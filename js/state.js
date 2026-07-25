@@ -37,12 +37,16 @@ function loadMatchLength() {
 function saveMatchLength(k) { if (MATCH_LENGTHS[k]) { try { localStorage.setItem(MATCH_LENGTH_KEY, k); } catch (e) {} } }
 
 const LAND_VALUE  = [100, 240, 480, 900, 1600]; // レベル1〜5の土地価値
+const MAX_LAND_LEVEL = LAND_VALUE.length;       // 土地レベルの上限（=5）
 const SELL_RATE   = 0.7;   // 強制売却の換金率
+const HIGHSELL_RATE = 1.3; // 💱高値売却スペルの換金率（v25: 1.0→1.3。売り時を作る一手として実入りを引き上げ）
 const COMEBACK_RATIO = 0.7; // 総資産が相手の7割未満なら劣勢（周回ボーナス1.5倍）
 
 // クリーチャー侵攻（march）
-const MARCH_COST_MIN  = 30;   // 行軍費の下限
-const MARCH_COST_RATE = 0.4;  // 行軍費 = クリーチャーコスト×この率
+// v25: 侵攻をもっと気軽に選べる手にするため行軍費を引き下げ（下限30→20・率0.4→0.25）。
+//      例: 40Gのクリーチャー 30→20G ／ 100Gのクリーチャー 40→25G ／ 300Gの精霊王 120→75G
+const MARCH_COST_MIN  = 20;   // 行軍費の下限
+const MARCH_COST_RATE = 0.25; // 行軍費 = クリーチャーコスト×この率
 // 盤面エフェクト（時限オーバーレイ）: sanctuary=結界 / snare=足止めの罠 / block=🚧バリケード（v23・進入禁止）
 const OVERLAY_DURATION = 2;   // 効果の持続ラウンド数
 
@@ -131,6 +135,31 @@ function landSupportSt(g, tile) {
   // 女神の加護（v20）: 所有者の全体FXで援護ST+10
   const goddess = activeFx(g, "goddess", tile.owner) ? 10 : 0;
   return Math.min(40, neigh.length * 10) + beacons * 10 + goddess;
+}
+
+// ---------- 📣応援（cheer・v25） ----------
+// 隣接する自領に「応援」持ちがいると、その土地のクリーチャーは武具を借りたように ST+15 / HP+15 を得る。
+// 自分自身の駐留地は数えない（＝応援役は他人を支えるための特性）。2体まで重複（上限 +30/+30）。
+// 防衛だけでなく、侵攻（march）の出撃元タイルにも同じように乗る（battle.js が opts.attSrcId で拾う）
+const CHEER_BONUS = 15;   // 応援1体あたりの ST/HP 補正
+const CHEER_MAX   = 2;    // 重複の上限（体数）
+function cheerCount(g, tile) {
+  if (!g || !tile || tile.owner === null || tile.owner === undefined) return 0;
+  const n = neighborsOf(g, tile).filter(t =>
+    t.type === "LAND" && t.owner === tile.owner && t.id !== tile.id &&
+    t.creature && !creatureNulled(g, t.creature) &&
+    CARD_BY_ID[t.creature.cardId].ab.includes("cheer")).length;
+  return Math.min(CHEER_MAX, n);
+}
+
+// ---------- 土地レベルの増減（v25: 築城/焦土/破城が共有する唯一の入口） ----------
+// delta を足して 1〜MAX_LAND_LEVEL にクランプする。実際に動いた場合だけ新レベルを返す（動かなければ null）
+function adjustLandLevel(tile, delta) {
+  if (!tile || tile.type !== "LAND" || tile.owner === null) return null;
+  const next = Math.max(1, Math.min(MAX_LAND_LEVEL, tile.level + delta));
+  if (next === tile.level) return null;
+  tile.level = next;
+  return next;
 }
 
 // クリーチャーの現在HP（傷を負っていれば減少。旧セーブ互換で hp 未設定なら基本値）

@@ -987,8 +987,8 @@ async function castSpell(p, cardId) {
     await enforceHandLimit(p);
 
   } else if (c.spell === "alchemy") {
-    // 手札1枚（このカード自身を除く）を捨てて120Gに変える
-    const ALCHEMY_GAIN = 120;
+    // 手札1枚（このカード自身を除く）を捨てて150Gに変える（v25: 120→150G。錬金大釜との段差を是正）
+    const ALCHEMY_GAIN = 150;
     let target;
     if (p.isCPU) {
       target = aiPickAlchemy(G, p, cardId);
@@ -1372,11 +1372,11 @@ async function castSpell(p, cardId) {
   // --- 土地 ---
   } else if (c.spell === "highsell") {
     const target = await humanPickLand(ownedLands(G, p.id),
-      "💱 高値売却 — 対象を選択", `自分の土地1つを<b>価値の100%</b>で売却します（通常の強制売却は${Math.round(SELL_RATE * 100)}%。駐留クリーチャーは手札に戻ります）`,
+      "💱 高値売却 — 対象を選択", `自分の土地1つを<b>価値の${Math.round(HIGHSELL_RATE * 100)}%</b>で売却します（通常の強制売却は${Math.round(SELL_RATE * 100)}%。駐留クリーチャーは手札に戻ります）`,
       "売却できる土地がありません");
     if (!target) return false;
     pay();
-    const gain = landValue(target);
+    const gain = Math.floor(landValue(target) * HIGHSELL_RATE); // v25: 100%→130%
     if (target.creature) { p.hand.push(target.creature.cardId); }
     target.owner = null; target.creature = null; target.level = 1;
     p.magic += gain;
@@ -1566,6 +1566,28 @@ async function castSpell(p, cardId) {
     SFX.coin();
     log(`🕯️ ${p.name}の豊穣の儀！ ${CARD_BY_ID[sac].name}を捧げ、+350G`);
 
+  // v25: 潤沢の儀＝豊穣の儀の派生。1〜3枚を好きなだけ捧げ、1枚につき+300G（1枚あたりは豊穣の儀より割安）
+  } else if (c.spell === "r_plenty") {
+    const PLENTY_PER_CARD = 300, PLENTY_MAX = 3;
+    const sacs = [];
+    for (let i = 0; i < PLENTY_MAX; i++) {
+      // 2枚目以降は「ここで終える」を選べる。1枚目のキャンセルは儀式そのものの中止（コスト未消費）
+      const sac = await ritualSacrifice(p, cardId, c.name, {
+        already: sacs,
+        optional: i > 0,
+        note: `捧げた枚数 ${i}/${PLENTY_MAX}（1枚につき +${PLENTY_PER_CARD}G）`,
+      });
+      if (!sac) break;
+      sacs.push(sac);
+    }
+    if (sacs.length === 0) return false;
+    pay();
+    sacs.forEach(id => discardFromHand(p, id));
+    const gain = sacs.length * PLENTY_PER_CARD;
+    p.magic += gain;
+    SFX.coin();
+    log(`🕯️ ${p.name}の潤沢の儀！ ${sacs.map(id => CARD_BY_ID[id].name).join("・")}の${sacs.length}枚を捧げ、+${gain}G`);
+
   } else if (c.spell === "r_contract") {
     if (p.deck.length === 0) { if (!p.isCPU) log("山札がありません", "warn"); return false; }
     const uniq = [...new Set(p.deck)].sort((a, b) => typeOrder(a) - typeOrder(b) || CARD_BY_ID[a].cost - CARD_BY_ID[b].cost);
@@ -1743,17 +1765,31 @@ async function castSpell(p, cardId) {
 
 // 🕯️儀式の追加コスト: 手札1枚（このカード自身を除く）を捧げる。
 // 選べなければ null（キャンセル＝不発・コスト未消費）。呼び出し側が discardFromHand する
-async function ritualSacrifice(p, selfId, spellName) {
-  const idx = p.hand.indexOf(selfId);
-  const pool = p.hand.slice(0, idx).concat(p.hand.slice(idx + 1));
-  if (pool.length === 0) { if (!p.isCPU) log("儀式に捧げる手札がありません", "warn"); return null; }
-  if (p.isCPU) return aiPickSacrifice(G, p, selfId);
+// opts（v25・潤沢の儀のような複数枚の儀式用）:
+//   already[] = すでに選んだカードid（候補から除く。同名は選んだ枚数だけ除く）
+//   optional  = true なら「ここで終える」ボタンを出す（キャンセルではなく打ち切り＝それまでの分は成立）
+//   note      = ダイアログに添える進捗の一文
+async function ritualSacrifice(p, selfId, spellName, opts = {}) {
+  const already = opts.already || [];
+  // 自分自身と、すでに捧げると決めたカードを手札から1枚ずつ差し引いた残りが候補
+  const pool = p.hand.slice();
+  [selfId, ...already].forEach(id => { const i = pool.indexOf(id); if (i >= 0) pool.splice(i, 1); });
+  if (pool.length === 0) { if (!p.isCPU && !opts.optional) log("儀式に捧げる手札がありません", "warn"); return null; }
+  if (p.isCPU) {
+    // CPUは「自分自身＋すでに捧げると決めた分」を手札から外した状態で最安を選ばせる（同じカードを二重に選ばない）
+    if (!already.length) return aiPickSacrifice(G, p, selfId);
+    const saved = p.hand;
+    p.hand = pool.concat([selfId]);
+    const pick = aiPickSacrifice(G, p, selfId);
+    p.hand = saved;
+    return pick;
+  }
   const res = await showDialog({
     title: `🕯️ ${spellName} — 捧げる手札を選択`,
-    body: "儀式の追加コストとして、手札から1枚を選んで捧げます（捨て札へ）",
+    body: "儀式の追加コストとして、手札から1枚を選んで捧げます（捨て札へ）" + (opts.note ? `<br>${opts.note}` : ""),
     cards: pool.map(id => ({ card: CARD_BY_ID[id] })),
     peek: true,
-    buttons: [{ label: "やめる", value: "cancel" }],
+    buttons: [{ label: opts.optional ? "ここで終える" : "やめる", value: "cancel", primary: !!opts.optional }],
   });
   return res.action === "card" ? res.cardId : null;
 }
@@ -2299,7 +2335,7 @@ async function enemyLandFlow(p, tile) {
     });
     if (res.action === "card") {
       const itemId = await humanPickBattleItem(p, CARD_BY_ID[res.cardId].cost,
-        `⚔ ${CARD_BY_ID[res.cardId].name}にアイテムを装備しますか？`);
+        `⚔ ${CARD_BY_ID[res.cardId].name}にアイテムを装備しますか？`, false, res.cardId);
       invade = { cardId: res.cardId, itemId };
     }
   }
@@ -2326,13 +2362,17 @@ async function enemyLandFlow(p, tile) {
 
 // 手札からバトル用アイテムを選ぶ（人間用）。ないなら聞かずに null。
 // isDefense: 防衛側の応酬か（💨煙玉など防衛側専用アイテムは侵略側では選べない・v19）
-async function humanPickBattleItem(p, committedCost, title, isDefense = false) {
+// excludeId: 候補から1枚だけ除くカードid（侵略に出すカード自身を武具に選べないようにする・二形対策・v25）
+async function humanPickBattleItem(p, committedCost, title, isDefense = false, excludeId = null) {
   const budget = p.magic - committedCost;
-  const items = p.hand.filter(id => CARD_BY_ID[id].type === "item");
+  // v25: 二形（hybrid）のクリーチャーも「武具として」装備できる＝isEquippable で拾う
+  const items = p.hand.filter(id => isEquippable(CARD_BY_ID[id]));
+  if (excludeId) { const i = items.indexOf(excludeId); if (i >= 0) items.splice(i, 1); }
   if (items.length === 0) return null;
   const res = await showDialog({
     title,
     body: `アイテムは使い切りです（残り魔力 ${budget}G）` +
+      (items.some(id => CARD_BY_ID[id].asItem) ? "<br>⚔🛡 <b>二形</b>のクリーチャーは武具として装備できます（装備すると使い切り）" : "") +
       (isDefense && items.some(id => CARD_BY_ID[id].escape) ? "<br>💨 煙玉＝バトルせず土地を明け渡し、クリーチャーは手札へ退避" : ""),
     cards: items.map(id => ({ card: CARD_BY_ID[id], disabled: CARD_BY_ID[id].cost > budget || (!isDefense && !!CARD_BY_ID[id].escape) })),
     peek: true,
@@ -2350,7 +2390,7 @@ async function fightFor(p, tile, attCard, attItem, battleOpts = {}) {
   if (defender.isCPU) {
     const id = aiChooseDefenseItem(G, defender, tile, attCard, attItem);
     if (id) {
-      defItem = CARD_BY_ID[id];
+      defItem = itemFormOf(CARD_BY_ID[id]); // v25: 二形のクリーチャーは擬似アイテムに変換して装備
       defender.magic -= defItem.cost;
       discardFromHand(defender, id);
     }
@@ -2360,7 +2400,7 @@ async function fightFor(p, tile, attCard, attItem, battleOpts = {}) {
       `🛡 防衛！ ${defCard.name}にアイテムを装備しますか？` +
       `（敵: ${attCard.name} ST${attCard.st + (attItem ? attItem.st : 0)}/HP${attCard.hp + (attItem ? attItem.hp : 0)}）`, true);
     if (itemId2) {
-      defItem = CARD_BY_ID[itemId2];
+      defItem = itemFormOf(CARD_BY_ID[itemId2]);
       defender.magic -= defItem.cost;
       discardFromHand(defender, itemId2);
     }
@@ -2421,7 +2461,7 @@ async function fightFor(p, tile, attCard, attItem, battleOpts = {}) {
 
 async function doInvade(p, tile, cardId, itemId = null) {
   const c = CARD_BY_ID[cardId];
-  const attItem = itemId ? CARD_BY_ID[itemId] : null;
+  const attItem = itemId ? itemFormOf(CARD_BY_ID[itemId]) : null; // v25: 二形は擬似アイテムに変換
   // 魔力の最終チェック（コスト不足での侵略をどの経路からも通さない）
   const total = c.cost + (attItem ? attItem.cost : 0);
   if (total > p.magic) {
@@ -2443,18 +2483,22 @@ async function doInvade(p, tile, cardId, itemId = null) {
     else { cpuSay(defender, "battleWin"); cpuSay(p, "battleLose"); }
   }
 
+  const defCid = tile.creature.cardId;                    // v25: 上書き前に控える（築城/焦土/遁走の判定用）
+  const defNulled = creatureNulled(G, tile.creature);      // 🌫無力化の霧の間は固有能力が働かない
+
   if (result.attackerWins) {
-    // 倒された防衛クリーチャー: 💨煙玉で退避／🔁転生なら手札へ、通常は捨札へ（v19）
+    // 倒された防衛クリーチャー: 💨煙玉で退避／🔁転生なら手札へ／💨遁走なら空き地へ、通常は捨札へ
     if (result.escaped || result.defRebirth) {
-      defender.hand.push(tile.creature.cardId);
-      if (result.defRebirth) log(`🔁 ${CARD_BY_ID[tile.creature.cardId].name}の転生！ 倒れても${defender.name}の手札に戻った`);
+      defender.hand.push(defCid);
+      if (result.defRebirth) log(`🔁 ${CARD_BY_ID[defCid].name}の転生！ 倒れても${defender.name}の手札に戻った`);
       await enforceHandLimit(defender);
-    } else {
-      defender.discard.push(tile.creature.cardId);
+    } else if (!(!defNulled && tryEscapeToEmptyLand(defender, defCid))) {
+      defender.discard.push(defCid);
     }
     tile.owner = p.id;
     tile.creature = { cardId, hp: woundedHp(result.attHp, result.attExtra, c.hp) }; // 戦闘後HP残量で駐留
     grantWarfire(p); // 🔥狼煙台（戦意）: 侵略勝利ボーナス（v19）
+    if (!defNulled) applyBattleLandEffects(tile, defCid, false); // 🔥焦土＝落ちた土地も痩せる
   } else {
     // 侵略失敗したクリーチャー: 🔁転生なら手札に戻る（v19）
     if (result.attRebirth) {
@@ -2473,14 +2517,60 @@ async function doInvade(p, tile, cardId, itemId = null) {
     }
     // 侵略に失敗＝その敵地に留まったまま。踏み倒しにならないよう通行料を徴収する
     // （足止めの罠で止められた末に侵略して敗れた場合も同じく徴収される）
+    // ※通行料は「踏んだ時点のレベル」で計算する＝築城/焦地のレベル変動はこの後に適用する
     const toll = tollOf(G, tile);
     if (toll > 0) {
       log(`${p.name}は侵略に失敗し、通行料${toll}Gを${defender.name}に支払う`, "warn");
       await forcePay(G, p, toll, defender, log, landSellChooser(p)); // 払いきれなければ城で再起
       renderAll(G);
     }
+    // v25: 🏗築城＝守り抜いてLv+1／🔥焦土＝戦火でLv-1（forcePayで土地を手放していたら何も起きない）
+    if (!defNulled && tile.owner === defender.id) applyBattleLandEffects(tile, defCid, true);
   }
   renderAll(G);
+}
+
+// ---------- v25: バトルの結果が「土地レベル」に跳ね返る特性（🏗築城 / 🔥焦土） ----------
+// tile: バトルが行われた土地（所有者・駐留クリーチャーの更新が済んだ後に呼ぶこと）
+// defCardId: そのバトルで防衛していたクリーチャーのカードid（上書き前に控えておく）
+// defenderHeld: 防衛側が守り切ったか（築城は守り勝ったときだけ発動。焦土は勝敗を問わない）
+function applyBattleLandEffects(tile, defCardId, defenderHeld) {
+  const dc = CARD_BY_ID[defCardId];
+  if (!dc || tile.type !== "LAND" || tile.owner === null) return;
+  if (defenderHeld && dc.ab.includes("bulwark")) {
+    const lv = adjustLandLevel(tile, +1);
+    if (lv !== null) {
+      SFX.coin();
+      log(`🏗 ${dc.name}の築城！ 守り抜いた${tileName(tile)}はLv${lv}に育った（価値${landValue(tile)}G）`, "battle");
+    } else {
+      log(`🏗 ${dc.name}の築城——${tileName(tile)}はすでに最大レベル`);
+    }
+  }
+  if (dc.ab.includes("blight")) {
+    const lv = adjustLandLevel(tile, -1);
+    if (lv !== null) log(`🔥 ${dc.name}の焦土——戦火で${tileName(tile)}はLv${lv}まで痩せた`, "warn");
+  }
+}
+
+// ---------- v25: 💨遁走（escaper）＝防衛に敗れても消滅せず、空いている領地へ逃げ延びる ----------
+// 逃げ先は所有者のいない土地（結界の張られたマスは避ける）。同属性の空き地を優先し、HPは全快で駐留する。
+// 逃げ延びたら true（＝捨て札に送らない）。空き地が1つも無ければ false＝通常どおり捨て札へ
+function tryEscapeToEmptyLand(owner, cardId) {
+  const card = CARD_BY_ID[cardId];
+  if (!card || !card.ab.includes("escaper")) return false;
+  const empties = G.tiles.filter(t => t.type === "LAND" && t.owner === null && !isSanctuaryProtected(G, t));
+  if (empties.length === 0) {
+    log(`💨 ${card.name}は逃げ延びようとしたが、空いている領地が無かった…`, "warn");
+    return false;
+  }
+  const same = empties.filter(t => t.element === card.element);
+  const pool = same.length ? same : empties;
+  const dst = pool[Math.floor(Math.random() * pool.length)];
+  dst.owner = owner.id;
+  dst.creature = { cardId, hp: card.hp }; // HP全快で再配置（傷は逃げる過程で癒える）
+  SFX.summon();
+  log(`💨 ${card.name}の遁走！ 敗れても消えず、${tileName(dst)}へ逃げ延びて${owner.name}の領地にした`, "battle");
+  return true;
 }
 
 // 🔥狼煙台（戦意・v19）: 自軍が侵略・侵攻のバトルに勝つたび、所有する狼煙台1つにつき+40G
@@ -2551,7 +2641,7 @@ async function doMarch(p, src, dst, itemId = null) {
   const cost = p.freeMarch ? 0 : marchCost(card);
   if (p.freeMarch) p.freeMarch = false;
   // 魔力の最終チェック（行軍費＋アイテム費が払えなければ侵攻不可）
-  const item = itemId ? CARD_BY_ID[itemId] : null;
+  const item = itemId ? CARD_BY_ID[itemId] : null; // コスト判定はカード本体のコストでよい（二形も同額）
   if (cost + (item ? item.cost : 0) > p.magic) {
     log(`⚠ 魔力が足りず${card.name}は侵攻できない（必要 ${cost + (item ? item.cost : 0)}G／魔力 ${p.magic}G）`, "warn");
     return false;
@@ -2585,26 +2675,41 @@ async function doMarch(p, src, dst, itemId = null) {
     else log(`🏇 ${card.name}は${tileName(dst)}を無血占領した！`);
   } else {
     // 敵地: 通常侵略と同じアイテム応酬つきバトル
-    const attItem = itemId ? CARD_BY_ID[itemId] : null;
+    const attItem = itemId ? itemFormOf(CARD_BY_ID[itemId]) : null; // v25: 二形は擬似アイテムに変換
     if (attItem) {
       p.magic -= attItem.cost;
       discardFromHand(p, itemId);
     }
     const defender = G.players[dst.owner];
+    const attNulled = creatureNulled(G, src.creature);
+    // 🐏破城（siegebreak・v25）: ぶつかる前に城壁を砕く＝相手の領地レベルを1下げてからバトルに入る。
+    // 土地の加護（landHpBonus）はレベル依存なので、これで防衛側の実効HPも下がる
+    if (!attNulled && card.ab.includes("siegebreak")) {
+      const lv = adjustLandLevel(dst, -1);
+      if (lv !== null) {
+        SFX.spell();
+        log(`🐏 ${card.name}の破城！ ${tileName(dst)}の城壁が崩れ、Lv${lv}に落ちた`, "battle");
+        renderAll(G);
+      } else {
+        log(`🐏 ${card.name}の破城——${tileName(dst)}はこれ以上崩せない（Lv1）`);
+      }
+    }
+    const defCid = dst.creature.cardId;                 // v25: 上書き前に控える（築城/焦土/遁走の判定用）
+    const defNulled = creatureNulled(G, dst.creature);
     // march は盤上のクリーチャーの出撃＝🌱成長段階・無力化・出撃元（群れの自己除外）をバトルへ引き継ぐ（v19/v20）
     const result = await fightFor(p, dst, card, attItem, {
       attGrown: Math.min(5, src.creature.grown || 0),
       attSrcId: src.id,
-      attNulled: creatureNulled(G, src.creature),
+      attNulled,
     });
     if (result.attackerWins) {
       // 勝ち: 占領。侵攻側は傷を持ち越して移動。元の土地は空き地に戻る
       if (result.escaped || result.defRebirth) { // 💨煙玉・🔁転生（v19）: 防衛側は手札へ
-        defender.hand.push(dst.creature.cardId);
-        if (result.defRebirth) log(`🔁 ${CARD_BY_ID[dst.creature.cardId].name}の転生！ 倒れても${defender.name}の手札に戻った`);
+        defender.hand.push(defCid);
+        if (result.defRebirth) log(`🔁 ${CARD_BY_ID[defCid].name}の転生！ 倒れても${defender.name}の手札に戻った`);
         await enforceHandLimit(defender);
-      } else {
-        defender.discard.push(dst.creature.cardId);
+      } else if (!(!defNulled && tryEscapeToEmptyLand(defender, defCid))) { // 💨遁走（v25）
+        defender.discard.push(defCid);
       }
       src.creature.hp = woundedHp(result.attHp, result.attExtra, maxHpOf(src.creature));
       dst.owner = p.id;
@@ -2614,6 +2719,7 @@ async function doMarch(p, src, dst, itemId = null) {
       log(`🏇 ${card.name}は${tileName(dst)}を制圧した！`, "battle");
       trySplit(); // 🫧分裂: 制圧に成功したら元の土地にも分裂体が残る（v24）
       grantWarfire(p); // 🔥狼煙台（戦意）: 侵攻勝利ボーナス（v19）
+      if (!defNulled) applyBattleLandEffects(dst, defCid, false); // 🔥焦土＝奪った土地も痩せている
     } else if (result.attHp > 0) {
       // 引き分け・両者生存: 侵攻側は傷を負って元の領地へ撤退。領地の変動なし
       src.creature.hp = woundedHp(result.attHp, result.attExtra, maxHpOf(src.creature));
@@ -2625,6 +2731,7 @@ async function doMarch(p, src, dst, itemId = null) {
         log(`🕸️ ${dc.name}の捕縛！ ${p.name}は次のターン動けない`, "warn");
       }
       log(`🏇 ${card.name}は攻めきれず${tileName(src)}へ撤退した（傷を負って帰還）`, "warn");
+      if (!defNulled) applyBattleLandEffects(dst, defCid, true); // v25: 🏗築城＝守り切ったのでLv+1／🔥焦土＝Lv-1
     } else {
       // 負け（討ち死に）: 侵攻側は消滅し、元の土地も失う（🔁転生なら手札に戻る・v19）
       const dc = CARD_BY_ID[dst.creature.cardId];
@@ -2638,12 +2745,13 @@ async function doMarch(p, src, dst, itemId = null) {
         p.hand.push(src.creature.cardId);
         log(`🔁 ${card.name}の転生！ 倒れても${p.name}の手札に戻った（元の土地は失う）`);
         await enforceHandLimit(p);
-      } else {
+      } else if (!(!attNulled && tryEscapeToEmptyLand(p, src.creature.cardId))) { // 💨遁走（v25）: 侵攻に敗れても逃げ延びる
         p.discard.push(src.creature.cardId);
       }
       src.owner = null;
       src.creature = null;
-      log(`🏇 ${card.name}は敗れて${result.attRebirth ? "手札へ退いた" : "消滅"}… 元の土地も失った`, "warn");
+      log(`🏇 ${card.name}は敗れて${result.attRebirth ? "手札へ退いた" : "退いた"}… 元の土地も失った`, "warn");
+      if (!defNulled) applyBattleLandEffects(dst, defCid, true); // v25: 🏗築城／🔥焦土
     }
   }
   renderAll(G);
@@ -2825,7 +2933,8 @@ function showHelp() {
       <b>② 通過アクション（①で能動行動しなかったターンだけ・1つ）</b>: <b>①で能動的な行動（召喚・レベルアップ・交代・侵攻・侵略）をしなかった</b>ターンに限り、
       このターンに<b>通過した</b>自分の領地について次のどれか1つを行える。<br>
       <b>＝そのターンの能動行動は1回まで。①で行動すれば②は無し。①が受け身マス／通行料のみ／パス／召喚できる手札が無い場合に、権利が②へ回る</b>（実際に選べる項目だけボタンが出る）。<br>
-      ・<b>クリーチャー侵攻</b> … 通過した自分のクリーチャーを隣のマスへ進める（行軍費を支払う）。
+      ・<b>クリーチャー侵攻</b> … 通過した自分のクリーチャーを隣のマスへ進める。
+        <b>行軍費はクリーチャーのコスト×25%（最低${MARCH_COST_MIN}G）と安く、気軽に仕掛けられる</b>。
         空き地なら無血占領、敵地ならバトル（勝てば制圧／引き分けなら元の土地へ撤退／負ければ消滅し元の土地も失う）<br>
       ・<b>クリーチャー交代</b> … 通過した自分の土地の駐留クリーチャーを、手札のクリーチャーと入れ替える（召喚コストを支払う）<br>
       ・<b>通過地レベルアップ</b> … 通過した自分の土地を1つレベルアップする<br>
@@ -2873,8 +2982,17 @@ function showHelp() {
       <span class="ab">魔法攻撃</span>攻撃が魔法＝物理無効・物理反射を貫く ／
       <span class="ab">模倣</span>バトル時、相手の基本ST・HP・能力をそっくり写し取って戦う（ドッペルゲンガー）<br>
       ※無属性の<b>ファントム（物理無効）・ミラージュ（物理反射）</b>には通常の攻撃が通らない。対策は
-      <b>✨魔法攻撃</b>（魔法攻撃持ちクリーチャー or マジックワンド等の装備）か、除去スペル（☄️メテオ等）。そのぶん両者ともHPは低い。<br><br>
-      <b>アイテム</b>: バトル時に⚔️武器（ST+）や🛡️防具（HP+）を装備できる（使い切り）。防衛側も応戦可能。<br>
+      <b>✨魔法攻撃</b>（魔法攻撃持ちクリーチャー or マジックワンド等の装備）か、除去スペル（☄️メテオ等）。そのぶん両者ともHPは低い。<br>
+      <b>🏞 領地に働きかける希少特性</b>（第二弾・レアの特性。バトルが土地そのものを変える）<br>
+      ・<span class="ab">築城</span> <b>防衛のバトルに勝つたび、その領地がLv+1</b>（最大Lv5・費用なし）。攻められるほど土地が育つ＝守り切れる場所に置くほど強い（ラムパートゴーレム）<br>
+      ・<span class="ab">焦土</span> 防衛時<b>HP+30</b>で守りは固いが、<b>この土地でバトルが起きるたびLv-1</b>（最低1）。攻め落とされても土地は痩せたまま渡る＝焦土戦術（スコーチワーム）<br>
+      ・<span class="ab">破城</span> <b>侵攻で攻め込むとき、バトルの前に相手の領地をLv-1</b>（最低1）。土地の加護ごと城壁を砕いてから殴れる（シージラム）<br>
+      ・<span class="ab">遁走</span> <b>バトルに敗れても消滅せず、空いている領地へHP全快で逃げ延びて自領にする</b>（空き地が無ければ捨て札）。そのぶん素のST/HPは低い（ミストランナー）<br>
+      ・<span class="ab">応援</span> <b>隣接する自領のクリーチャーに、武具を貸すように ST+15 / HP+15</b>（2体まで重複）。自分は戦わずに周りを底上げする（旗手バナーベアラー）<br>
+      ・<span class="ab">魔力強奪</span> <b>バトルで与えたダメージと同量の魔力を相手から奪う</b>（💰グリードファングと重ねると×3に／マナイーター）<br>
+      ・<span class="ab">二形</span> <b>クリーチャーとして召喚できるほか、バトル時に武具としても装備できる</b>（装備すると使い切り）。クリーチャーとしては最弱クラスだが手札で腐らない（リビングブレード＝ST+40／リビングシールド＝HP+40）<br><br>
+      <b>アイテム</b>: バトル時に⚔️武器（ST+）や🛡️防具（HP+）を装備できる（使い切り）。防衛側も応戦可能。
+      <b>二形</b>のクリーチャーも装備の候補に並ぶ（ただし侵略に出したそのカード自身は選べない）。<br>
       ・🚫 <b>ディスペルワード</b> … 相手のアイテム効果を打ち消す ／ 🪞 <b>ミラーシールド</b> … 受けた攻撃の一部を反射<br>
       ・✨ <b>マジックワンド／アルカナロッド</b> … 武器よりST補正は控えめだが<b>攻撃が魔法になる</b>＝物理無効・物理反射を貫く（防衛時の反撃にも有効）<br>
       ・💰 <b>グリードファング</b> … ST+25の吸奪武器。<b>与えたダメージ×2倍の魔力を相手から強奪</b>する（攻撃が通らなければ強奪もなし）<br>
@@ -2883,7 +3001,9 @@ function showHelp() {
       <b>除去・妨害スペル</b>: ☄️ <b>メテオ</b>（安価・敵1体に40ダメージ＝削り／削り切れば破壊）、
       ✨ <b>バニッシュ</b>（高価・レジェンド／敵1体を<b>HP不問で確実に消滅</b>）、
       🌬️ <b>ガスト</b>（敵クリーチャーを隣の空き地へ<b>強制移動</b>＝連鎖崩し・防衛どかし）<br>
-      <b>資金スペル</b>: ⚗️ <b>アルケミー</b>（手札1枚を捨てて120Gに変える＝使わないカードを資金化）<br>
+      <b>資金スペル</b>: ⚗️ <b>アルケミー</b>（手札1枚を捨てて150Gに変える＝使わないカードを資金化）、
+      🕯️ <b>豊穣の儀</b>（手札1枚を捧げて+350G）、🕯️ <b>潤沢の儀</b>（手札を<b>1〜3枚まで好きなだけ</b>捧げ、1枚につき+300G＝1枚あたりは割安だが枚数でまとめて稼げる）、
+      💱 <b>高値売却</b>（自分の土地1つを<b>価値の130%</b>で現金化。強制売却の70%より遥かに得で、駐留クリーチャーは手札に戻る）<br>
       <b>移動スペル</b>: 💫 <b>テレポート</b>（自分のコマを好きなマスへ飛ばす。城以外・マスの効果や関門通過は発生せず、その後ダイスで移動）、
       🚪 <b>トランスポート</b>（自分のクリーチャーを好きな<b>空き地</b>へ転送＝連鎖の組み替え・遠征）、
       🐇 <b>リープ</b>（自分のクリーチャーを<b>2マス先</b>の空き地へ跳躍）。どちらも元の土地は空き地に戻る（レベルは残る・不動は対象外）<br>

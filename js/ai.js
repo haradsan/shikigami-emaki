@@ -133,6 +133,8 @@ function aiChooseSpell(g, p) {
     if (c.spell === "grandquake" && aiPickGrandquakeTargets(g, p)) return id;
     // 儀式は「捧げる手札」が別に要る（このカード＋1枚）
     if (c.spell === "r_harvest" && p.hand.length >= 3 && p.magic < 300) return id;
+    // 潤沢の儀（v25）: 手札が詰まっているときほど強い（3枚捧げて+900G）。手札5枚以上＝2〜3枚は確実に捧げられる
+    if (c.spell === "r_plenty" && p.hand.length >= 5 && p.magic < 400) return id;
     if (c.spell === "r_blaze" && p.hand.length >= 2 && aiPickBlazeTarget(g, p)) return id;
     if (c.spell === "r_revive" && p.hand.length >= 2 && aiPickReviveTarget(g, p)) return id;
     if (c.spell === "r_ages" && p.hand.length >= 2 && aiPickAgesTarget(g, p)) return id;
@@ -351,16 +353,18 @@ function aiChooseInvade(g, p, tile) {
   const budget = p.magic - 50;
   // 不動クリーチャーは侵略に出せない
   const creatures = aiHandCards(p).filter(c => c.type === "creature" && !c.ab.includes("immobile") && c.cost <= budget);
-  const items = aiHandCards(p).filter(c => c.type === "item");
+  // v25: 二形（hybrid）のクリーチャーも武具として装備できる。itemFormOf で擬似アイテムに変換して評価する
+  const items = aiHandCards(p).filter(c => isEquippable(c)).map(c => ({ card: c, eff: itemFormOf(c) }));
   const combos = [];
   const bopts = { g, attackerId: p.id }; // 群れ（pack）の集計に侵略側プレイヤーを渡す（v19）
   for (const c of creatures) {
     if (resolveBattle(c, tile, null, null, bopts).attackerWins) {
       combos.push({ cardId: c.id, itemId: null, cost: c.cost });
     } else {
-      for (const it of items) {
-        if (it.escape) continue; // 💨煙玉は防衛側専用（v19）
-        if (c.cost + it.cost <= budget && resolveBattle(c, tile, it, null, bopts).attackerWins) {
+      for (const { card: it, eff } of items) {
+        if (eff.escape) continue;      // 💨煙玉は防衛側専用（v19）
+        if (it.id === c.id) continue;  // 二形を「自分自身に装備」はできない（同じ1枚）
+        if (c.cost + it.cost <= budget && resolveBattle(c, tile, eff, null, bopts).attackerWins) {
           combos.push({ cardId: c.id, itemId: it.id, cost: c.cost + it.cost });
         }
       }
@@ -384,8 +388,10 @@ function aiChooseDefenseItem(g, defender, tile, attCard, attItem) {
   const bopts = { g, attackerId: g.current }; // 侵略は手番プレイヤーが行う（群れの集計用・v19）
   const noItem = resolveBattle(attCard, tile, attItem, null, bopts);
   if (!noItem.attackerWins) return null; // 素で守れるなら温存
-  const items = aiHandCards(defender).filter(c => c.type === "item" && c.cost <= defender.magic - 50);
-  const savers = items.filter(it => !it.escape && !resolveBattle(attCard, tile, attItem, it, bopts).attackerWins);
+  // v25: 二形（hybrid）のクリーチャーも防具として使える。eff＝battle.jsに渡す実効の装備データ
+  const items = aiHandCards(defender).filter(c => isEquippable(c) && c.cost <= defender.magic - 50)
+    .map(c => ({ id: c.id, cost: c.cost, eff: itemFormOf(c) }));
+  const savers = items.filter(it => !it.eff.escape && !resolveBattle(attCard, tile, attItem, it.eff, bopts).attackerWins);
   if (savers.length > 0) {
     savers.sort((a, b) => a.cost - b.cost);
     // 守る価値がある土地か（アイテム代 < 土地価値）
@@ -393,7 +399,7 @@ function aiChooseDefenseItem(g, defender, tile, attCard, attItem) {
     return null;
   }
   // 💨煙玉（v19）: どうやっても守れないとき、高価なクリーチャーなら土地を明け渡して手札へ退避させる
-  const smoke = items.find(c => c.escape);
+  const smoke = items.find(c => c.eff.escape);
   const defCard = CARD_BY_ID[tile.creature.cardId];
   if (smoke && defCard.cost >= 80 && !defCard.structure) return smoke.id;
   return null;

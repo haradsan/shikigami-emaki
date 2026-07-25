@@ -65,6 +65,14 @@ const ABILITY_INFO = {
   harbor:   { name: "港湾", desc: "自分がこのマスを通過・停止するたび +40G" },
   warfire:  { name: "戦意", desc: "自軍が侵略・侵攻のバトルに勝つたび +40G" },
   festival: { name: "祝祭", desc: "自分の周回ボーナスが1.5倍になる" },
+  // ---------- v25: 領地に働きかける特性・応援・二形（原さん要望） ----------
+  bulwark:    { name: "築城", desc: "防衛のバトルに勝つたび、守り抜いたその領地のレベルが1上がる（最大Lv5・費用なし）。攻められるほど土地が育つ希少特性" },
+  blight:     { name: "焦土", desc: "防衛時HP+30で守りは固いが、この土地でバトルが起きるたび、決着後に領地レベルが1下がる（最低Lv1）" },
+  siegebreak: { name: "破城", desc: "侵攻（march）で攻め込むとき、バトルの前に相手の領地レベルを1下げる（最低Lv1）。土地の加護ごと城壁を砕く" },
+  escaper:    { name: "遁走", desc: "バトルに敗れても消滅せず、盤面の空いている領地へHP全快で逃げ延びてそこを自領にする（防衛でも侵攻でも／空き地が無ければ捨て札）" },
+  cheer:      { name: "応援", desc: "隣接する自領のクリーチャーがバトルするとき、武具を貸すように ST+15 / HP+15 を与える（2体まで重複・自分のバトルには乗らない）" },
+  siphon:     { name: "魔力強奪", desc: "バトルで与えたダメージと同量の魔力を相手から奪う（💰吸奪の武器と重ねられる）" },
+  hybrid:     { name: "二形", desc: "クリーチャーとして召喚できるほか、バトル時に武具として装備もできる（装備した場合は使い切り）" },
 };
 
 // レア度: カードの希少度。card.rarity で個別指定、無ければコストとタイプから推定。
@@ -128,9 +136,9 @@ const CARD_DB = [
   { id: "frostnaga",   name: "フロストナーガ",   type: "creature", element: "water", cost: 60,  st: 40, hp: 30, ab: ["first"] },
   { id: "shellcrab",   name: "シェルクラブ",     type: "creature", element: "water", cost: 65,  st: 20, hp: 55, ab: ["armor"] }, // v23: guard→硬殻（ウンディーネとの重複解消。「硬い殻」の名前どおりに）
   { id: "undine",      name: "ウンディーネ",     type: "creature", element: "water", cost: 65,  st: 30, hp: 50, ab: ["guard"] }, // v13: 70→65（同コスト帯のドリアードに見劣りしていたため値下げ）
-  { id: "mermaid",     name: "マーメイドナイト", type: "creature", element: "water", cost: 80,  st: 30, hp: 65, ab: [] }, // v13: HP60→65（同コストのロックゴーレムに完全に劣っていたため）
+  { id: "mermaid",     name: "マーメイドナイト", type: "creature", element: "water", cost: 80,  st: 35, hp: 65, ab: [] }, // v25: ST30→35（第二弾の80-85G帯＝テラコッタ40/55・アビスアングラー45/45に押されていた「騎士」を並みの打点に）
   { id: "seaserpent",  name: "シーサーペント",   type: "creature", element: "water", cost: 90,  st: 50, hp: 60, ab: [] }, // v13: HP50→60（同コストのバジリスク(貫通付き)に完全に劣っていたため）
-  { id: "sirene",      name: "セイレーン",       type: "creature", element: "water", cost: 95,  st: 40, hp: 50, ab: ["capture"] }, // v23: first→捕縛（シーウィッチの完全劣化を解消。歌声の魅了＝捕縛）
+  { id: "sirene",      name: "セイレーン",       type: "creature", element: "water", cost: 95,  st: 45, hp: 60, ab: ["capture"] }, // v23: first→捕縛／v25: 40/50→45/60（80Gのアビスアングラー(45/45 捕縛)に15G高いまま劣っていた）
   { id: "frostgiant",  name: "フロストジャイアント", type: "creature", element: "water", cost: 110, st: 55, hp: 65, ab: [] }, // v13: 50/60→55/65（同コストのフォレストロード(捕縛付き)に完全に劣っていたため）
   { id: "kraken",      name: "クラーケン",       type: "creature", element: "water", cost: 120, st: 60, hp: 60, ab: ["capture"] }, // v13: 捕縛を付与（同コストのグリーンドラゴン(貫通)に完全に劣っていた。触腕で搦め捕るイメージ）
   { id: "tidallord",   name: "タイダルロード",   type: "creature", element: "water", cost: 135, st: 65, hp: 75, ab: ["first"] },
@@ -146,7 +154,7 @@ const CARD_DB = [
   { id: "basilisk",    name: "バジリスク",       type: "creature", element: "earth", cost: 90,  st: 50, hp: 50, ab: ["pierce"] },
   { id: "ogre",        name: "オーガ",           type: "creature", element: "earth", cost: 95,  st: 60, hp: 40, ab: ["assault"] },
   { id: "ironturtle",  name: "アイアンタートル", type: "creature", element: "earth", cost: 105, st: 30, hp: 90, ab: ["guard"] },
-  { id: "earthdragon", name: "アースドラゴン",   type: "creature", element: "earth", cost: 120, st: 50, hp: 70, ab: [] },
+  { id: "earthdragon", name: "アースドラゴン",   type: "creature", element: "earth", cost: 120, st: 55, hp: 75, ab: [] }, // v25: 50/70→55/75（115Gのオブシディアンナイト(55/60 硬殻)に支配されていた）
   { id: "behemoth",    name: "ベヒーモス",       type: "creature", element: "earth", cost: 135, st: 75, hp: 60, ab: ["assault"] }, // v23: 70/50→75/60（135Gの最重量級らしい風格に）
   { id: "gaiatitan",   name: "ガイアタイタン",   type: "creature", element: "earth", cost: 140, st: 65, hp: 85, ab: ["guard"] },
   { id: "greatwall",   name: "グレートウォール", type: "creature", element: "earth", cost: 90,  st: 10, hp: 100, ab: ["immobile"] },
@@ -154,12 +162,12 @@ const CARD_DB = [
   // --- v4追加クリーチャー（各属性に追加） ---
   { id: "hellcat",     name: "ヘルキャット",     type: "creature", element: "fire",  cost: 45,  st: 30, hp: 20, ab: ["first"] },
   { id: "cerberus",    name: "ケルベロス",       type: "creature", element: "fire",  cost: 110, st: 60, hp: 50, ab: ["assault"] },
-  { id: "magmagolem",  name: "マグマゴーレム",   type: "creature", element: "fire",  cost: 95,  st: 40, hp: 60, ab: [] },
-  { id: "vulcandrake", name: "ヴォルカンドレイク", type: "creature", element: "fire", cost: 150, st: 80, hp: 55, ab: ["pierce"] },
+  { id: "magmagolem",  name: "マグマゴーレム",   type: "creature", element: "fire",  cost: 95,  st: 45, hp: 60, ab: [] }, // v25: ST40→45（105Gのカルデラゴーレム(45/65)に10G安いだけで全面的に劣っていた）
+  { id: "vulcandrake", name: "ヴォルカンドレイク", type: "creature", element: "fire", cost: 150, st: 80, hp: 60, ab: ["pierce"] }, // v25: HP55→60（同150Gの焔竜グレンドラゴン(75/60 遠隔+貫通)に完全に劣っていた）
   { id: "icesprite",   name: "アイススプライト", type: "creature", element: "water", cost: 45,  st: 20, hp: 40, ab: [] },
   { id: "kappa",       name: "カッパ",           type: "creature", element: "water", cost: 60,  st: 30, hp: 45, ab: ["guard"] },
   { id: "seawitch",    name: "シーウィッチ",     type: "creature", element: "water", cost: 90,  st: 50, hp: 45, ab: ["first"] },
-  { id: "waterdragon", name: "ウォータードラゴン", type: "creature", element: "water", cost: 125, st: 60, hp: 65, ab: [] },
+  { id: "waterdragon", name: "ウォータードラゴン", type: "creature", element: "water", cost: 125, st: 60, hp: 70, ab: [] }, // v25: HP65→70（120Gのウミボウズ(60/60 吸収)に見劣りしていた素のドラゴン枠を厚く）
   { id: "gnome",       name: "ノーム",           type: "creature", element: "earth", cost: 45,  st: 20, hp: 45, ab: [] },
   { id: "goblinaxe",   name: "ゴブリンアックス", type: "creature", element: "earth", cost: 60,  st: 40, hp: 35, ab: ["assault"] },
   { id: "clayhulk",    name: "クレイハルク",     type: "creature", element: "earth", cost: 100, st: 40, hp: 75, ab: ["guard"] },
@@ -167,7 +175,7 @@ const CARD_DB = [
   //     地＝重装の高HP壁で受ける。木＝先制と絡め手（捕縛）で手数を取り、相手を拘束して立ち回る。
   //     トレント／タイタンオークは樹木モチーフのため木属性（旧地属性からの名実一致移籍。数値・能力は不変）。
   { id: "treant",      name: "トレント",         type: "creature", element: "wood",  cost: 70,  st: 30, hp: 65, ab: [] }, // v13: HP60→65（守護付きドリアードと差別化＝素のHPで上回る壁に）
-  { id: "titanoak",    name: "タイタンオーク",   type: "creature", element: "wood",  cost: 130, st: 60, hp: 70, ab: [] },
+  { id: "titanoak",    name: "タイタンオーク",   type: "creature", element: "wood",  cost: 130, st: 60, hp: 80, ab: [] }, // v25: HP70→80（115Gのセコイアジャイアント(55/70)に15G高くて+5STしか勝てていなかった）
   { id: "kodama",      name: "コダマ",           type: "creature", element: "wood",  cost: 45,  st: 20, hp: 35, ab: ["lucky"] },
   { id: "sprout",      name: "スプラウト",       type: "creature", element: "wood",  cost: 40,  st: 20, hp: 40, ab: [] },
   { id: "thornvine",   name: "ソーンヴァイン",   type: "creature", element: "wood",  cost: 55,  st: 30, hp: 40, ab: ["capture"] },
@@ -178,14 +186,14 @@ const CARD_DB = [
   { id: "woodwolf",    name: "ウッドウルフ",     type: "creature", element: "wood",  cost: 75,  st: 50, hp: 40, ab: ["first"] },
   { id: "mossgiant",   name: "モスジャイアント", type: "creature", element: "wood",  cost: 90,  st: 40, hp: 65, ab: ["capture"] },
   { id: "worldtree",   name: "ワールドツリー",   type: "creature", element: "wood",  cost: 100, st: 20, hp: 85, ab: ["immobile", "capture"] },
-  { id: "forestlord",  name: "フォレストロード", type: "creature", element: "wood",  cost: 110, st: 50, hp: 60, ab: ["capture"] },
+  { id: "forestlord",  name: "フォレストロード", type: "creature", element: "wood",  cost: 110, st: 55, hp: 60, ab: ["capture"] }, // v25: ST50→55（同コストのキングマンティス(60/45 先制+捕縛)に押されていた）
   { id: "greendragon", name: "グリーンドラゴン", type: "creature", element: "wood",  cost: 120, st: 60, hp: 60, ab: ["pierce"] },
   { id: "elderent",    name: "エンシェントエント", type: "creature", element: "wood", cost: 135, st: 60, hp: 75, ab: ["capture"] },
   // --- v13追加クリーチャー ---
-  { id: "alraune",     name: "アルラウネ",       type: "creature", element: "wood",  cost: 85,  st: 40, hp: 50, ab: ["capture"] },
+  { id: "alraune",     name: "アルラウネ",       type: "creature", element: "wood",  cost: 85,  st: 40, hp: 55, ab: ["capture"] }, // v25: HP50→55（80Gのアビスアングラー(45/45 捕縛)との差別化＝木らしい粘りに）
   // --- v15追加: 各属性に「元から魔法攻撃を備えた」術士を1種ずつ。
   //     無属性の物理無効・物理反射（ファントム/ミラージュ）を素で掃討できる対抗札。そのぶんHPは低め ---
-  { id: "flamemage",   name: "フレイムメイジ",   type: "creature", element: "fire",  cost: 75,  st: 45, hp: 25, ab: ["magicatk"], rarity: "uncommon" },
+  { id: "flamemage",   name: "フレイムメイジ",   type: "creature", element: "fire",  cost: 75,  st: 45, hp: 30, ab: ["magicatk"], rarity: "uncommon" }, // v25: HP25→30（同75Gのタイドメイデン(40/40)に対し打たれ弱すぎた）
   { id: "druid",       name: "ドルイド",         type: "creature", element: "wood",  cost: 70,  st: 35, hp: 35, ab: ["magicatk"], rarity: "uncommon" },
   { id: "runedwarf",   name: "ルーンドワーフ",   type: "creature", element: "earth", cost: 70,  st: 35, hp: 40, ab: ["magicatk"], rarity: "uncommon" },
   { id: "frostwizard", name: "フロストウィザード", type: "creature", element: "water", cost: 65, st: 40, hp: 30, ab: ["magicatk"], rarity: "uncommon" }, // v23: 75→65G（タイドメイデン(75G 40/40)の完全劣化だった＝安さで差別化）
@@ -194,12 +202,12 @@ const CARD_DB = [
   { id: "gargoyle",     name: "ガーゴイル",       type: "creature", element: "neutral", cost: 85,  st: 35, hp: 55, ab: ["guard", "spellproof"], rarity: "rare" }, // v23: 60→85G（守護+護法＝スペル除去不能の壁が60Gは安すぎた）
   { id: "unicorn",      name: "ユニコーン",       type: "creature", element: "neutral", cost: 75,  st: 45, hp: 45, ab: ["first", "lucky"],      rarity: "rare" },
   { id: "mithrilgolem", name: "ミスリルゴーレム", type: "creature", element: "neutral", cost: 95,  st: 50, hp: 70, ab: ["spellproof"],           rarity: "rare" },
-  { id: "chimera",      name: "キメラ",           type: "creature", element: "neutral", cost: 115, st: 45, hp: 60, ab: ["double"],               rarity: "legendary" },
+  { id: "chimera",      name: "キメラ",           type: "creature", element: "neutral", cost: 115, st: 55, hp: 65, ab: ["double"],               rarity: "legendary" }, // v25: 45/60→55/65（110Gのアンフィスバエナ(55/50 連撃・レア)に排出率で劣るレジェンドが数値でも負けていた）
   // --- 無属性（v15追加）: 物理/魔法の攻撃タイプを軸にしたトリックスター。
   //     物理攻撃しか持たない相手には鉄壁だが、魔法攻撃（✨アイテム/クリーチャー）や除去スペルにはあっさり沈む
   //     ＝「対策を積んでいるか」で強さが激変するメタカード。HPは意図的に低い（物理無効=低め／物理反射=極小）---
-  { id: "phantom",      name: "ファントム",       type: "creature", element: "neutral", cost: 75,  st: 30, hp: 35, ab: ["physnull"],    rarity: "rare" },
-  { id: "mirage",       name: "ミラージュ",       type: "creature", element: "neutral", cost: 55,  st: 10, hp: 15, ab: ["physreflect"], rarity: "rare" },
+  { id: "phantom",      name: "ファントム",       type: "creature", element: "neutral", cost: 70,  st: 35, hp: 40, ab: ["physnull"],    rarity: "rare" }, // v25: 75G 30/35→70G 35/40（60Gのウィルオーウィスプが物理無効＋魔法攻撃を兼ねて上位互換だった）
+  { id: "mirage",       name: "ミラージュ",       type: "creature", element: "neutral", cost: 55,  st: 10, hp: 25, ab: ["physreflect"], rarity: "rare" }, // v25: HP15→25（魔法攻撃の一撃で必ず落ちる紙束すぎた。メタカードとしての最低限の体力を確保）
   // --- 無属性（v17追加）: ドッペルゲンガー＝相手をそっくり真似るトリックスター（原さん要望）。
   //     素のST/HPは最弱クラスだが、バトルでは常に「相手と同じ強さ」＝強敵ほど良い写し身になる。
   //     スフィンクス＝無属性初の魔法攻撃持ち。守護も併せ持つ万能の番人（ファントム/ミラージュ対策にもなる）
@@ -209,11 +217,11 @@ const CARD_DB = [
   { id: "longsword",     name: "ロングソード",     type: "item", cost: 40,  st: 20, hp: 0,  desc: "バトル時 ST+20" },
   { id: "battleaxe",     name: "バトルアックス",   type: "item", cost: 70,  st: 40, hp: 0,  desc: "バトル時 ST+40" },
   { id: "greatsword",    name: "グレートソード",   type: "item", cost: 100, st: 55, hp: 0,  desc: "バトル時 ST+55" },
-  { id: "assassindagger",name: "アサシンダガー",   type: "item", cost: 80,  st: 15, hp: 0,  grant: ["first"], desc: "ST+15・先制を得る" },
+  { id: "assassindagger",name: "アサシンダガー",   type: "item", cost: 65,  st: 15, hp: 0,  grant: ["first"], desc: "ST+15・先制を得る" }, // v25: 80→65G（デュアルブレード(95G ST+35+先制)に15G差でST20も劣り、存在意義が無かった）
   { id: "leathershield", name: "レザーシールド",   type: "item", cost: 40,  st: 0,  hp: 20, desc: "バトル時 HP+20" },
   { id: "towershield",   name: "タワーシールド",   type: "item", cost: 70,  st: 0,  hp: 40, desc: "バトル時 HP+40" },
   { id: "platemail",     name: "プレートメイル",   type: "item", cost: 100, st: 0,  hp: 55, desc: "バトル時 HP+55" },
-  { id: "elementalorb",  name: "エレメンタルオーブ", type: "item", cost: 60, st: 15, hp: 15, desc: "バトル時 ST+15 / HP+15" },
+  { id: "elementalorb",  name: "エレメンタルオーブ", type: "item", cost: 55, st: 15, hp: 15, desc: "バトル時 ST+15 / HP+15" }, // v25: 60→55G（ジャイアントベルト(70G +20/+20)・ウォーバナー(65G +25/+10)からの傾斜を適正化）
   // --- v4追加アイテム ---
   { id: "claymore",      name: "クレイモア",       type: "item", cost: 130, st: 70, hp: 0,  desc: "バトル時 ST+70" },
   { id: "mithrilshield", name: "ミスリルシールド", type: "item", cost: 130, st: 0,  hp: 70, desc: "バトル時 HP+70" },
@@ -234,12 +242,12 @@ const CARD_DB = [
   { id: "manadrain", name: "マナドレイン",   type: "spell", cost: 70,  spell: "drain",    desc: "相手から200Gを奪う" }, // v23: 50→70G（±400Gの振れ幅が50Gは安すぎた）
   { id: "holyword",  name: "ホーリーワード", type: "spell", cost: 60,  spell: "holyword", desc: "次のダイスの目を自由に選ぶ" },
   { id: "drawmist",  name: "ドローミスト",   type: "spell", cost: 50,  spell: "draw",     desc: "カードを2枚引く" }, // v23: 70→50G（インスピレーションに支配されていた）
-  { id: "quake",     name: "クエイク",       type: "spell", cost: 120, spell: "quake",    desc: "敵の土地1つのレベルを1下げる" },
-  { id: "growth",    name: "グロース",       type: "spell", cost: 150, spell: "growth",   rarity: "rare", desc: "自分のLv3以下の土地1つをLv+1" },
+  { id: "quake",     name: "クエイク",       type: "spell", cost: 90,  spell: "quake",    desc: "敵の土地1つのレベルを1下げる" }, // v25: 120→90G（170Gのグランドクエイクが2つ下げる＝単発版が割高すぎた）
+  { id: "growth",    name: "グロース",       type: "spell", cost: 120, spell: "growth",   rarity: "rare", desc: "自分のLv3以下の土地1つをLv+1" }, // v25: 150→120G（星霜の儀(120G+手札1枚でLv+2)に支配されていた）
   { id: "recall",    name: "リコール",       type: "spell", cost: 100, spell: "recall",   desc: "城へテレポート（総資産達成なら勝利！ 関門を規定数すべて通過済みなら周回ボーナスも得る）" },
   { id: "revenge",   name: "リベンジ",       type: "spell", cost: 80,  spell: "revenge",  desc: "総資産で負けている時、差額の25%（最大500G）を相手から奪う" },
   { id: "eleshift",  name: "エレメンタルシフト", type: "spell", cost: 90, spell: "eleshift", desc: "自分の土地1つの属性を変える（連鎖の組み替えに）" },
-  { id: "vanish",    name: "バニッシュ",     type: "spell", cost: 160, spell: "vanish",   desc: "敵クリーチャー1体を無条件で消滅させ土地を解放する（HP不問＝どんな相手でも確実に破壊／土地レベルは残る）" },
+  { id: "vanish",    name: "バニッシュ",     type: "spell", cost: 140, spell: "vanish",   desc: "敵クリーチャー1体を無条件で消滅させ土地を解放する（HP不問＝どんな相手でも確実に破壊／土地レベルは残る）" },
   { id: "gust",      name: "ガスト",         type: "spell", cost: 90,  spell: "gust", rarity: "rare", icon: "🌬️", desc: "敵クリーチャー1体を隣接する空き地へ強制的に押し出す（元の土地は空き地に戻る＝連鎖崩し・防衛どかしに／不動・結界は対象外）" },
   { id: "regen",     name: "リジェネ",       type: "spell", cost: 60,  spell: "regen", icon: "💚", desc: "負傷した自分のクリーチャー1体のHPを全回復する" },
   { id: "renew",     name: "引き直し",       type: "spell", cost: 40,  spell: "renew",    desc: "手札をすべて捨て、新たに6枚引く（手札事故のリセットに）" },
@@ -250,7 +258,7 @@ const CARD_DB = [
   { id: "steal",     name: "スティール",     type: "spell", cost: 80,  spell: "steal",    icon: "🎭", desc: "相手の手札からランダムに1枚奪う" },
   { id: "salvage",   name: "サルベージ",     type: "spell", cost: 40,  spell: "salvage",  icon: "♻️", desc: "自分の捨て札からカード1枚を選んで手札に戻す" },
   // --- v13追加スペル ---
-  { id: "alchemy",   name: "アルケミー",     type: "spell", cost: 40,  spell: "alchemy",  icon: "⚗️", desc: "手札から1枚を選んで捨て、120Gに変える（使わないカードを資金に）" },
+  { id: "alchemy",   name: "アルケミー",     type: "spell", cost: 40,  spell: "alchemy",  icon: "⚗️", desc: "手札から1枚を選んで捨て、150Gに変える（使わないカードを資金に）" }, // v25: 120→150G（錬金大釜(70Gで2枚×130G)に対し1枚あたりの実入りが低すぎた）
   // --- v17追加スペル: 移動3種（原さん要望）。自分を飛ばす／配下を好きな空き地へ／配下を2マス先へ ---
   { id: "teleport",  name: "テレポート",     type: "spell", cost: 90,  spell: "teleport",  rarity: "rare",     icon: "💫", desc: "自分のコマを盤面の好きなマス（城以外）へ飛ばす。そのあと通常どおりダイスで移動する（飛んだだけではマスの効果・関門通過は発生しない）" },
   { id: "transport", name: "トランスポート", type: "spell", cost: 80,  spell: "transport", rarity: "rare",     icon: "🚪", desc: "自分のクリーチャー1体を盤面の好きな空き地へ転送する（現在HPのまま移動・元の土地は空き地に戻りレベルは残る／不動は対象外）" },
@@ -259,7 +267,7 @@ const CARD_DB = [
   { id: "plunder",     name: "プランダー",       type: "spell", cost: 95, spell: "plunder",    rarity: "rare",     icon: "💰", desc: "相手の所持金の半分を奪う（相手が富むほど大きい）" },
   { id: "hyperdice",   name: "ダイスブースト",   type: "spell", cost: 50, spell: "dicedouble", rarity: "uncommon", icon: "🎲", desc: "次のダイスの出目を2倍にする（最大12マス進む）" },
   { id: "dispelward",  name: "ディスペルワード", type: "item", cost: 55, st: 0, hp: 0,  nullify: true,  rarity: "rare", desc: "バトル時、相手のアイテムの効果を打ち消す（相手のアイテムを無効化）" },
-  { id: "mirrorshield",name: "ミラーシールド",   type: "item", cost: 95, st: 0, hp: 20, reflect: 0.5, rarity: "rare", desc: "バトル時 HP+20・受けた攻撃ダメージの50%を相手に反射する" },
+  { id: "mirrorshield",name: "ミラーシールド",   type: "item", cost: 85, st: 0, hp: 20, reflect: 0.5, rarity: "rare", desc: "バトル時 HP+20・受けた攻撃ダメージの50%を相手に反射する" }, // v25: 95→85G（スパイクメイル(75G HP+25/反射30%)との差が10G＝反射20%分に見合わなかった）
   // --- 盤面エフェクト（スペル枠で発動、2ラウンドの時限効果でマスそのものを変化させる） ---
   { id: "sanctuary", name: "サンクチュアリ", type: "spell", cost: 140, spell: "sanctuary", fx: true, icon: "🛡️",
     desc: "【盤面】自分の土地1つに2Rの結界。侵略・クリーチャー侵攻・敵スペルの対象にならない" },
@@ -377,6 +385,22 @@ const CARD_DB = [
   { id: "mirrorknight", name: "鏡騎士ミラーナイト", type: "creature", element: "neutral", set: 2, cost: 120, st: 40, hp: 55, ab: ["physreflect"], rarity: "legendary" },
   { id: "orichalcum",   name: "オリハルコンゴーレム", type: "creature", element: "neutral", set: 2, cost: 130, st: 60, hp: 80, ab: ["armor", "spellproof"], rarity: "legendary" },
   { id: "chaoschimera", name: "カオスキメラ",     type: "creature", element: "neutral", set: 2, cost: 140, st: 60, hp: 55, ab: ["double", "lastward"], rarity: "legendary" },
+  // ============================================================
+  // v25追加クリーチャー（原さん要望）: 「領地レベルに働きかける」希少特性の一群と、応援・魔力強奪・二形
+  // いずれも素のスタッツはコスト相応より控えめ＝特性で戦うカード
+  // ============================================================
+  { id: "rampartgolem", name: "ラムパートゴーレム", type: "creature", element: "earth", set: 2, cost: 100, st: 35, hp: 60, ab: ["bulwark"], rarity: "rare" },   // 🏗築城: 守り勝つたびLv+1
+  { id: "scorchworm",   name: "スコーチワーム",     type: "creature", element: "fire",  set: 2, cost: 70,  st: 35, hp: 45, ab: ["blight"],  rarity: "uncommon" }, // 🔥焦土: 守備+30の代わりに土地が痩せる
+  { id: "siegeram",     name: "シージラム",         type: "creature", element: "earth", set: 2, cost: 80,  st: 45, hp: 40, ab: ["siegebreak"], rarity: "rare" }, // 🐏破城: 侵攻先のLvを削ってから殴る
+  { id: "mistrunner",   name: "ミストランナー",     type: "creature", element: "water", set: 2, cost: 60,  st: 25, hp: 30, ab: ["escaper"], rarity: "rare" },    // 💨遁走: 負けても空き地へ逃げる（そのぶん低スタッツ）
+  { id: "manaeater",    name: "マナイーター",       type: "creature", element: "fire",  set: 2, cost: 85,  st: 40, hp: 40, ab: ["siphon"],  rarity: "rare" },    // 💸魔力強奪
+  { id: "bannerbearer", name: "旗手バナーベアラー", type: "creature", element: "wood",  set: 2, cost: 80,  st: 30, hp: 40, ab: ["cheer"],   rarity: "rare" },    // 📣応援: 隣接自領に武具の代わり
+  // 二形（hybrid）: クリーチャーとしては最弱クラス（無属性＝土地の加護も属性相性も無い）だが、
+  // 手札に置いておけば武器／防具としても装備できる＝腐らない万能札。装備した場合は使い切り
+  { id: "livingblade",  name: "リビングブレード",   type: "creature", element: "neutral", set: 2, cost: 75, st: 25, hp: 25, ab: ["hybrid"], asItem: { st: 40, hp: 0 },
+    rarity: "rare", desc: "⚔武器としても使える二形。装備すると バトル時 ST+40（使い切り）" },
+  { id: "livingshield", name: "リビングシールド",   type: "creature", element: "neutral", set: 2, cost: 75, st: 15, hp: 35, ab: ["hybrid"], asItem: { st: 0, hp: 40 },
+    rarity: "rare", desc: "🛡防具としても使える二形。装備すると バトル時 HP+40（使い切り）" },
   // --- 🏛️建造物（クリーチャーのサブタイプ。ST0・不動・バトルで反撃しない据え付けの施設） ---
   { id: "signaltower", name: "狼煙台",     type: "creature", element: "fire",    set: 2, cost: 60,  st: 0, hp: 45, ab: ["immobile", "warfire"],  structure: true, rarity: "uncommon" },
   { id: "greenhouse",  name: "温室庭園",   type: "creature", element: "wood",    set: 2, cost: 65,  st: 0, hp: 55, ab: ["immobile", "garden"],   structure: true, rarity: "uncommon" },
@@ -463,7 +487,7 @@ const CARD_DB = [
   { id: "blessing",  name: "ブレッシング", type: "spell", set: 2, cost: 70, spell: "blessing", rarity: "rare", icon: "🕊️", desc: "自軍クリーチャー1体を永続強化: ST/最大HP+10（成長と同じ枠を使い、合計+25まで）" },
   { id: "siege",     name: "攻城の号令",   type: "spell", set: 2, cost: 100, spell: "siege", rarity: "rare", noCpu: true, icon: "⚔️", desc: "このターンの自分の侵略・侵攻バトルで ST+25" },
   // --- 土地（7種） ---
-  { id: "highsell",   name: "高値売却",     type: "spell", set: 2, cost: 60, spell: "highsell", rarity: "uncommon", noCpu: true, icon: "💱", desc: "自分の土地1つを価値の100%で売却する（通常の強制売却は70%。駐留クリーチャーは手札に戻る）" },
+  { id: "highsell",   name: "高値売却",     type: "spell", set: 2, cost: 60, spell: "highsell", rarity: "uncommon", noCpu: true, icon: "💱", desc: "自分の土地1つを価値の130%で売却する（Lv5なら2080G。通常の強制売却は70%。駐留クリーチャーは手札に戻る）" }, // v25: 100%→130%（売り時を作る一手として実入りを引き上げ）
   { id: "veinfind",   name: "鉱脈発見",     type: "spell", set: 2, cost: 80, spell: "veinfind", rarity: "rare", icon: "💎", desc: "自分の土地1つに魔力鉱脈を付与: 以後、自分のターン開始時+20G（永続。その土地を失うと消える）" },
   { id: "assimilate", name: "属性同化",     type: "spell", set: 2, cost: 100, spell: "assimilate", rarity: "rare", noCpu: true, icon: "🌀", desc: "自分の土地1つの属性に、隣接する自領すべての属性を合わせる（連鎖の一括組み替え）" },
   { id: "curseland",  name: "カースランド", type: "spell", set: 2, cost: 110, spell: "curseland", rarity: "rare", icon: "🕯️", desc: "敵の土地1つの通行料を半減する（2ラウンド）" },
@@ -485,6 +509,8 @@ const CARD_DB = [
   { id: "miragefield", name: "蜃気楼",      type: "spell", set: 2, cost: 75, spell: "miragefield", rarity: "uncommon", icon: "🏜️", desc: "2ラウンドの間、自分の土地が敵の土地対象スペル（クエイク/カースランド等）の対象にならない（クリーチャーは対象になる）" },
   // --- 🕯️儀式（8種）: 追加コストとして手札1枚を捧げる ---
   { id: "r_harvest",  name: "豊穣の儀",     type: "spell", set: 2, cost: 80, spell: "r_harvest", ritual: true, rarity: "uncommon", icon: "🕯️", desc: "【儀式: 手札1枚を捧げる】+350G" },
+  // v25: 豊穣の儀の派生（原さん要望）。1枚あたりの実入りは豊穣の儀より低いが、まとめて捧げれば総額で大きく勝る
+  { id: "r_plenty",   name: "潤沢の儀",     type: "spell", set: 2, cost: 90, spell: "r_plenty", ritual: true, rarity: "rare", icon: "🕯️", desc: "【儀式: 手札を1〜3枚まで好きなだけ捧げる】捧げた1枚につき +300G（豊穣の儀は1枚350G＝1枚あたりは割安・枚数でまとめて稼ぐ）" },
   { id: "r_contract", name: "契約の儀",     type: "spell", set: 2, cost: 90, spell: "r_contract", ritual: true, rarity: "rare", noCpu: true, icon: "🕯️", desc: "【儀式: 手札1枚を捧げる】山札から好きなカード1枚を手札に加える（山札は切り直す）" },
   { id: "r_blaze",    name: "猛火の儀",     type: "spell", set: 2, cost: 100, spell: "r_blaze", ritual: true, rarity: "rare", icon: "🕯️", desc: "【儀式: 手札1枚を捧げる】敵クリーチャー1体に70ダメージ（護法・結界は対象外）" },
   { id: "r_revive",   name: "蘇生の儀",     type: "spell", set: 2, cost: 110, spell: "r_revive", ritual: true, rarity: "rare", icon: "🕯️", desc: "【儀式: 手札1枚を捧げる】自分の捨て札のクリーチャー1体を、好きな空き地へコスト不要で召喚する" },
@@ -502,6 +528,18 @@ const CARD_DB = [
 ];
 
 const CARD_BY_ID = Object.fromEntries(CARD_DB.map(c => [c.id, c]));
+
+// ---------- 二形（hybrid・v25） ----------
+// 「武具としても使えるクリーチャー」を、バトルのアイテム処理へ渡せる形に変換する。
+// battle.js は装備品を { name, st, hp, grant?, magicatk?, ... } として読むだけなので、
+// asItem の中身に名前とコストを添えた擬似アイテムを作れば既存の処理がそのまま通る。
+// 普通のアイテムはそのまま返す（呼び出し側は常にこれを通してよい）。
+function isEquippable(card) { return !!card && (card.type === "item" || !!card.asItem); }
+function itemFormOf(card) {
+  if (!card) return null;
+  if (!card.asItem) return card;
+  return { ...card.asItem, id: card.id, name: card.name, cost: card.cost, icon: card.icon, hybridForm: true };
+}
 
 function shuffle(arr) {
   const a = arr.slice();

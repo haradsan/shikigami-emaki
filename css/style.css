@@ -486,6 +486,40 @@ body.in-game #hud-tabs { display: flex; }
 .dlg-body b { color: var(--gold); }
 .dlg-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .dlg-buttons { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+/* ---------- 盤面タイルピッカー（領地選択ウインドウ・v25） ---------- */
+/* 候補は縦1列のリスト。ラベルが長くても折り返して全文が読める（スマホで右端が見切れないように）。
+   候補が多いときはこの枠だけがスクロールし、下の「👁 盤面から選ぶ／やめる」は常に見える位置に残る */
+.tile-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  margin-bottom: 14px;
+  padding-right: 2px;
+}
+.btn.tile-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  white-space: normal;     /* .btn の nowrap を打ち消す＝長いラベルは折り返す */
+  word-break: break-word;
+  line-height: 1.5;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+.tile-pick .tp-no {
+  flex: 0 0 auto;
+  color: var(--gold);
+  font-weight: bold;
+  font-size: 13px;
+  opacity: 0.85;
+}
+.tile-pick .tp-label { flex: 1 1 auto; min-width: 0; }
+.tile-pick-actions { justify-content: space-between; }
 /* 「👁 盤面を確認」ボタンは左端に寄せて他の選択肢と見分ける */
 .dlg-peek { margin-right: auto; border-style: dashed; color: var(--dim); }
 .dlg-peek:hover { border-color: var(--gold); color: var(--gold); }
@@ -1238,8 +1272,11 @@ body.in-game #hud-tabs { display: flex; }
   #round-info { font-size: 12px; }
   #message { font-size: 15px; }
   #dice { font-size: 44px; margin-bottom: 8px; }
-  #dialog { padding: 14px 14px; max-width: 94vw; max-height: 88vh; max-height: 88dvh; }
+  #dialog { padding: 14px 14px; max-width: 94vw; max-height: 88vh; max-height: 88dvh; overflow-x: hidden; }
   #dialog h2 { font-size: 16px; }
+  /* 領地選択ウインドウ（v25）: 縦リストをやや低くして、下の操作ボタンが必ず画面に入るようにする */
+  .tile-pick-list { max-height: 40vh; max-height: 40dvh; gap: 7px; }
+  .btn.tile-pick { font-size: 13px; padding: 9px 11px; gap: 7px; }
   /* ヘッダーが2段に折り返すため、ステータス/ログのウィンドウはその下から始める */
   #win-p0 { top: 102px; }
   #win-p1 { top: 102px; }

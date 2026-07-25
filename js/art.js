@@ -169,6 +169,8 @@ const ARCH = {
     if (o.bow) parts.push(`<path d="M78 14 C90 24 90 40 78 50" fill="none" stroke="${p.sil}" stroke-width="3"/><path d="M78 14 L78 50" fill="none" stroke="${p.glow}" stroke-width="1.2" opacity="0.8"/><path d="M70 32 L84 32" fill="none" stroke="${p.sil}" stroke-width="2.4"/><path d="M84 32 L80 29 M84 32 L80 35" fill="none" stroke="${p.sil}" stroke-width="2"/>`);
     if (o.shield) parts.push(`<path d="M40 36 C48 38 48 52 40 58 C32 52 32 38 40 36 Z"/><circle cx="40" cy="46" r="2.5" fill="${p.glow}" stroke="none" opacity="0.8"/>`);
     if (o.ribbon) parts.push(`<path d="M46 36 C34 30 30 40 24 36 M74 40 C86 46 92 38 98 44" fill="none" stroke="${p.glow}" stroke-width="2" opacity="0.75"/>`);
+    // 軍旗（v25・📣応援の旗手）: 右手に長い旗竿と、風になびく旗
+    if (o.banner) parts.push(`<rect x="77" y="6" width="2.6" height="46" rx="1.3"/><path d="M79.6 9 C90 12 94 18 88 22 C94 26 90 32 79.6 30 Z"/><path d="M83 14 C87 16 87 22 83 24" fill="none" stroke="${p.glow}" stroke-width="1.2" opacity="0.85"/><circle cx="78.3" cy="4" r="2.6" fill="${p.glow}" stroke="none" opacity="0.9"/>`);
     if (o.genie) parts.push(`<path d="M53 56 C44 62 56 66 48 70 C64 68 70 62 67 54 Z"/><path d="M58 12 C58 6 62 6 62 1 C66 6 64 10 62 13 Z" fill="${p.glow}" stroke="none" opacity="0.85"/>`);
     let s = parts.join("");
     if (o.small) s = _scale(s, 0.82, 60, 40);
@@ -626,6 +628,17 @@ const CREATURE_ART = {
   terraking:     { arch: "golem",    o: { big: 1, crown: 1, moss: 1 } },
   nereusking:    { arch: "humanoid", o: { big: 1, trident: 1, horns: 1 } },
   aeonking:      { arch: "humanoid", o: { big: 1, staff: 1, wings: 1 } },
+  // ============================================================
+  // v25追加（築城・焦土・破城・遁走・魔力強奪・応援・二形）
+  // ============================================================
+  rampartgolem:  { arch: "golem",    o: { big: 1, shine: 1 } },              // 🏗築城＝城壁を積み上げる石の守将
+  scorchworm:    { arch: "serpent",  o: { fins: 1 } },                       // 🔥焦土＝土を焼きながら這う炎蟲
+  siegeram:      { arch: "beast",    o: { tusks: 1, big: 1 } },              // 🐏破城＝城門を突き崩す巨獣
+  mistrunner:    { arch: "fairy",    o: { wings: 1 } },                      // 💨遁走＝霧に紛れて逃げる俊足
+  manaeater:     { arch: "jelly" },                                          // 💸魔力強奪＝魔力を啜る不定形
+  bannerbearer:  { arch: "humanoid", o: { banner: 1, leafhair: 1 } },        // 📣応援＝軍旗を掲げる木の旗手
+  livingblade:   { arch: "humanoid", o: { sword: 1, small: 1 } },            // ⚔二形＝ひとりでに舞う剣
+  livingshield:  { arch: "humanoid", o: { shield: 1, small: 1 } },           // 🛡二形＝ひとりでに構える盾
 };
 
 // ---------- アイテムの造形 ----------

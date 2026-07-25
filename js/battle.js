@@ -10,6 +10,7 @@ const ARMOR_REDUCE    = 10;   // 硬殻のダメージ軽減量
 const LASTWARD_ST     = 25;   // 背水のST補正（HP半分以下）
 const PACK_ST_MAX     = 30;   // 群れのST上限（+5×6体分）
 const GROW_STEP       = 5;    // 成長1段階あたりのST/HP上昇（上限は grown=5 ＝ +25）
+const BLIGHT_DEF_HP   = 30;   // 🔥焦土（v25）の防衛時HP補正（代償として土地レベルが下がる）
 
 // 成長（grow）の段階（0〜5）。creature = tile.creature（{cardId, hp, grown}）
 function grownOf(creature) { return Math.min(5, (creature && creature.grown) || 0); }
@@ -106,15 +107,24 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   };
   const attPack = attAb.has("pack") ? Math.min(PACK_ST_MAX, packCount(opts.attackerId, attCard.element, opts.attSrcId ?? -1) * 5) : 0;
   const defPack = defAb.has("pack") ? Math.min(PACK_ST_MAX, packCount(tile.owner, defCard.element, tile.id) * 5) : 0;
-  attSt += attPack;
-  defSt += defPack + support;
+
+  // 📣応援（cheer・v25）: 隣接する自領の応援役が「武具を貸す」ようにST/HPを上乗せする。
+  // 防衛側はその土地、侵略側は march の出撃元タイル（手札からの侵略は盤上にいないので応援を受けられない）
+  const cheerAt = t => (opts.g && t && typeof cheerCount === "function") ? cheerCount(opts.g, t) : 0;
+  const attCheer = cheerAt(opts.attSrcId != null && opts.g ? opts.g.tiles[opts.attSrcId] : null) * CHEER_BONUS;
+  const defCheer = cheerAt(tile) * CHEER_BONUS;
+
+  attSt += attPack + attCheer;
+  defSt += defPack + support + defCheer;
 
   const defBonus = attAb.has("pierce") ? 0 : landHpBonus(tile, defCard);
   const guardBonus = defAb.has("guard") ? 20 : 0;
+  // 🔥焦土（blight・v25）: 守りは固い（防衛時HP+30）が、この土地でのバトル後にレベルが1下がる（main.jsが処理）
+  const blightHp = defAb.has("blight") ? BLIGHT_DEF_HP : 0;
   const defWindHp = opts.defHpBonus || 0; // 護りの風（v20）
   if (defWindHp) log.push(`🌬️ 護りの風！ ${defCard.name}のHP+${defWindHp}`);
-  const attExtra = attItemEff ? attItemEff.hp : 0;
-  const defExtra = (defItemEff ? defItemEff.hp : 0) + defBonus + guardBonus + defWindHp;
+  const attExtra = (attItemEff ? attItemEff.hp : 0) + attCheer;
+  const defExtra = (defItemEff ? defItemEff.hp : 0) + defBonus + guardBonus + defWindHp + defCheer + blightHp;
   // 決死の覚悟（v20）: 会心率の底上げ（豪運と重複時は高い方）
   const attCritRate = Math.max(attAb.has("lucky") ? CRIT_RATE_LUCKY : CRIT_RATE, opts.attCritRate || 0);
   const defCritRate = Math.max(defAb.has("lucky") ? CRIT_RATE_LUCKY : CRIT_RATE, opts.defCritRate || 0);
@@ -149,6 +159,9 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
     log.push(`🛡 ${defCard.name}は土地の加護でHP+${defBonus}`);
   }
   if (guardBonus > 0) log.push(`🛡 ${defCard.name}の守護！ HP+${guardBonus}`);
+  if (blightHp > 0) log.push(`🔥 ${defCard.name}の焦土！ HP+${blightHp}（このバトルの後、土地は痩せる）`);
+  if (attCheer > 0) log.push(`📣 隣接する味方の応援！ ${attCard.name}のST+${attCheer} / HP+${attCheer}`);
+  if (defCheer > 0) log.push(`📣 隣接する味方の応援！ ${defCard.name}のST+${defCheer} / HP+${defCheer}`);
   if (attMagic) log.push(`✨ ${attCard.name}の攻撃は魔法攻撃！（物理無効・物理反射を貫く）`);
   if (defMagic) log.push(`✨ ${defCard.name}の攻撃は魔法攻撃！（物理無効・物理反射を貫く）`);
 
@@ -184,12 +197,13 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   if (attScroll > 0) {
     log.push(`📊【式】侵略 ${attCard.name}: ST ${attSt}（📜巻物固定） ／ HP ${bd(attHp, attCard.hp, [["成長", attGrown * GROW_STEP], ["装備", attExtra]])}`);
   } else {
-    log.push(`📊【式】侵略 ${attCard.name}: ST ${bd(attSt, attCard.st, [["装備", attItemEff ? attItemEff.st : 0], ["強襲", attAb.has("assault") ? 20 : 0], ["属性", advAtt ? ELEM_ADV_ST : 0], ["成長", attGrown * GROW_STEP], ["群れ", attPack], ["闘技場", RULES.invaderSt]])} ／ HP ${bd(attHp, attCard.hp, [["成長", attGrown * GROW_STEP], ["装備", attExtra]])}`);
+    log.push(`📊【式】侵略 ${attCard.name}: ST ${bd(attSt, attCard.st, [["装備", attItemEff ? attItemEff.st : 0], ["強襲", attAb.has("assault") ? 20 : 0], ["属性", advAtt ? ELEM_ADV_ST : 0], ["成長", attGrown * GROW_STEP], ["群れ", attPack], ["応援", attCheer], ["闘技場", RULES.invaderSt]])} ／ HP ${bd(attHp, attCard.hp, [["成長", attGrown * GROW_STEP], ["装備", attItemEff ? attItemEff.hp : 0], ["応援", attCheer]])}`);
   }
+  const defHpParts = [["装備", defItemEff ? defItemEff.hp : 0], ["土地の加護", defBonus], ["守護", guardBonus], ["焦土", blightHp], ["応援", defCheer], ["護りの風", defWindHp]];
   if (defScroll > 0) {
-    log.push(`📊【式】防衛 ${defCard.name}: ST ${defSt}（📜巻物固定） ／ HP ${bd(defHp, defBaseHp, [["装備", defItemEff ? defItemEff.hp : 0], ["土地の加護", defBonus], ["守護", guardBonus]])}`);
+    log.push(`📊【式】防衛 ${defCard.name}: ST ${defSt}（📜巻物固定） ／ HP ${bd(defHp, defBaseHp, defHpParts)}`);
   } else {
-    log.push(`📊【式】防衛 ${defCard.name}: ST ${bd(defSt, defCard.st, [["装備", defItemEff ? defItemEff.st : 0], ["属性", advDef ? ELEM_ADV_ST : 0], ["成長", defGrown * GROW_STEP], ["群れ", defPack], ["援護", support]])} ／ HP ${bd(defHp, defBaseHp, [["装備", defItemEff ? defItemEff.hp : 0], ["土地の加護", defBonus], ["守護", guardBonus]])}`);
+    log.push(`📊【式】防衛 ${defCard.name}: ST ${bd(defSt, defCard.st, [["装備", defItemEff ? defItemEff.st : 0], ["属性", advDef ? ELEM_ADV_ST : 0], ["成長", defGrown * GROW_STEP], ["群れ", defPack], ["援護", support], ["応援", defCheer]])} ／ HP ${bd(defHp, defBaseHp, defHpParts)}`);
   }
   // 侵略は「一撃で相手の実効HPを削り切れば占領」。硬殻は一撃ごとに-10されるためここで織り込む。
   const attBlocked = !attMagic && (defAb.has("physnull") || defAb.has("physreflect")); // 侵略の攻撃が通らない
@@ -318,11 +332,16 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   } else {
     log.push(`⚖ 両者生存。侵略失敗！ ${attCard.name}は撤退した`);
   }
-  // 吸奪武器（drainMagic・v17）: 打消し後の有効アイテムなら、与えたダメージ×倍率の魔力を相手から強奪する。
-  const attDrain = (attItemEff && attItemEff.drainMagic && attDealt > 0) ? attDealt * attItemEff.drainMagic : 0;
-  const defDrain = (defItemEff && defItemEff.drainMagic && defDealt > 0) ? defDealt * defItemEff.drainMagic : 0;
-  if (attDrain) log.push(`💰 ${attItemEff.name}の吸奪！ 与えたダメージ${attDealt}×${attItemEff.drainMagic}＝${attDrain}Gを強奪！`);
-  if (defDrain) log.push(`💰 ${defItemEff.name}の吸奪！ 与えたダメージ${defDealt}×${defItemEff.drainMagic}＝${defDrain}Gを強奪！`);
+  // 吸奪（drainMagic・v17）＋💸魔力強奪（siphon・v25の能力）: 与えたダメージ×倍率の魔力を相手から強奪する。
+  // 武器の倍率と能力の等倍は加算される（グリードファング×2 ＋ 魔力強奪×1 ＝ ダメージ×3）
+  const drainMul = (itemEff, ab) => ((itemEff && itemEff.drainMagic) || 0) + (ab.has("siphon") ? 1 : 0);
+  const attMul = drainMul(attItemEff, attAb), defMul = drainMul(defItemEff, defAb);
+  const attDrain = (attMul > 0 && attDealt > 0) ? attDealt * attMul : 0;
+  const defDrain = (defMul > 0 && defDealt > 0) ? defDealt * defMul : 0;
+  const drainSrc = (itemEff, ab, name) =>
+    (itemEff && itemEff.drainMagic) ? (ab.has("siphon") ? `${itemEff.name}と${name}の魔力強奪` : itemEff.name) : `${name}の魔力強奪`;
+  if (attDrain) log.push(`💰 ${drainSrc(attItemEff, attAb, attCard.name)}！ 与えたダメージ${attDealt}×${attMul}＝${attDrain}Gを強奪！`);
+  if (defDrain) log.push(`💰 ${drainSrc(defItemEff, defAb, defCard.name)}！ 与えたダメージ${defDealt}×${defMul}＝${defDrain}Gを強奪！`);
   return {
     attackerWins, log, attHp, defHp, attExtra, defExtra, attDrain, defDrain,
     // 転生（rebirth・v19）: 倒されたとき捨札ではなく手札に戻る（アイテム由来の付与も含めた実効判定）

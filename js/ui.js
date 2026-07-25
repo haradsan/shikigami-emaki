@@ -303,6 +303,8 @@ function showCardDetail(cardId) {
     }
   }
   if (c.type === "item") info += row("補正", `${c.st ? `ST+${c.st} ` : ""}${c.hp ? `HP+${c.hp}` : ""}` || "—");
+  // v25: 二形（hybrid）＝武具として装備したときの補正も併記する
+  if (c.asItem) info += row("武具として", `${c.asItem.st ? `⚔ ST+${c.asItem.st} ` : ""}${c.asItem.hp ? `🛡 HP+${c.asItem.hp}` : ""}（装備すると使い切り）`);
   // 特性（能力）は名前だけでなく説明文まで表示（今回の要望の中心）
   const abHtml = (c.ab || []).length
     ? `<div class="cd-abs"><div class="cd-abs-t">🔖 特性</div>` +
@@ -624,11 +626,23 @@ function humanPickTileOnMap(candidates, opts) {
       restoreBtn.onclick = () => { overlay.classList.add("show"); restoreBtn.classList.add("hidden"); };
     };
 
+    // v25: 候補は「縦1列のリスト」で並べる。
+    // 以前は .dlg-buttons（横並び・btnはwhite-space:nowrap）だったため、
+    // 「🔥 火の土地 #12（Lv3・価値480G・💧アンダイン）」のような長いラベルがスマホ幅を突き抜けて
+    // 右側が見切れていた（原さん報告）。リスト化＋折り返しで全文が読めるようにし、
+    // 候補が多いときはリスト枠だけをスクロールさせて「👁 盤面から選ぶ／やめる」を常に画面内に残す。
     let html = `<h2>${esc(opts.title)}</h2>`;
     html += `<p class="dlg-body">${opts.body}<br>🖱 <b>盤面で光っているマス（#番号）を直接クリック</b>しても選べます（「👁 盤面から選ぶ」で盤面へ）。</p>`;
-    html += `<div class="dlg-buttons">`;
+    html += `<div class="tile-pick-list">`;
+    html += candidates.map(t => {
+      const label = opts.labelFn(t);
+      // ラベルに #番号 が含まれない種類のマス（城・関門など）には番号バッジを添えて盤面と対応づける
+      const no = label.includes(`#${t.id}`) ? "" : `<span class="tp-no">#${t.id}</span>`;
+      return `<button class="btn tile-pick" data-id="${t.id}">${no}<span class="tp-label">${label}</span></button>`;
+    }).join("");
+    html += `</div>`;
+    html += `<div class="dlg-buttons tile-pick-actions">`;
     html += `<button class="btn dlg-peek" data-peek="1" title="盤面を表示して、光っているマスを直接クリックで選べます">👁 盤面から選ぶ</button>`;
-    html += candidates.map(t => `<button class="btn" data-id="${t.id}">${opts.labelFn(t)}</button>`).join("");
     if (opts.cancelable) html += `<button class="btn" data-cancel="1">${esc(opts.cancelLabel || "やめる")}</button>`;
     html += `</div>`;
     box.innerHTML = html;
