@@ -214,12 +214,18 @@ function rankGapText(rows, me) {
   return `首位まで -${rows[0].assets - me.assets}G`;
 }
 
-// ---------- プレイヤーパネル ----------
+// ---------- プレイヤー情報窓（v27: 画面上部に3名分を圧縮して固定） ----------
+// v26までは4隅のフローティング窓だったため盤面が隠れていた。v27では上部のフロー配置に変え、
+// 1人あたり3行（①順位・名前・魔力 ②総資産バー ③連鎖/関門/周回/山札＋首位との差）に圧縮。
+// クリックで詳細ポップアップ（showPlayerDetail）＝畳んだ情報はそこで読める。
 function renderPanels(g) {
-  // 三つ巴のときだけ3人目のウィンドウ（#win-p2）を表示する
-  const w2 = document.getElementById("win-p2");
-  if (w2) w2.classList.toggle("unused", g.players.length < 3);
   const rows = standingsOf(g); // 現状順位（総資産順）
+  // 2人なら2列にして1枚あたりを広く使う（3人目の枠は .unused で消す）
+  const strips = document.getElementById("pstrips");
+  if (strips) strips.classList.toggle("n2", g.players.length < 3);
+  const p2el = document.getElementById("panel-2");
+  if (p2el) p2el.classList.toggle("unused", g.players.length < 3);
+  const needed = gatesNeededOf(g);
   g.players.forEach(p => {
     const el = document.getElementById(`panel-${p.id}`);
     if (!el) return;
@@ -228,26 +234,36 @@ function renderPanels(g) {
     const chains = Object.keys(ELEMENTS)
       .map(e => ({ e, n: chainCount(g, p.id, e) }))
       .filter(c => c.n > 0)
-      .map(c => `${ELEMENTS[c.e].icon}${c.n}`).join(" ") || "－";
-    const needed = gatesNeededOf(g);
+      .map(c => `${ELEMENTS[c.e].icon}${c.n}`).join("") || "－";
     const gates = "●".repeat(Math.min(p.gates.size, needed)) + "○".repeat(Math.max(0, needed - p.gates.size));
     const reached = assets >= RULES.target; // 目標達成＝城へ凱旋すれば勝ち（⚑リーチ表示）
+    el.style.setProperty("--pc", PLAYER_COLORS[p.id]); // 左端の色帯＝プレイヤー色
     el.classList.toggle("active", g.current === p.id && !g.over);
     el.classList.toggle("dead", !p.alive);
     el.classList.toggle("reached", reached && !g.over);
+    el.dataset.pid = p.id;
+    el.title = `${p.name}の詳細（所有地・関門・山札など）を開く`;
     // CPUはキャラの顔絵（chars.js）を名前の横に出して「相手の存在」を感じさせる
     const ch = (typeof charOf === "function") ? charOf(p) : null;
-    const face = ch ? `<span class="p-face">${charPortraitSVG(ch, 22)}</span>` : P_ICONS[p.id];
+    const face = ch ? `<span class="p-face">${charPortraitSVG(ch, 20)}</span>` : P_ICONS[p.id];
     el.innerHTML = `
-      <div class="p-name" style="color:${PLAYER_COLORS[p.id]}">${face} ${esc(p.name)}${reached ? ` <span class="p-reach" title="目標資産に到達！ 城へ凱旋すれば勝利">⚑凱旋リーチ</span>` : ""}</div>
-      <div class="p-row"><span>魔力</span><b>${p.magic}G</b></div>
-      <div class="p-row big"><span>総資産</span><b>${assets}G / ${RULES.target}G</b></div>
-      <div class="p-bar"><div style="width:${Math.min(100, assets / RULES.target * 100)}%; background:${PLAYER_COLORS[p.id]}"></div></div>
-      <div class="p-row rank" title="総資産（魔力＋所有地の価値）で決まる現在の順位。ラウンド上限になったときの資産勝負もこの順位で決まります">
-        <span class="p-rank r${me.rank}">${rankMedal(me.rank)} ${me.rank}位</span><span class="p-gap">${rankGapText(rows, me)}</span></div>
-      <div class="p-row"><span>連鎖</span><b>${chains}</b></div>
-      <div class="p-row"><span>関門 ${gates}</span><span>周回 ${p.laps} / 山札 ${p.deck.length}</span></div>
-    `;
+      <div class="ps-top">
+        <span class="p-rank r${me.rank}" title="総資産で決まる現在の順位（ラウンド上限の資産勝負もこの順位）">${rankMedal(me.rank)}${me.rank}</span>
+        ${face}<span class="ps-name" style="color:${PLAYER_COLORS[p.id]}">${esc(p.name)}</span>
+        ${reached ? `<span class="p-reach" title="目標資産に到達！ 城へ凱旋すれば勝利">⚑凱旋</span>` : ""}
+      </div>
+      <div class="ps-mid">
+        <span class="ps-magic" title="手持ちの魔力">💎${p.magic}G</span>
+        <span class="ps-assets" title="総資産（魔力＋所有地の価値） / 目標"><b>${assets}</b> / ${RULES.target}G</span>
+        <div class="ps-bar"><div style="width:${Math.min(100, assets / RULES.target * 100)}%; background:${PLAYER_COLORS[p.id]}"></div></div>
+      </div>
+      <div class="ps-meta">
+        <span title="属性の連鎖（同属性の自領数）">🔗${chains}</span>
+        <span title="通過した関門">⛩️${gates}</span>
+        <span title="周回数">🔄${p.laps}</span>
+        <span title="山札の残り">🎴${p.deck.length}</span>
+        <span class="ps-gap">${rankGapText(rows, me)}</span>
+      </div>`;
   });
   const diff = DIFFICULTIES[loadDifficulty()];
   const mode = g.hotseat ? "🎮 2人対戦" : g.royale ? `⚔ 三つ巴｜${diff.icon}${diff.label}` : `難易度 ${diff.icon}${diff.label}`;
@@ -260,7 +276,60 @@ function renderPanels(g) {
     (ml && !g.training && loadMatchLength() !== "normal" ? `｜${ml.icon}${ml.label}` : "") +
     (g.weekly ? `｜🎪 ${g.weekly.name}` : "") +
     `｜🥇 ${leader}`;
-  renderHudTabs(); // 隠しているウィンドウのチップにも順位メダルを出しているので、資産が動いたら作り直す
+}
+
+// ---------- プレイヤー詳細ポップアップ（v27） ----------
+// 上部の情報窓は圧縮表示なので、細かい情報（所有地の一覧・関門・捨札・手札枚数など）は
+// 情報窓をクリックしたときのポップアップで見せる。カード詳細（showCardDetail）と同じく
+// #overlay や UI.dialogBusy に触らない独立レイヤー＝どの場面で開いても進行を壊さない。
+function showPlayerDetail(pid) {
+  if (typeof G === "undefined" || !G || !G.players) return;
+  const p = G.players[pid];
+  if (!p) return;
+  const rows = standingsOf(G);
+  const me = rows.find(r => r.id === pid);
+  const lands = ownedLands(G, pid);
+  const landTotal = lands.reduce((s, t) => s + landValue(t), 0);
+  const needed = gatesNeededOf(G);
+  const gates = "●".repeat(Math.min(p.gates.size, needed)) + "○".repeat(Math.max(0, needed - p.gates.size));
+  const chains = Object.keys(ELEMENTS)
+    .map(e => ({ e, n: chainCount(G, pid, e) })).filter(c => c.n > 0)
+    .map(c => `${ELEMENTS[c.e].icon}${ELEMENTS[c.e].name}×${c.n}（通行料×${chainMult(c.n).toFixed(1)}）`).join("　") || "なし";
+  const ch = (typeof charOf === "function") ? charOf(p) : null;
+  const face = ch ? charPortraitSVG(ch, 30) : P_ICONS[pid];
+  const row = (k, v) => `<div class="cd-row"><span class="cd-k">${k}</span><span class="cd-v">${v}</span></div>`;
+  const landHtml = lands.length
+    ? lands.map(t => {
+        const cr = t.creature ? CARD_BY_ID[t.creature.cardId] : null;
+        const crTxt = cr
+          ? `${ELEMENTS[cr.element].icon}${esc(cr.name)}（HP ${currentHp(t.creature)}/${maxHpOf(t.creature)}）`
+          : `<span class="ip-empty">空き（クリーチャー無し）</span>`;
+        return `<div class="ip-land"><span class="ipl-no">#${t.id}</span>` +
+          `<span>${ELEMENTS[t.element].icon}Lv${t.level}・価値${landValue(t)}G</span>` +
+          `<span>${crTxt}</span><span class="ipl-toll">通行料 ${tollOf(G, t)}G</span></div>`;
+      }).join("")
+    : `<div class="ip-empty">まだ領地はありません</div>`;
+  let pop = document.getElementById("info-pop");
+  if (!pop) {
+    pop = document.createElement("div");
+    pop.id = "info-pop";
+    document.body.appendChild(pop);
+  }
+  pop.innerHTML = `<div class="ip-box">
+      <div class="ip-name" style="color:${PLAYER_COLORS[pid]}">${face} ${esc(p.name)}
+        <span class="p-rank r${me.rank}">${rankMedal(me.rank)} ${me.rank}位</span></div>
+      ${row("魔力", `<b>${p.magic}G</b>`)}
+      ${row("総資産", `<b>${me.assets}G</b> / ${RULES.target}G　（魔力 ${p.magic}G ＋ 領地 ${landTotal}G）`)}
+      ${row("順位", `${rankGapText(rows, me) || "—"}`)}
+      ${row("連鎖", chains)}
+      ${row("関門", `${gates}（${p.gates.size} / ${needed}）`)}
+      ${row("周回", `${p.laps} 周`)}
+      ${row("手札 / 山札 / 捨札", `${p.hand.length}枚 / ${p.deck.length}枚 / ${p.discard.length}枚`)}
+      <div class="ip-lands"><div class="cd-abs-t">🏞 所有地 ${lands.length}か所（合計 ${landTotal}G）</div>${landHtml}</div>
+      <div class="cd-hint">クリックで閉じる</div>
+    </div>`;
+  pop.classList.add("show");
+  pop.onclick = () => pop.classList.remove("show");
 }
 
 // ---------- 手札 ----------
@@ -452,7 +521,14 @@ async function animateDraw(card) {
   host.remove();
 }
 
-function renderAll(g) { renderBoard(g); renderPanels(g); renderHand(g); }
+function renderAll(g) {
+  renderBoard(g);
+  renderPanels(g);
+  renderHand(g);
+  // 手札の枚数や⚑凱旋リーチ表示で上部・下段の高さが変わるので、そのたびに位置基準を測り直す
+  // （盤面の等倍サイズ --board-base もここで更新＝盤面が下段に食い込まない）
+  syncHudMetrics();
+}
 
 // ---------- タイトル画面（起動時の世界観演出） ----------
 // マナの粒子が瞬く夜空＋ゆっくり回る大紋章＋地平のクリーチャーシルエット。
@@ -490,6 +566,9 @@ function showTitleScreen() {
 
 // ---------- 盤面ズーム（拡大縮小して読みやすく） ----------
 let BOARD_ZOOM = 1;
+// 直近の自動フィット倍率。BOARD_ZOOM がこれと同じ＝「自分では拡大していない」状態なので、
+// 表示領域が変わったとき（情報窓の開閉・画面回転・マップ確認モード）に自動で合わせ直してよい
+let AUTO_FIT_ZOOM = null;
 // ZOOM_MIN は「⛶ 全体」フィットで大きな盤面を1画面に収められるよう低め（0.3）にしてある
 const ZOOM_MIN = 0.3, ZOOM_MAX = 2.6, ZOOM_STEP = 0.2;
 function applyZoom() {
@@ -515,52 +594,160 @@ function fitBoard(opts = {}) {
   let z = Math.min((wrap.clientWidth - 10) / baseW, (wrap.clientHeight - 10) / baseH);
   if (opts.max !== undefined) z = Math.min(z, opts.max);
   BOARD_ZOOM = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, +z.toFixed(2)));
+  AUTO_FIT_ZOOM = BOARD_ZOOM; // 「自動で合わせた倍率」として覚える（maybeRefitBoard の判定用）
   applyZoom();
   wrap.scrollTo({ left: 0, top: 0 });
 }
 
-// ---------- 固定フローティングウィンドウ（ステータス／ログ／手札） ----------
-// 盤面をスクロールしても常に見える固定ウィンドウ。各ウィンドウは「✕」で一時的に隠せ、
-// 隠すと画面右下の再表示チップから戻せる。
-const HUD_WINDOWS = [
-  { id: "win-p0",   chip: "🔵 あなた" },
-  { id: "win-p1",   chip: "🔴 相手" },
-  { id: "win-p2",   chip: "🟢 相手2" }, // 三つ巴のときだけ実体が表示される（それ以外は .unused）
-  { id: "win-log",  chip: "📜 ログ" },
-  { id: "win-hand", chip: "🃏 手札" },
-];
-function renderHudTabs() {
-  const tabs = document.getElementById("hud-tabs");
-  if (!tabs) return;
-  // ステータスパネルを隠しているときは、チップのラベルに現状順位のメダルを付ける
-  // （パネルを閉じて盤面を広く見ているときでも順位だけは分かるように）
-  const rows = (typeof G !== "undefined" && G && G.players && G.tiles && !G.over) ? standingsOf(G) : null;
-  const chipOf = w => {
-    const m = /^win-p(\d)$/.exec(w.id);
-    if (!rows || !m) return w.chip;
-    const r = rows.find(x => x.id === Number(m[1]));
-    return r ? `${rankMedal(r.rank)}${w.chip}` : w.chip;
-  };
-  tabs.innerHTML = HUD_WINDOWS
-    .filter(w => {
-      const el = document.getElementById(w.id);
-      // .unused（この対戦では使わないウィンドウ＝2人対戦時の win-p2）はチップも出さない
-      return el && el.classList.contains("hidden") && !el.classList.contains("unused");
-    })
-    .map(w => `<button class="hud-tab" data-win="${w.id}">${chipOf(w)}</button>`).join("");
-  tabs.querySelectorAll(".hud-tab").forEach(btn => btn.addEventListener("click", () => {
-    const win = document.getElementById(btn.dataset.win);
-    if (win) { win.classList.remove("hidden"); renderHudTabs(); }
-  }));
+// ============================================================
+// 表示トグル（v27）— 👥情報窓 / 📜ログ / 🃏手札 / 🗺マップ確認
+// ------------------------------------------------------------
+// 情報窓・手札・ダイスは盤面に重ならないフロー配置になったので、隠す目的は
+// 「盤面をもっと広く見たい」ことに絞られた。切り替えは上部バーの4つのボタンに集約し、
+// 各ウィンドウの「✕」も同じ関数を呼ぶ（＝状態が1か所に集まって食い違わない）。
+// 選んだ状態は localStorage に残す（毎回同じ好みで遊べるように）。
+// ============================================================
+const HUD_PREF_KEY = "mana-circuit-hud";
+// 既定: 情報窓＝出す／ログ＝広い画面だけ出す（狭い画面ではログが盤面に重なるため既定オフ。
+// 通知トースト（v26）があるので閉じていても重要な出来事は分かる）／手札＝開いた状態
+function defaultHudPrefs() {
+  return { panels: true, log: window.innerWidth > 980, hand: true };
 }
+let HUD_PREFS = defaultHudPrefs();
+// 自分で選んだ設定が保存されているか（無い間は画面幅に応じた既定を使い続ける＝
+// 小さい窓で開いてから最大化した場合などに「なぜかログが出ない」状態が固定されない）
+function hasSavedHudPrefs() {
+  try { return localStorage.getItem(HUD_PREF_KEY) != null; } catch (e) { return false; }
+}
+function loadHudPrefs() {
+  try {
+    const s = JSON.parse(localStorage.getItem(HUD_PREF_KEY));
+    if (s && typeof s === "object") return { ...defaultHudPrefs(), ...s };
+  } catch (e) { /* プライベートモード等 */ }
+  return defaultHudPrefs();
+}
+function saveHudPrefs() {
+  try { localStorage.setItem(HUD_PREF_KEY, JSON.stringify(HUD_PREFS)); } catch (e) { /* 無視 */ }
+}
+// v27でレイアウトが変わったので、最初の1回だけ切り替え方を案内する（保存できない環境では出さない）
+const HUD_HINT_KEY = "mana-circuit-hint-v27";
+function showLayoutHintOnce() {
+  try {
+    if (localStorage.getItem(HUD_HINT_KEY)) return;
+    localStorage.setItem(HUD_HINT_KEY, "1");
+  } catch (e) { return; }
+  toast("🗺 で盤面を大きく確認／👥📜🃏 で情報窓・ログ・手札を切替できます", "sys");
+}
+// 隠したときに出す短い案内（戻し方が分からなくならないように）
+const VIEW_HINTS = {
+  panels: "👥 情報窓を隠しました（上部の👥で戻せます）",
+  log: "📜 ログを隠しました（上部の📜で戻せます）",
+  hand: "🃏 手札を畳みました（上部の🃏で戻せます）",
+};
+function applyHudPrefs() {
+  const strips = document.getElementById("pstrips");
+  if (strips) strips.classList.toggle("hidden", !HUD_PREFS.panels);
+  const logWin = document.getElementById("win-log");
+  if (logWin) logWin.classList.toggle("hidden", !HUD_PREFS.log);
+  // 手札は「畳む」（完全に消さない＝枚数の帯は残す）
+  document.body.classList.toggle("hand-min", !HUD_PREFS.hand);
+  renderViewToggles();
+  syncHudMetrics();
+  maybeRefitBoard();
+  updateHandArrows();
+}
+function toggleView(key) {
+  if (!(key in HUD_PREFS)) return;
+  HUD_PREFS[key] = !HUD_PREFS[key];
+  saveHudPrefs();
+  applyHudPrefs();
+  if (!HUD_PREFS[key] && VIEW_HINTS[key]) toast(VIEW_HINTS[key], "sys");
+}
+function renderViewToggles() {
+  const set = (id, off, on) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.classList.toggle("off", !!off);
+    b.classList.toggle("on", !!on);
+  };
+  set("view-panels", !HUD_PREFS.panels);
+  set("view-log", !HUD_PREFS.log);
+  set("view-hand", !HUD_PREFS.hand);
+  set("view-map", false, !!UI.mapFocus);
+}
+
+// ---------- 上部エリア／下段の実測高さをCSS変数に流す ----------
+// セリフ吹き出し・ポップアップ通知・「選択に戻る」ボタンの位置をこの値から決めている
+// （v26まではpx直書きで、レイアウトを変えるたびに重なりの調整が必要だった）
+// 盤面の等倍サイズ（--board-base）も同時に更新する: 盤面エリアの高さ＝100% になるので、
+// 情報窓・手札を畳んだぶんがそのまま盤面の大きさになり、「100%」の意味も分かりやすい
+function syncHudMetrics() {
+  const h = (document.querySelector("header")?.offsetHeight || 0) +
+            (document.getElementById("hud-top")?.offsetHeight || 0);
+  const bar = document.getElementById("bottom-bar");
+  const bh = (bar && getComputedStyle(bar).display !== "none") ? bar.offsetHeight : 0;
+  const root = document.documentElement;
+  root.style.setProperty("--hud-h", `${Math.round(h)}px`);
+  root.style.setProperty("--bottom-h", `${Math.round(bh)}px`);
+  const wrap = document.getElementById("board-wrap");
+  // clientHeight はスクロールバーを除いた内側の高さ。8px引いて、拡大時に横スクロールバーが
+  // 出ても「縮む→出ない→また伸びる」の往復にならないようにしている
+  if (wrap && wrap.clientHeight > 80) {
+    root.style.setProperty("--board-base", `${Math.round(wrap.clientHeight - 8)}px`);
+  }
+}
+
+// ---------- 🗺 マップ確認モード ----------
+// 情報窓・ログ・手札を一時的に片付けて「マス目の表示を最優先」にする。
+// 解除すると元の倍率に戻る（マップを見るために拡大した状態が残らないように）。
+UI.mapFocus = false;
+UI._zoomBeforeMap = null;
+function setMapFocus(on) {
+  on = !!on;
+  if (UI.mapFocus === on) return;
+  UI.mapFocus = on;
+  document.body.classList.toggle("map-focus", on);
+  if (on) {
+    UI._zoomBeforeMap = BOARD_ZOOM;
+    syncHudMetrics();
+    fitBoard(); // 空いた領域いっぱいに盤面を広げる（拡大の上限なし＝マスを大きく見せる）
+    toast("🗺 マップ確認モード（もう一度🗺で戻ります）", "sys");
+  } else {
+    syncHudMetrics();
+    if (UI._zoomBeforeMap != null) { BOARD_ZOOM = UI._zoomBeforeMap; applyZoom(); }
+    UI._zoomBeforeMap = null;
+  }
+  renderViewToggles();
+}
+function toggleMapFocus() { setMapFocus(!UI.mapFocus); }
+function exitMapFocus() { setMapFocus(false); }
+
+// 盤面の自動フィット: 「自動で合わせた倍率のまま（＝自分で拡大縮小していない）」ときだけ
+// 表示領域の変化に追随する。手で拡大した倍率を勝手に戻さないための判定。
+function maybeRefitBoard() {
+  if (typeof G === "undefined" || !G || !G.tiles) return;
+  if (UI.mapFocus) { fitBoard(); return; }
+  if (AUTO_FIT_ZOOM != null && Math.abs(BOARD_ZOOM - AUTO_FIT_ZOOM) < 0.005) fitBoard({ max: 1 });
+}
+
 function initHudWindows() {
-  HUD_WINDOWS.forEach(w => {
-    const win = document.getElementById(w.id);
-    if (!win) return;
-    const closeBtn = win.querySelector(".win-close");
-    if (closeBtn) closeBtn.addEventListener("click", () => { win.classList.add("hidden"); renderHudTabs(); });
+  HUD_PREFS = loadHudPrefs();
+  // 各ウィンドウの「✕」もトグルと同じ処理を呼ぶ（状態が食い違わないように）
+  const closeMap = { "win-log": "log", "win-hand": "hand" };
+  Object.entries(closeMap).forEach(([winId, key]) => {
+    const btn = document.getElementById(winId)?.querySelector(".win-close");
+    if (btn) btn.addEventListener("click", () => { if (HUD_PREFS[key]) toggleView(key); });
   });
-  renderHudTabs();
+  document.getElementById("view-panels")?.addEventListener("click", () => toggleView("panels"));
+  document.getElementById("view-log")?.addEventListener("click", () => toggleView("log"));
+  document.getElementById("view-hand")?.addEventListener("click", () => toggleView("hand"));
+  document.getElementById("view-map")?.addEventListener("click", toggleMapFocus);
+  // 情報窓のクリックで詳細ポップアップ（イベント委譲＝毎回の再描画で付け直さない）
+  document.getElementById("pstrips")?.addEventListener("click", e => {
+    const strip = e.target.closest && e.target.closest(".pstrip");
+    if (strip && strip.dataset.pid !== undefined) showPlayerDetail(Number(strip.dataset.pid));
+  });
+  applyHudPrefs();
   initHandArrows();
 }
 
@@ -1127,14 +1314,31 @@ async function showDicePicker() {
   });
 }
 
+// ---------- メインの操作ボタン（v27: 操作ドック） ----------
+// ダイスを振る操作は専用の丸いボタン（#roll-btn＝出目表示に重なる大きな的）で受ける。
+// 盤面中央から下段の右端へ移したので、盤面を隠さずに親指の届く位置で押せる。
+// それ以外のラベル（▶次へ等）は同じドックのピル（#action-btn）に出す。
+function mainActionButton(label) {
+  return /🎲/.test(label) ? document.getElementById("roll-btn") : document.getElementById("action-btn");
+}
+function showActionButton(label) {
+  const btn = mainActionButton(label);
+  if (btn.id === "action-btn") btn.textContent = label; // ダイスボタンの中身は固定（🎲＋振る）
+  btn.classList.remove("hidden");
+  UI._actionBtn = btn; // Space / Enter キーで押せるようにするため覚えておく
+  return btn;
+}
+function hideActionButton(btn) {
+  const b = btn || UI._actionBtn;
+  if (b) b.classList.add("hidden");
+  if (!btn || btn === UI._actionBtn) UI._actionBtn = null;
+}
 // メインの操作ボタン（1つだけ表示して押されるのを待つ）
 function waitButton(label) {
   return new Promise(resolve => {
-    const btn = document.getElementById("action-btn");
-    btn.textContent = label;
-    btn.classList.remove("hidden");
+    const btn = showActionButton(label);
     const handler = () => {
-      btn.classList.add("hidden");
+      hideActionButton(btn);
       btn.removeEventListener("click", handler);
       resolve();
     };

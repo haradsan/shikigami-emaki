@@ -24,8 +24,12 @@ body {
   background: radial-gradient(ellipse at 50% 0%, #2b2340 0%, var(--bg) 60%);
   color: var(--text);
   font-family: "Yu Gothic UI", "Meiryo", sans-serif;
-  min-height: 100vh;
-  min-height: 100dvh; /* スマホのアドレスバー伸縮に追従（非対応ブラウザは上の100vhが有効） */
+  /* v27: 画面ぴったりの高さに固定する。上部エリアと下段（手札＋ダイス）をフロー配置にしたので、
+     高さが可変（min-height）だとページ全体が縦に伸びて下段が画面外へ出てしまう。
+     余った分は盤面（main）が受け持ち、盤面だけが内側でスクロール／ズームする */
+  height: 100vh;
+  height: 100dvh; /* スマホのアドレスバー伸縮に追従（非対応ブラウザは上の100vhが有効） */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   user-select: none;
@@ -34,13 +38,16 @@ body {
 
 header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  padding: 10px 24px 4px;
+  gap: 10px;
+  padding: 8px 18px 5px;
+  flex: none;
 }
 h1 {
-  font-size: 22px;
-  letter-spacing: 6px;
+  font-size: 21px;
+  letter-spacing: 5px;
+  white-space: nowrap;
   /* 金彩のグラデーション文字 */
   background: linear-gradient(180deg, #fff3c4 10%, #ffd76a 45%, #c9962e 75%, #ffe9a0);
   -webkit-background-clip: text;
@@ -48,17 +55,117 @@ h1 {
   color: transparent;
   filter: drop-shadow(0 0 10px #ffd76a44) drop-shadow(0 2px 2px #000);
 }
-#round-info { color: var(--dim); font-size: 14px; }
-.header-right { display: flex; align-items: center; gap: 12px; }
+.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .btn.small { padding: 4px 12px; font-size: 12.5px; border-radius: 8px; }
 #zoom-ctrl { display: flex; align-items: center; gap: 4px; }
 #zoom-ctrl .btn.small { padding: 4px 10px; }
 #zoom-label { min-width: 54px; text-align: center; color: var(--dim); }
 
+/* ============================================================
+   上部固定エリア（v27）— 情報窓3名分 ＋ 対戦情報 ＋ 表示トグル
+   ------------------------------------------------------------
+   v26までは4隅にフローティングの情報窓を置いていたため盤面が隠れていた。
+   v27では上部エリア・下段（手札＋ダイス）をどちらも「フロー配置」にして、
+   盤面（main）と物理的に重ならないようにしてある。
+   ＝盤面の上に乗るのはダイアログ・通知・吹き出しだけ（いずれも一時的）。
+   ============================================================ */
+#hud-top {
+  display: none; /* タイトル画面では出さない。ゲーム中だけ body.in-game で表示 */
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px 4px;
+}
+body.in-game #hud-top { display: flex; }
+
+/* 3名分の圧縮情報窓（横並び・等幅）。2人対戦では2列にして1枚あたりを広く使う */
+#pstrips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: min(100%, 1160px);
+  margin: 0 auto;
+}
+#pstrips.n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: min(100%, 780px); }
+#pstrips.hidden { display: none !important; }
+.pstrip {
+  position: relative;
+  min-width: 0;
+  background: rgba(42, 36, 56, 0.94);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--pc, var(--border));
+  border-radius: 10px;
+  padding: 5px 9px 6px;
+  box-shadow: 0 4px 14px #0007;
+  cursor: pointer;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.pstrip:hover { border-color: var(--gold); }
+.pstrip.unused { display: none !important; } /* この対戦では使わない3人目 */
+.pstrip.active { border-color: var(--gold); box-shadow: 0 0 13px #ffd76a44; }   /* 手番 */
+.pstrip.reached { border-color: var(--gold); box-shadow: 0 0 16px #ffd76a55; }  /* ⚑凱旋リーチ */
+.pstrip.dead { opacity: 0.45; }
+.ps-top { display: flex; align-items: center; gap: 5px; font-size: 13.5px; font-weight: bold; line-height: 1.2; }
+.ps-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-magic { flex: none; color: var(--gold); font-size: 12px; white-space: nowrap; }
+.ps-mid { display: flex; align-items: center; gap: 7px; margin: 2px 0 1px; }
+.ps-assets { flex: none; font-size: 12px; line-height: 1.2; white-space: nowrap; }
+.ps-assets b { color: var(--gold); }
+.ps-bar { flex: 1; min-width: 24px; height: 5px; background: #17131f; border-radius: 3px; overflow: hidden; }
+.ps-bar div { height: 100%; border-radius: 3px; transition: width 0.4s; }
+.ps-meta { display: flex; align-items: center; gap: 8px; font-size: 10.5px; line-height: 1.3; color: var(--dim); white-space: nowrap; overflow: hidden; }
+.ps-meta .ps-gap { margin-left: auto; }
+.pstrip .p-rank { font-size: 11.5px; padding: 0 5px; }
+.pstrip .p-face { margin-right: 0; vertical-align: -4px; }
+
+/* 対戦情報（左）／メッセージ（中央）／表示トグル（右） */
+#hud-bar { display: flex; align-items: center; gap: 10px; min-height: 26px; }
+#round-info {
+  flex: 0 1 auto;
+  color: var(--dim);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#message {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 14.5px;
+  font-weight: bold;
+  color: var(--gold);
+  text-shadow: 0 2px 8px #000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 表示トグル（👥情報窓 / 📜ログ / 🃏手札 / 🗺マップ確認）。隠している間は暗くなる */
+#view-toggles { display: none; flex: none; gap: 4px; }
+body.in-game #view-toggles { display: flex; }
+.vt {
+  width: 34px;
+  height: 28px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s;
+}
+.vt:hover { border-color: var(--gold); }
+.vt.off { opacity: 0.38; }                                        /* 非表示中 */
+.vt.on { border-color: var(--gold); box-shadow: 0 0 10px #ffd76a55; background: #4a3a12; } /* マップ確認モード中 */
+
 main {
   flex: 1;
   display: flex;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 2px 12px 4px;
   min-height: 0;
 }
 
@@ -82,38 +189,81 @@ main {
 }
 #board {
   display: block;
-  /* --zoom（ズームボタン/Ctrl+ホイール）で拡大縮小。既定は画面高さの74% */
-  height: calc(74vh * var(--zoom, 1));
+  /* 等倍（100%）＝盤面エリアの高さぴったり。--board-base は ui.js syncHudMetrics が実測して入れる
+     （情報窓・手札の開閉で盤面エリアの高さが変わるため。未設定の環境でも 66vh で破綻しない）。
+     --zoom（ズームボタン/Ctrl+ホイール/ピンチ）でここから拡大縮小する */
+  height: calc(var(--board-base, 66vh) * var(--zoom, 1));
   aspect-ratio: 1;
 }
 .tile rect { transition: stroke 0.2s; }
 
-#center-hud {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 52%;
-  text-align: center;
-  pointer-events: none;
+/* ============================================================
+   下段（v27）— 手札 ＋ 操作ドック（ダイス）
+   v26までは 🎲 と操作ボタンが盤面中央（#center-hud）にあり、中央のマスを隠していた。
+   v27では下段の右端＝親指の届く位置へ移し、盤面の上から完全に外した。
+   ============================================================ */
+#bottom-bar {
+  display: none;
+  flex: none;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 10px calc(8px + env(safe-area-inset-bottom, 0px));
 }
-#center-hud > * { pointer-events: auto; }
-#message {
-  font-size: 17px;
-  font-weight: bold;
-  color: var(--gold);
-  margin-bottom: 10px;
-  text-shadow: 0 2px 8px #000;
-  min-height: 24px;
+body.in-game #bottom-bar { display: flex; }
+
+#ctrl-dock { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+/* ダイスの丸い定位置。「直前の出目の表示」と「振るボタン」を同じ場所に重ねてある
+   ＝重要なアイコンなので小さくせず、かつ盤面には重ならない */
+#dice-slot {
+  position: relative;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #3a3153, #201a2e 72%);
+  border: 2px solid var(--border);
+  box-shadow: 0 6px 20px #000a, inset 0 0 16px #0009;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 #dice {
-  font-size: 54px;
+  font-size: 34px;
   font-weight: bold;
   color: #fff;
-  margin-bottom: 12px;
-  text-shadow: 0 4px 16px #000;
+  line-height: 1;
+  text-shadow: 0 3px 10px #000;
   transition: transform 0.1s;
 }
 #dice.rolling { transform: scale(1.15) rotate(8deg); }
+/* 振るボタン（ダイス待ちのときだけ出目表示の上に重なる。金の脈動で「押すところ」を示す） */
+#roll-btn {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: radial-gradient(circle at 35% 28%, #b08c2c, #6b520f 72%);
+  color: #fff;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  animation: rollPulse 1.7s ease-out infinite;
+}
+#roll-btn:hover { filter: brightness(1.18); }
+#roll-btn.hidden { display: none !important; }
+.rb-face { font-size: 27px; line-height: 1; filter: drop-shadow(0 2px 3px #000); }
+.rb-lbl { font-size: 10.5px; font-weight: bold; letter-spacing: 1px; }
+@keyframes rollPulse {
+  0%        { box-shadow: 0 0 0 0 #ffd76aaa, 0 6px 20px #000a; }
+  70%, 100% { box-shadow: 0 0 0 13px #ffd76a00, 0 6px 20px #000a; }
+}
+/* ダイス以外のメイン操作（▶次へ等）はドックの上に小さめのピルで出す */
+#ctrl-dock #action-btn { max-width: 160px; font-size: 13px; padding: 8px 14px; white-space: normal; }
 
 /* ---------- ボタン ---------- */
 .btn {
@@ -145,13 +295,13 @@ main {
 body.in-game .in-game-only { display: inline-block; }
 .hidden.in-game-only, body.in-game .in-game-only.hidden { display: none !important; }
 
-/* ---------- 固定フローティングウィンドウ（ステータス／ログ／手札） ---------- */
-/* 既定（タイトル画面など）は非表示。ゲーム中だけ body.in-game で表示する */
-.hud-win { display: none; position: fixed; z-index: 55; }
-#hud-tabs { display: none; }
+/* ---------- ログ／手札のウィンドウ ---------- */
+/* 既定（タイトル画面など）は非表示。ゲーム中だけ body.in-game で表示する。
+   v27: どちらもフロー配置（ログは広い画面では盤面の右／手札は下段）＝盤面に重ならない。
+   狭い画面のログだけは例外的にフローティング（下の @media (max-width: 980px) 参照） */
+.hud-win { display: none; position: relative; }
 body.in-game .hud-win { display: block; }
 body.in-game .hud-win.hidden { display: none !important; }
-body.in-game #hud-tabs { display: flex; }
 .hud-win.framed {
   background: rgba(34, 28, 48, 0.94);
   border: 1px solid var(--border);
@@ -160,20 +310,12 @@ body.in-game #hud-tabs { display: flex; }
   box-shadow: 0 8px 28px #000a;
   backdrop-filter: blur(3px);
 }
-#win-p0 { top: 54px; left: 12px;  width: 252px; }
-#win-p1 { top: 54px; right: 12px; width: 252px; }
-/* 順位行（v26）でパネルが約20px高くなったぶん、下段のウィンドウを下げて隙間を確保する */
-#win-p2 { top: 232px; right: 12px; width: 252px; } /* 3人目（⚔三つ巴）は相手1の下 */
-#win-log { top: 232px; left: 12px; width: 252px; }
-/* この対戦では使わないウィンドウ（2人対戦時の win-p2）。チップにも出さない */
-.hud-win.unused { display: none !important; }
-#win-hand {
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 10px;
-  max-width: min(96vw, 940px);
-}
-/* 各ウィンドウ右上の「✕」（一時的に隠す） */
+/* 📜ログ: 広い画面では盤面の右の余白（正方形の盤面では必ず余る）に縦長で並べる */
+#win-log { flex: none; width: 258px; align-self: stretch; }
+body.in-game #win-log { display: flex; flex-direction: column; }
+/* 🃏手札: 下段の中央。狭い画面では縮んでカードが横スクロールになる */
+#win-hand { flex: 1 1 auto; min-width: 0; max-width: min(96vw, 940px); }
+/* 各ウィンドウ右上の「✕」（一時的に隠す。上部バーのトグルで戻せる） */
 .win-close {
   position: absolute;
   top: -9px;
@@ -193,77 +335,60 @@ body.in-game #hud-tabs { display: flex; }
 }
 .win-close:hover { border-color: var(--gold); color: var(--gold); }
 .win-head { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+/* 手札の折りたたみ（🃏トグル）: 枚数の帯だけ残して盤面を広く使う */
+body.hand-min #win-hand #hand-row { display: none; }
+body.hand-min #win-hand { padding: 6px 12px; flex: none; }
+body.hand-min #win-hand .win-head { margin-bottom: 0; }
 
-/* 隠したウィンドウの再表示チップ（右下） */
-#hud-tabs {
+/* ---------- プレイヤー詳細ポップアップ（情報窓のクリックで開く・表示専用） ---------- */
+#info-pop {
   position: fixed;
-  right: 12px;
-  bottom: 12px;
-  z-index: 56;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-end;
+  inset: 0;
+  z-index: 280;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 16, 0.72);
+  padding: 16px;
+  backdrop-filter: blur(2px);
 }
-.hud-tab {
-  background: rgba(34, 28, 48, 0.94);
-  color: var(--text);
+#info-pop.show { display: flex; }
+.ip-box {
+  background: linear-gradient(180deg, #2c2540, #211b30);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 5px 14px;
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  box-shadow: 0 4px 14px #0008;
+  border-radius: 16px;
+  padding: 16px 18px;
+  max-width: min(94vw, 520px);
+  max-height: 86vh;
+  max-height: 86dvh;
+  overflow-y: auto;
+  box-shadow: 0 18px 50px #000c;
 }
-.hud-tab:hover { border-color: var(--gold); color: var(--gold); }
+.ip-name { font-size: 17px; font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; }
+.ip-lands { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+.ip-land { display: flex; gap: 8px; font-size: 12px; color: #d8d2e8; line-height: 1.75; }
+.ip-land .ipl-no { color: var(--dim); min-width: 34px; }
+.ip-land .ipl-toll { margin-left: auto; color: var(--gold); }
+.ip-empty { font-size: 12px; color: var(--dim); }
 
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 14px;
-  box-shadow: 0 8px 28px #0009;
-  transition: box-shadow 0.3s, border-color 0.3s;
-}
-.panel.active { border-color: var(--gold); box-shadow: 0 0 14px #ffd76a44; }
-.panel.dead { opacity: 0.4; }
-/* 目標資産に到達（⚑凱旋リーチ）: 金の枠で「あとは城へ帰るだけ」を全員に見せる */
-.panel.reached { border-color: var(--gold); box-shadow: 0 0 18px #ffd76a66; }
-.p-name { font-weight: bold; font-size: 15px; margin-bottom: 6px; }
-.p-face { display: inline-block; vertical-align: -5px; margin-right: 2px; } /* キャラの顔絵（chars.js） */
+/* キャラの顔絵（chars.js） */
+.p-face { display: inline-block; vertical-align: -4px; }
+/* 目標資産に到達（⚑凱旋リーチ）＝「あとは城へ帰るだけ」を全員に見せる金のバッジ */
 .p-reach {
   display: inline-block;
+  flex: none;
   font-size: 10.5px;
   color: #1a1526;
   background: linear-gradient(180deg, #ffe9a0, #ffd76a);
   border-radius: 8px;
-  padding: 1px 7px;
-  margin-left: 4px;
-  vertical-align: 1px;
+  padding: 1px 6px;
   animation: reachBlink 1.2s ease-in-out infinite;
 }
 @keyframes reachBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-.p-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  color: var(--dim);
-  margin: 2px 0;
-}
-.p-row b { color: var(--text); }
-.p-row.big b { color: var(--gold); }
-.p-bar {
-  height: 5px;
-  background: #17131f;
-  border-radius: 3px;
-  overflow: hidden;
-  margin: 4px 0;
-}
-.p-bar div { height: 100%; border-radius: 3px; transition: width 0.4s; }
 
-/* 現状順位（standingsOf・総資産順）: パネルの総資産バーの直下でぱっと見て分かるように */
-.p-row.rank { align-items: center; margin-top: 3px; }
+/* 現状順位（standingsOf・総資産順）のメダルチップ */
 .p-rank {
+  flex: none;
   font-weight: bold;
   font-size: 13px;
   color: var(--text);
@@ -276,10 +401,11 @@ body.in-game #hud-tabs { display: flex; }
 .p-rank.r1 { color: #1a1526; background: linear-gradient(180deg, #ffe9a0, #ffd76a); border-color: #ffd76a; }
 .p-rank.r2 { color: #f2f2f8; background: linear-gradient(180deg, #b8bcd0, #8f93aa); border-color: #b8bcd0; }
 .p-rank.r3 { color: #2a1a10; background: linear-gradient(180deg, #e2a877, #c98550); border-color: #e2a877; }
-.p-gap { font-size: 11.5px; color: var(--dim); }
 
 #log {
-  height: 28vh;
+  /* 広い画面ではサイドバーいっぱいに伸びる（狭い画面は @media 側で固定高さにする） */
+  flex: 1;
+  min-height: 0;
   background: rgba(28, 23, 40, 0.94);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -295,16 +421,18 @@ body.in-game #hud-tabs { display: flex; }
 .log-line.battle { color: #ff9a7a; }
 .log-line.warn { color: #ffb84d; }
 
-/* ---------- 手札（固定ウィンドウ） ---------- */
+/* ---------- 手札（下段ウィンドウ） ---------- */
 #hand-count { font-size: 12px; color: var(--dim); }
-#hand-row { display: flex; align-items: stretch; gap: 4px; }
+#hand-row { display: flex; align-items: stretch; gap: 4px; min-width: 0; }
 #hand {
   display: flex;
   gap: 10px;
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
-  max-width: min(94vw, 916px);
+  /* 幅は親（#win-hand）に従う＝下段で操作ドックと並んでも溢れない */
+  flex: 1;
+  min-width: 0;
   padding-bottom: 4px;
   /* スマホ: 手札スクロールが端に達してもブラウザの「戻る/進む」ナビゲーションへ連鎖させない */
   overscroll-behavior-x: contain;
@@ -327,6 +455,14 @@ body.in-game #hud-tabs { display: flex; }
 }
 .hand-arrow:hover { border-color: var(--gold); }
 .hand-arrow:disabled { opacity: 0.25; cursor: default; }
+
+/* 手札のカードは少し小ぶりにして下段の高さを抑える（そのぶん盤面が広くなる）。
+   ダイアログ・アルバム・カード詳細のカードは従来サイズのまま */
+#hand .card { width: 112px; font-size: 11.5px; }
+#hand .c-art { height: 56px; }
+#hand .c-elem { top: 43px; }
+#hand .c-name { font-size: 11.5px; }
+#hand .c-desc { font-size: 10.5px; }
 
 /* カード = 額縁＋アート窓＋コスト宝珠＋魔力の光沢。属性色の縁取りとレア度の輝きで差をつける */
 .card {
@@ -543,11 +679,13 @@ body.in-game #hud-tabs { display: flex; }
 .dlg-peek:hover { border-color: var(--gold); color: var(--gold); }
 .dice-pick { justify-content: center; }
 
-/* ダイアログを一旦閉じて盤面/手札を確認しているときのフローティングボタン */
+/* ダイアログを一旦閉じて盤面/手札を確認しているときのフローティングボタン。
+   v27: 下段（手札＋ダイス）はフロー配置になったので、その高さ（--bottom-h・ui.js が実測）の
+   すぐ上に浮かせる＝手札もダイスも隠さない */
 #peek-restore {
   position: fixed;
   left: 50%;
-  bottom: 22px;
+  bottom: calc(var(--bottom-h, 180px) + 8px);
   transform: translateX(-50%);
   z-index: 200;
   background: linear-gradient(180deg, #8a6d1f, #6b520f);
@@ -940,7 +1078,9 @@ body.in-game #hud-tabs { display: flex; }
 #draw-fx {
   position: fixed;
   left: 50%;
-  bottom: 230px;
+  /* 手札（下段）のすぐ上から現れて、下＝手札へ吸い込まれる。
+     下段の高さは開閉で変わるので実測値 --bottom-h を基準にする（v27） */
+  bottom: calc(var(--bottom-h, 200px) + 30px);
   transform: translateX(-50%);
   z-index: 150;
   pointer-events: none;
@@ -1253,18 +1393,27 @@ body.in-game #hud-tabs { display: flex; }
 @media (max-width: 980px) {
   .builder { flex-direction: column; }
   .pool-list, .deck-list { height: 30vh; }
-  main { flex-direction: column; }
-  #board { height: auto; width: calc(min(94vw, 66vh) * var(--zoom, 1)); }
-  /* 固定ウィンドウを小さくして盤面の邪魔を減らす */
-  #win-p0 { width: 45vw; max-width: 210px; top: 50px; left: 6px; }
-  #win-p1 { width: 45vw; max-width: 210px; top: 50px; right: 6px; }
-  #win-p2 { width: 45vw; max-width: 210px; top: 254px; right: 6px; } /* 相手1の下（凱旋リーチ表示分の余白込み） */
-  #win-log { top: 176px; left: 6px; width: 62vw; max-width: 260px; }
-  #log { height: 18vh; }
-  .panel { padding: 8px 10px; }
-  /* 中央HUD（メッセージ/ダイス/振るボタン）は盤面中央（環の空きスペース）に絶対配置のまま。
-     こうすれば固定手札ウィンドウに隠れず、狭い画面でもダイスを振れる */
-  #center-hud { width: 60% !important; }
+  main { flex-direction: column; padding: 2px 6px 4px; }
+  #board { height: auto; width: calc(min(96vw, 66vh) * var(--zoom, 1)); }
+  /* 📜ログ: 横に並べる余白が無いので、この幅だけはフローティングに戻す（盤面の左上に重ねる）。
+     ただし既定では非表示（loadHudPrefs）＝狭い画面では盤面を優先し、必要なときだけ📜で出す */
+  #win-log {
+    position: fixed;
+    left: 6px;
+    top: calc(var(--hud-h, 150px) + 6px);
+    width: 62vw;
+    max-width: 268px;
+    z-index: 55;
+  }
+  #log { flex: none; height: 22vh; }
+  /* 情報窓（3名分）を詰める */
+  #pstrips { gap: 6px; }
+  .pstrip { padding: 4px 7px 5px; border-radius: 9px; }
+  .ps-top { font-size: 12.5px; gap: 4px; }
+  .ps-magic { font-size: 11.5px; }
+  .ps-assets { font-size: 11px; }
+  .ps-meta { font-size: 10px; gap: 6px; }
+  .pstrip .p-rank { font-size: 11px; padding: 0 4px; }
 }
 
 /* ---------- タッチ端末（スマホ/タブレット）: 当たり判定を指サイズに ---------- */
@@ -1273,7 +1422,7 @@ body.in-game #hud-tabs { display: flex; }
   .btn.small { min-height: 38px; padding: 7px 12px; font-size: 13px; }
   #zoom-ctrl .btn.small { padding: 7px 12px; }
   .win-close { width: 30px; height: 30px; line-height: 28px; font-size: 14px; top: -12px; right: -12px; }
-  .hud-tab { padding: 9px 16px; font-size: 13px; }
+  .vt { width: 40px; height: 36px; font-size: 16px; }
   .dice-pick .btn { width: 60px; min-height: 52px; }
   .pool-item, .deck-item { padding: 9px 9px; }
   .stage-btn { padding: 11px 14px; }
@@ -1282,41 +1431,56 @@ body.in-game #hud-tabs { display: flex; }
   .card.selectable, .card.castable { border-color: var(--gold); }
 }
 
-/* ---------- スマホ縦持ち（ホットシート2人対戦向けの微調整） ---------- */
+/* ---------- スマホ縦持ち ---------- */
 @media (max-width: 700px) {
-  header { flex-wrap: wrap; align-items: center; padding: 6px 10px 4px; row-gap: 4px; }
+  header { flex-wrap: wrap; align-items: center; padding: 5px 8px 3px; row-gap: 4px; }
   h1 { font-size: 17px; letter-spacing: 3px; }
+  /* ゲーム中は題字を隠し、ヘッダーのボタンもアイコンだけにして1段に収める
+     （v27: ヘッダーが3段に折り返して盤面の高さを50px以上食っていたのを解消） */
+  body.in-game h1 { display: none; }
+  body.in-game .header-right { flex: 1; }
+  body.in-game .btn.small .lbl { display: none; }
+  body.in-game #zoom-label { min-width: 44px; }
   .header-right { flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-  #round-info { font-size: 12px; }
-  #message { font-size: 15px; }
-  #dice { font-size: 44px; margin-bottom: 8px; }
+  /* 対戦情報とトグルを1段目、メッセージを2段目に分ける（狭い画面では横に並べると
+     メッセージの幅が0になって読めなくなるため）。メッセージが空のときは行ごと消える */
+  #hud-bar { gap: 6px; flex-wrap: wrap; }
+  /* flex-basis を 0 にしておくのが要点: auto（＝文字の幅）だとトグルが2段目に押し出される */
+  #round-info { font-size: 11px; flex: 1 1 0; min-width: 0; }
+  #view-toggles { order: 2; }
+  #message { order: 3; flex: 1 1 100%; font-size: 13px; min-height: 17px; }
+  #hud-top { padding: 0 6px 3px; gap: 3px; }
   #dialog { padding: 14px 14px; max-width: 94vw; max-height: 88vh; max-height: 88dvh; overflow-x: hidden; }
   #dialog h2 { font-size: 16px; }
   /* 領地選択ウインドウ（v25）: 縦リストをやや低くして、下の操作ボタンが必ず画面に入るようにする */
   .tile-pick-list { max-height: 40vh; max-height: 40dvh; gap: 7px; }
   .btn.tile-pick { font-size: 13px; padding: 9px 11px; gap: 7px; }
-  /* 狭い画面はパネルを詰めて、順位行（v26）を足しても高さが増えないようにする
-     （ログ #win-log=258px・3人目 #win-p2=414px・手札=595px前後という既存のレイアウトを崩さないため） */
-  .panel { padding: 7px 9px; }
-  .p-name { font-size: 14px; margin-bottom: 3px; }
-  .p-row { font-size: 12px; margin: 1px 0; }
-  .p-bar { height: 4px; margin: 3px 0; }
-  .p-row.rank { margin-top: 1px; }
-  .p-rank { font-size: 12px; padding: 0 6px; }
-  .p-gap { font-size: 10.5px; }
-  /* ヘッダーが2段に折り返すため、ステータス/ログのウィンドウはその下から始める */
-  #win-p0 { top: 102px; }
-  #win-p1 { top: 102px; }
-  #win-p2 { top: 414px; } /* 左のログ（258〜約404px）と重ならない高さ・手札（622px〜）より上 */
-  #win-log { top: 258px; }
+  /* 3列に詰めるため、情報窓は3行目（連鎖・関門・周回・山札）を畳んで名前＋金額＋バーの3行にする。
+     畳んだ内容は情報窓をタップすると出る詳細ポップアップ（showPlayerDetail）で読める */
+  .ps-meta { display: none; }
+  .ps-top { font-size: 11.5px; gap: 3px; }
+  .ps-magic { font-size: 10px; }
+  .ps-assets { font-size: 10px; }
+  /* 魔力・総資産で1行使い、バーは折り返して独立した行にする（横に3つ並べると潰れる） */
+  .ps-mid { gap: 5px; margin: 2px 0 1px; flex-wrap: wrap; }
+  .ps-bar { flex: 1 1 100%; }
+  .pstrip { padding: 4px 6px 5px; }
+  .pstrip .p-face svg { width: 18px; height: 18px; }
+  .p-reach { font-size: 9.5px; padding: 0 4px; }
+  /* ダイスは指で押しやすい大きさを保つ（小さくしない） */
+  #dice-slot { width: 68px; height: 68px; }
+  #dice { font-size: 30px; }
+  .rb-face { font-size: 25px; }
+  #bottom-bar { gap: 6px; padding: 0 6px calc(6px + env(safe-area-inset-bottom, 0px)); }
   /* ※ セリフ吹き出し(#cpu-bubble)とポップアップ通知(#toast-stack)の狭い画面向け調整は
      ファイル末尾の「@media (max-width: 700px) 追補」にある（両者の基本ルールがこの
      メディアクエリより後ろで定義されているため、ここに書くと同じ詳細度で後出しに負ける） */
-  /* Androidのジェスチャーバー（ホームバー）と重ならないように */
-  #win-hand { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-width: 96vw; }
-  /* 手札カードを縮小してスクロール量を減らす（戻るジェスチャーとの衝突を減らし、矢印送りの回数も少なく） */
-  #hand { gap: 7px; }
-  #hand .card { width: 98px; font-size: 10.5px; padding: 4px 5px 5px; }
+  /* 手札カードを縮小してスクロール量を減らす（戻るジェスチャーとの衝突を減らし、矢印送りの回数も少なく）。
+     v27では下段に操作ドック（ダイス）が並ぶので、送り矢印と余白も詰めて表示枚数を確保する */
+  #hand { gap: 6px; }
+  #win-hand { padding: 6px 7px 8px; }
+  .hand-arrow { width: 26px; }
+  #hand .card { width: 94px; font-size: 10.5px; padding: 4px 5px 5px; }
   #hand .c-art { height: 48px; }
   #hand .c-elem { top: 36px; font-size: 11px; }
   #hand .c-cost { width: 21px; height: 21px; font-size: 10px; }
@@ -1327,8 +1491,6 @@ body.in-game #hud-tabs { display: flex; }
   #hand .card.facedown { width: 98px; height: 137px; }
   /* フリップ演出（手札オープン）の固定サイズカードもTCG比率を保ったまま縮小 */
   #hand .card.fixed { height: 137px; }
-  #hud-tabs { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
-  #peek-restore { bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
   /* ステージ選択の世界観ヘッダーは狭い画面ではコンパクトに */
   .ss-hero { gap: 10px; padding: 10px 11px; }
   .ss-crest { width: 54px; height: 54px; }
@@ -1339,7 +1501,9 @@ body.in-game #hud-tabs { display: flex; }
 /* ---------- キャラのセリフ吹き出し（chars.js cpuSay・非ブロッキング） ---------- */
 #cpu-bubble {
   position: fixed;
-  top: 52px;
+  /* v27: 上部エリア（ヘッダー＋情報窓）の実測高さ --hud-h（ui.js syncHudMetrics）のすぐ下に出す
+     ＝情報窓と重ならず、盤面の上端にかぶる。--hud-h が無い環境でも既定値で破綻しない */
+  top: calc(var(--hud-h, 140px) + 8px);
   left: 50%;
   transform: translate(-50%, -12px);
   z-index: 58;
@@ -1368,8 +1532,8 @@ body.in-game #hud-tabs { display: flex; }
    カード詳細(280)・タイトル(300)より下。pointer-events:none で操作は一切奪わない */
 #toast-stack {
   position: fixed;
-  /* キャラのセリフ吹き出し（#cpu-bubble: top 52px・最長セリフで高さ70px）の下から積む＝同時に出ても重ならない */
-  top: 130px;
+  /* キャラのセリフ吹き出し（#cpu-bubble・最長セリフで高さ約70px）の下から積む＝同時に出ても重ならない */
+  top: calc(var(--hud-h, 140px) + 86px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 250;
@@ -1426,11 +1590,34 @@ body.in-game #hud-tabs { display: flex; }
    狭い画面向け調整はここに置く。CSSは同じ詳細度なら後に書いたほうが勝つため、
    メディアクエリ側に書いても基本ルールに上書きされてしまう（実際に効いていなかった） */
 @media (max-width: 700px) {
-  /* ヘッダーが2段に折り返すぶん、セリフ吹き出しをその下へ */
-  #cpu-bubble { top: 100px; }
-  /* ポップアップ通知は吹き出しのさらに下（吹き出しは狭い画面だと3行＝高さ約126pxまで伸びる） */
-  #toast-stack { top: 232px; max-width: 92vw; gap: 5px; }
+  /* 位置の基準は --hud-h（上部エリアの実測高さ）。狭い画面では吹き出しが3行＝高さ約126pxまで
+     伸びるので、ポップアップ通知はそのぶん下から積む */
+  #cpu-bubble { top: calc(var(--hud-h, 120px) + 6px); }
+  #toast-stack { top: calc(var(--hud-h, 120px) + 136px); max-width: 92vw; gap: 5px; }
   .toast { font-size: 12.5px; padding: 6px 11px; }
+}
+
+/* ============================================================
+   🗺 マップ確認モード（v27・body.map-focus）
+   「マップを見たいときはマス目を最優先」。情報窓・📜ログ・🃏手札を一時的に片付け、
+   盤面だけを残して自動フィットする（ui.js toggleMapFocus が倍率を退避／復帰）。
+   ダイスの操作ドックは残す＝マップを見ながらそのまま進行できる。
+   ============================================================ */
+body.map-focus #pstrips,
+body.map-focus #win-hand,
+body.map-focus #win-log { display: none !important; }
+body.map-focus #board-wrap { padding: 0; }
+/* モード中であることが分かる控えめな帯（もう一度🗺で戻せることを伝える） */
+body.map-focus #hud-bar::before {
+  content: "🗺 マップ確認モード";
+  flex: none;
+  font-size: 11.5px;
+  color: #1a1526;
+  background: linear-gradient(180deg, #ffe9a0, #ffd76a);
+  border-radius: 8px;
+  padding: 1px 8px;
+  font-weight: bold;
+  white-space: nowrap;
 }
 
 /* ---------- スクロールバー ---------- */

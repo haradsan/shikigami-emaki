@@ -10,53 +10,76 @@
 <header>
   <h1>✦ マナサーキット ✦</h1>
   <div class="header-right">
-    <div id="round-info"></div>
-    <div id="zoom-ctrl" title="盤面を拡大／縮小（Ctrl+マウスホイールでも可）">
+    <div id="zoom-ctrl" title="盤面を拡大／縮小（Ctrl+マウスホイール・2本指ピンチでも可）">
       <button id="zoom-out" class="btn small" title="盤面を縮小">－</button>
       <button id="zoom-label" class="btn small" title="等倍に戻す">100%</button>
       <button id="zoom-in" class="btn small" title="盤面を拡大">＋</button>
-      <button id="zoom-fit" class="btn small" title="盤面全体が画面に収まる倍率に調整する">⛶ 全体</button>
+      <button id="zoom-fit" class="btn small" title="盤面全体が画面に収まる倍率に調整する">⛶<span class="lbl"> 全体</span></button>
     </div>
-    <button id="discard-btn" class="btn small in-game-only" title="両者の捨てカードを確認する">🗑 捨札</button>
-    <button id="surrender-btn" class="btn small danger hidden" title="自分の番でダイスを振る前にゲームを投了できます">🏳 投了</button>
+    <button id="discard-btn" class="btn small in-game-only" title="両者の捨てカードを確認する">🗑<span class="lbl"> 捨札</span></button>
+    <button id="surrender-btn" class="btn small danger hidden" title="自分の番でダイスを振る前にゲームを投了できます">🏳<span class="lbl"> 投了</span></button>
     <button id="mute-btn" class="btn small" title="効果音のオン/オフ">🔊</button>
     <button id="bgm-btn" class="btn small" title="BGMのオン/オフ（WebAudioで自動生成）">🎵</button>
-    <button id="help-btn" class="btn small">❓ 遊び方</button>
+    <button id="help-btn" class="btn small" title="遊び方">❓<span class="lbl"> 遊び方</span></button>
   </div>
 </header>
+
+<!-- 上部固定の情報エリア（v27）: 盤面に「重ねない」ためフロー配置にしてある。
+     ・#pstrips  … プレイヤー3名分の圧縮情報窓（👥で表示/非表示・クリックで詳細）
+     ・#hud-bar  … 対戦情報（ステージ/ラウンド/首位）＋メッセージ＋表示トグル -->
+<div id="hud-top">
+  <div id="pstrips">
+    <div class="pstrip" id="panel-0"></div>
+    <div class="pstrip" id="panel-1"></div>
+    <!-- 3人目（⚔三つ巴のときだけ表示。それ以外は .unused で非表示） -->
+    <div class="pstrip unused" id="panel-2"></div>
+  </div>
+  <div id="hud-bar">
+    <div id="round-info"></div>
+    <div id="message">ようこそ</div>
+    <div id="view-toggles">
+      <button id="view-panels" class="vt" title="上部の情報窓（3名分）を表示／非表示">👥</button>
+      <button id="view-log" class="vt" title="📜ログを表示／非表示">📜</button>
+      <button id="view-hand" class="vt" title="🃏手札を大きく／小さく（折りたたみ）">🃏</button>
+      <button id="view-map" class="vt" title="🗺 マップ確認モード（情報窓・ログ・手札を一時的に隠してマス目を優先表示）">🗺</button>
+    </div>
+  </div>
+</div>
 
 <main>
   <div id="board-wrap">
     <div id="board-inner">
       <svg id="board" viewBox="0 0 700 700" xmlns="http://www.w3.org/2000/svg"></svg>
-      <div id="center-hud">
-        <div id="message">ようこそ</div>
-        <div id="dice">🎲</div>
-        <button id="action-btn" class="btn primary hidden"></button>
-      </div>
     </div>
   </div>
+  <!-- 📜ログ: 広い画面では盤面の右に並べて「盤面に重ねない」。狭い画面だけ左下のフローティングになる -->
+  <div id="win-log" class="hud-win"><div id="log"></div><button class="win-close" title="一時的に隠す（👥📜のトグルで戻せます）">✕</button></div>
 </main>
 
-<!-- 固定フローティングウィンドウ: 盤面をスクロールしても常に見える。各「✕」で一時的に隠せ、右下のチップで再表示 -->
-<div id="win-p0" class="hud-win"><div id="panel-0" class="panel"></div><button class="win-close" title="一時的に隠す">✕</button></div>
-<div id="win-p1" class="hud-win"><div id="panel-1" class="panel"></div><button class="win-close" title="一時的に隠す">✕</button></div>
-<!-- 3人目のパネル（⚔三つ巴のときだけ表示。それ以外は .unused で非表示） -->
-<div id="win-p2" class="hud-win unused"><div id="panel-2" class="panel"></div><button class="win-close" title="一時的に隠す">✕</button></div>
-<div id="win-log" class="hud-win"><div id="log"></div><button class="win-close" title="一時的に隠す">✕</button></div>
-<div id="win-hand" class="hud-win framed">
-  <div class="win-head"><span id="hand-count"></span></div>
-  <!-- 手札は矢印ボタンで1枚ずつ送れる（スマホでスワイプすると戻るジェスチャーと衝突するため） -->
-  <div id="hand-row">
-    <button id="hand-prev" class="hand-arrow hidden" title="手札を左へ送る">◀</button>
-    <div id="hand"></div>
-    <button id="hand-next" class="hand-arrow hidden" title="手札を右へ送る">▶</button>
+<!-- 下段: 手札 ＋ 操作ドック（ダイス）。ここもフロー配置＝盤面に重ならない -->
+<div id="bottom-bar">
+  <div id="win-hand" class="hud-win framed">
+    <div class="win-head"><span id="hand-count"></span></div>
+    <!-- 手札は矢印ボタンで1枚ずつ送れる（スマホでスワイプすると戻るジェスチャーと衝突するため） -->
+    <div id="hand-row">
+      <button id="hand-prev" class="hand-arrow hidden" title="手札を左へ送る">◀</button>
+      <div id="hand"></div>
+      <button id="hand-next" class="hand-arrow hidden" title="手札を右へ送る">▶</button>
+    </div>
+    <button class="win-close" title="一時的に隠す（🃏のトグルで戻せます）">✕</button>
   </div>
-  <button class="win-close" title="一時的に隠す">✕</button>
+  <!-- 操作ドック（v27）: 盤面中央にあった 🎲 と操作ボタンをここへ集約。
+       ダイスは「出目の表示」と「振るボタン」を同じ丸い場所に重ねてある -->
+  <div id="ctrl-dock">
+    <button id="action-btn" class="btn primary hidden"></button>
+    <div id="dice-slot" title="直前の出目">
+      <div id="dice">🎲</div>
+      <button id="roll-btn" class="hidden" title="ダイスを振る（Space / Enter キーでも振れます）">
+        <span class="rb-face">🎲</span><span class="rb-lbl">振る</span>
+      </button>
+    </div>
+  </div>
 </div>
-
-<!-- 隠したウィンドウを再表示するチップ -->
-<div id="hud-tabs"></div>
 
 <!-- ポップアップ通知（ui.js toast）: スペルの効果・機能停止など「影響のあった出来事」を
      画面上部に短く出してすぐ消す。📜ログを閉じて遊んでいても気づけるようにするため。

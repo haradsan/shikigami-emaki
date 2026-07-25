@@ -11,7 +11,8 @@ let _surrendering = false; // 投了確認ダイアログの二重表示防止
 
 // ---------- ゲーム開始 ----------
 async function startGame(stageIdx, opts = {}) {
-  document.body.classList.add("in-game"); // 固定ウィンドウ（ステータス／手札）を表示
+  document.body.classList.add("in-game"); // 上部の情報窓・下段（手札／ダイス）を表示
+  exitMapFocus();  // 前の対戦で🗺マップ確認モードのままだった場合は解除
   clearToasts(); // 前の対戦のポップアップ通知が残らないように
   G = newGame(stageIdx, opts);
   G.training = !!opts.training; // トレーニング（練習対戦・進行度を更新せず勝利でカード3枚）
@@ -36,15 +37,15 @@ async function startGame(stageIdx, opts = {}) {
   const th = G.stage.theme;
   document.body.style.background = th
     ? `radial-gradient(ellipse at 50% 0%, ${th.glow} 0%, ${th.bg} 60%)` : "";
-  // 中央HUDが盤面中心のマス（八の字の城・十字路など）を隠すステージでは位置をずらす
-  const hud = document.getElementById("center-hud");
-  const hudPos = G.stage.hud || { left: "50%", top: "50%", width: "52%" };
-  hud.style.left = hudPos.left;
-  hud.style.top = hudPos.top;
-  hud.style.width = hudPos.width;
+  // ※ v26まではここで中央HUD（メッセージ／ダイス）の位置を stage.hud でずらしていた。
+  //    v27でダイスと操作ボタンを下段の操作ドックへ移し、盤面の上には何も置かなくなったので不要
+  //    （stages.js の hud 指定は残っているが未使用。盤面中央のマスも隠れない）
   document.getElementById("log").innerHTML = "";
+  document.getElementById("dice").textContent = "🎲"; // 前の対戦の出目を持ち込まない
   renderAll(G);
+  syncHudMetrics(); // 吹き出し・通知・「選択に戻る」の位置基準（--hud-h / --bottom-h）を更新
   fitBoard({ max: 1 }); // 開始時は盤面全体が見える倍率に（見えないマスを無くす。拡大はしない）
+  showLayoutHintOnce(); // 初回だけ「🗺/👥📜🃏 で表示を切り替えられる」ことを案内
   log(`=== ${G.stage.icon} STAGE ${stageIdx + 1}「${G.stage.name}」 ===`, "sys");
   log(G.hotseat ? `🎮 2人対戦: 🔵${G.players[0].name} vs 🔴${G.players[1].name}`
     : G.royale ? `⚔ 三つ巴: 🔵${G.players[0].name} vs 🔴${G.players[1].name} vs 🟢${G.players[2].name}`
@@ -549,6 +550,9 @@ function discardFromHand(p, cardId) {
 // ---------- 人間: スペル使用（1ターン1回・任意）→ ダイスボタン ----------
 async function humanSpellAndRoll(p) {
   let spellUsed = false;
+  // 🗺マップ確認モード中は手札が畳まれている＝スペルを選べないので、自分の操作に入る前に解除する
+  // （見たいときにまた🗺を押せばよい。見えない手札を探させないための保険）
+  exitMapFocus();
   while (true) {
     renderHand(G);
     if (!spellUsed) markCastableSpells(p);
@@ -570,15 +574,14 @@ async function humanSpellAndRoll(p) {
   }
 }
 
-// キャンセル可能なボタン待ち（スペル使用でダイス待ちを中断するため）
+// キャンセル可能なボタン待ち（スペル使用でダイス待ちを中断するため）。
+// ボタンの実体は showActionButton が決める（🎲ラベルなら操作ドックの丸いダイスボタン＝ui.js）
 function waitButtonCancellable(label) {
-  const btn = document.getElementById("action-btn");
-  btn.textContent = label;
-  btn.classList.remove("hidden");
+  const btn = showActionButton(label);
   let handler;
   const promise = new Promise(resolve => {
     handler = () => {
-      btn.classList.add("hidden");
+      hideActionButton(btn);
       btn.removeEventListener("click", handler);
       resolve(true);
     };
@@ -588,7 +591,7 @@ function waitButtonCancellable(label) {
     promise,
     cancel() {
       btn.removeEventListener("click", handler);
-      btn.classList.add("hidden");
+      hideActionButton(btn);
     },
   };
 }
@@ -2857,7 +2860,8 @@ async function startSealed(stageIdx) {
 
 // ---------- タイトル（ステージ選択）画面 ----------
 async function titleScreen() {
-  document.body.classList.remove("in-game"); // タイトルでは固定ウィンドウを隠す
+  document.body.classList.remove("in-game"); // タイトルでは情報窓・手札・ドックを隠す
+  exitMapFocus(); // 🗺マップ確認モードをタイトルに持ち込まない
   document.body.style.background = ""; // ステージのテーマ背景を解除して既定に戻す
   clearToasts(); // 対戦中のポップアップ通知をタイトルに持ち込まない
   showSurrenderButton(false);
@@ -3052,9 +3056,16 @@ function showHelp() {
       （ボスは精霊王を<b>確定でデッキに投入</b>してくる）。<br>
       <b>🎪 ウィークリールール</b>: 毎週月曜に切り替わる特殊ルール（通行料2倍・初期手札レジェンド保証など）。タイトルの「🎪 週替り」でON/OFF。
       ONで正規対戦に勝つと<b>ボーナスカード+${typeof WEEKLY_BONUS_CARDS !== "undefined" ? WEEKLY_BONUS_CARDS : 2}枚</b>（トレーニングには適用されない）。<br>
-      <b>🥇 現状順位</b>: 各プレイヤーのパネルに<b>総資産順の順位</b>と<b>首位との差</b>が常に出る（同額なら同順位）。
-      ヘッダーにも首位が出るほか、パネルを「✕」で隠しているときは<b>右下のチップにも順位メダル</b>が付く。
-      ラウンド上限で決着するときの資産勝負も、この順位のとおり決まる。<br>
+      <b>👥 情報窓（画面上部・3名分）</b>: 各プレイヤーの<b>順位・魔力・総資産（バー）・連鎖・関門・周回・山札</b>を
+      上部に圧縮して常時表示する（順位は総資産順。同額なら同順位で、ラウンド上限の資産勝負もこの順位どおり）。
+      <b>情報窓をクリック</b>すると所有地の一覧を含む詳細が開く。<br>
+      <b>🖥 画面の切り替え</b>: 上部右の4つのボタンで<b>👥情報窓／📜ログ／🃏手札</b>を隠す・戻すができる（選んだ状態は次回も保たれる）。
+      <b>🗺 マップ確認モード</b>は情報窓・ログ・手札を一時的に片付けて<b>マス目の表示を最優先</b>にし、盤面を画面いっぱいに広げる
+      （もう一度🗺で元の倍率に戻る。PCでは<b>Mキー</b>でも切替）。<br>
+      <b>🎲 ダイス</b>は画面右下の丸いボタン（＝直前の出目もここに出る）。PCでは<b>Space / Enterキー</b>でも振れる。
+      情報窓・手札・ダイスはすべて盤面の外に置いてあるので、<b>盤面が隠れることはない</b>。<br>
+      <b>🔎 盤面の拡大</b>: ヘッダーの<b>－／＋</b>で拡大縮小、<b>⛶ 全体</b>で全体が収まる倍率へ、<b>100%</b>をクリックで等倍（＝盤面エリアぴったり）。
+      Ctrl+マウスホイール、スマホは2本指ピンチでも調整できる。<br>
       <b>🔔 ポップアップ通知</b>: <b>スペルの効果・特性の発動・機能停止（スペル封じ・足止め・無力化など）・
       通行料・魔力不足</b>など「影響のあった出来事」は、📜ログと同じ文言を画面上部に短く表示してすぐ消える。
       <b>ログを閉じたまま遊んでも見落とさない</b>ための表示で、盤面やダイアログの操作を邪魔することはない。<br>
@@ -3095,8 +3106,36 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   // 途中棄権（投了）
   document.getElementById("surrender-btn").addEventListener("click", requestSurrender);
-  // 固定フローティングウィンドウ（ステータス／手札）の開閉
+  // 表示トグル（👥情報窓／📜ログ／🃏手札／🗺マップ確認）と各ウィンドウの「✕」
   initHudWindows();
+  // 画面サイズの変化（回転・ウィンドウ操作）に追随: 位置基準の再計算＋自動フィット中なら合わせ直す
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      // 自分で表示を選んでいない間は、画面幅に応じた既定（狭い画面はログを出さない）を再評価する
+      if (!hasSavedHudPrefs()) { HUD_PREFS = defaultHudPrefs(); applyHudPrefs(); }
+      syncHudMetrics();
+      maybeRefitBoard();
+    }, 150);
+  });
+  // キーボード操作（PC）: Space / Enter＝メインの操作（ダイスを振る）、M＝マップ確認、L＝ログ
+  document.addEventListener("keydown", e => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA") return; // 名前入力などの邪魔をしない
+    if (e.code === "Space" || e.code === "Enter" || e.code === "NumpadEnter") {
+      // 決定待ちのメイン操作ボタンがあれば押す（ダイアログのボタンには干渉しない）
+      if (UI._actionBtn && !UI._actionBtn.classList.contains("hidden") && UI.dialogBusy === 0) {
+        e.preventDefault();
+        UI._actionBtn.click();
+      }
+      return;
+    }
+    if (!document.body.classList.contains("in-game") || UI.dialogBusy > 0) return;
+    if (e.key === "m" || e.key === "M") { e.preventDefault(); toggleMapFocus(); }
+    if (e.key === "l" || e.key === "L") { e.preventDefault(); toggleView("log"); }
+  });
   // 盤面ズーム
   document.getElementById("zoom-in").addEventListener("click", () => zoomBoard(ZOOM_STEP));
   document.getElementById("zoom-out").addEventListener("click", () => zoomBoard(-ZOOM_STEP));
