@@ -187,15 +187,44 @@ function renderBoard(g) {
   svg.innerHTML = html;
 }
 
+// ---------- 現状順位（standings） ----------
+// 勝利条件は「総資産 → 城へ凱旋」なので、順位は総資産（魔力＋所有地の価値）の多い順で決める。
+// 同額は同順位（1位・1位・3位）。ラウンド上限による資産勝負の判定と同じ基準。
+function standingsOf(g) {
+  const rows = g.players.map(p => ({ id: p.id, assets: assetsOf(g, p) }))
+    .sort((a, b) => b.assets - a.assets);
+  let rank = 0, prev = null;
+  rows.forEach((r, i) => {
+    if (r.assets !== prev) { rank = i + 1; prev = r.assets; }
+    r.rank = rank;
+  });
+  return rows;
+}
+const RANK_MEDALS = ["🥇", "🥈", "🥉"];
+function rankMedal(rank) { return RANK_MEDALS[rank - 1] || "🏳"; }
+// 首位との差（首位なら2位との差）を短い文で。ぱっと見て「今どれだけ勝っているか」が分かるように
+function rankGapText(rows, me) {
+  if (rows.length < 2) return "";
+  if (me.rank === 1) {
+    const others = rows.filter(r => r.id !== me.id);
+    if (others.some(r => r.rank === 1)) return "同率首位"; // 首位が並んでいる＝「2位に+○G」ではない
+    const next = others[0]; // rows は総資産の降順なので、自分を除いた先頭が次点
+    return `${next.rank}位に +${me.assets - next.assets}G`;
+  }
+  return `首位まで -${rows[0].assets - me.assets}G`;
+}
+
 // ---------- プレイヤーパネル ----------
 function renderPanels(g) {
   // 三つ巴のときだけ3人目のウィンドウ（#win-p2）を表示する
   const w2 = document.getElementById("win-p2");
   if (w2) w2.classList.toggle("unused", g.players.length < 3);
+  const rows = standingsOf(g); // 現状順位（総資産順）
   g.players.forEach(p => {
     const el = document.getElementById(`panel-${p.id}`);
     if (!el) return;
-    const assets = assetsOf(g, p);
+    const me = rows.find(r => r.id === p.id);
+    const assets = me.assets;
     const chains = Object.keys(ELEMENTS)
       .map(e => ({ e, n: chainCount(g, p.id, e) }))
       .filter(c => c.n > 0)
@@ -214,6 +243,8 @@ function renderPanels(g) {
       <div class="p-row"><span>魔力</span><b>${p.magic}G</b></div>
       <div class="p-row big"><span>総資産</span><b>${assets}G / ${RULES.target}G</b></div>
       <div class="p-bar"><div style="width:${Math.min(100, assets / RULES.target * 100)}%; background:${PLAYER_COLORS[p.id]}"></div></div>
+      <div class="p-row rank" title="総資産（魔力＋所有地の価値）で決まる現在の順位。ラウンド上限になったときの資産勝負もこの順位で決まります">
+        <span class="p-rank r${me.rank}">${rankMedal(me.rank)} ${me.rank}位</span><span class="p-gap">${rankGapText(rows, me)}</span></div>
       <div class="p-row"><span>連鎖</span><b>${chains}</b></div>
       <div class="p-row"><span>関門 ${gates}</span><span>周回 ${p.laps} / 山札 ${p.deck.length}</span></div>
     `;
@@ -221,10 +252,15 @@ function renderPanels(g) {
   const diff = DIFFICULTIES[loadDifficulty()];
   const mode = g.hotseat ? "🎮 2人対戦" : g.royale ? `⚔ 三つ巴｜${diff.icon}${diff.label}` : `難易度 ${diff.icon}${diff.label}`;
   const ml = (typeof MATCH_LENGTHS !== "undefined") ? MATCH_LENGTHS[loadMatchLength()] : null;
+  // ヘッダーにも首位だけ出す（パネルを全部閉じていても「今だれが勝っているか」は分かるように）
+  const tied = rows.length > 1 && rows[1].rank === 1;
+  const leader = tied ? "同率首位" : g.players[rows[0].id].name;
   document.getElementById("round-info").textContent =
     `${g.stage.icon} STAGE ${g.stageIdx + 1}｜ラウンド ${Math.min(g.round, RULES.maxRounds)} / ${RULES.maxRounds}｜${mode}` +
     (ml && !g.training && loadMatchLength() !== "normal" ? `｜${ml.icon}${ml.label}` : "") +
-    (g.weekly ? `｜🎪 ${g.weekly.name}` : "");
+    (g.weekly ? `｜🎪 ${g.weekly.name}` : "") +
+    `｜🥇 ${leader}`;
+  renderHudTabs(); // 隠しているウィンドウのチップにも順位メダルを出しているので、資産が動いたら作り直す
 }
 
 // ---------- 手札 ----------
@@ -496,13 +532,22 @@ const HUD_WINDOWS = [
 function renderHudTabs() {
   const tabs = document.getElementById("hud-tabs");
   if (!tabs) return;
+  // ステータスパネルを隠しているときは、チップのラベルに現状順位のメダルを付ける
+  // （パネルを閉じて盤面を広く見ているときでも順位だけは分かるように）
+  const rows = (typeof G !== "undefined" && G && G.players && G.tiles && !G.over) ? standingsOf(G) : null;
+  const chipOf = w => {
+    const m = /^win-p(\d)$/.exec(w.id);
+    if (!rows || !m) return w.chip;
+    const r = rows.find(x => x.id === Number(m[1]));
+    return r ? `${rankMedal(r.rank)}${w.chip}` : w.chip;
+  };
   tabs.innerHTML = HUD_WINDOWS
     .filter(w => {
       const el = document.getElementById(w.id);
       // .unused（この対戦では使わないウィンドウ＝2人対戦時の win-p2）はチップも出さない
       return el && el.classList.contains("hidden") && !el.classList.contains("unused");
     })
-    .map(w => `<button class="hud-tab" data-win="${w.id}">${w.chip}</button>`).join("");
+    .map(w => `<button class="hud-tab" data-win="${w.id}">${chipOf(w)}</button>`).join("");
   tabs.querySelectorAll(".hud-tab").forEach(btn => btn.addEventListener("click", () => {
     const win = document.getElementById(btn.dataset.win);
     if (win) { win.classList.remove("hidden"); renderHudTabs(); }
@@ -520,13 +565,61 @@ function initHudWindows() {
 }
 
 // ---------- ログ ----------
-function log(msg, cls = "") {
+// 📜ログウィンドウを閉じて遊ぶ人のために、「影響のある出来事」は同じ文言をポップアップ（toast）にも出す。
+// どの行を出すかの既定ルール:
+//   ・cls === "warn"      → 出す（このコードベースでは warn ＝ 妨害・機能停止・魔力不足など「効いた」出来事）
+//   ・castSpell 実行中     → 出す（スペルの効果ログ。beginLogToast/endLogToast のスコープ内。
+//                            新しいスペルを足しても toast の付け忘れが起きないようにするため）
+//   ・cls === "battle"    → 出さない（バトル実況は1戦で何行も流れるのでポップアップには不向き）
+//   ・それ以外            → 出さない
+// 個別に上書きしたいときは第3引数で `{ toast: true }` / `{ toast: false }` を渡す
+// （特性の発動・通行料・周回など「ログでしか分からない出来事」は明示的に true にしている）。
+function log(msg, cls = "", opts = {}) {
   const el = document.getElementById("log");
   const div = document.createElement("div");
   div.className = `log-line ${cls}`;
   div.textContent = msg;
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
+  const auto = cls === "warn" || (UI.logToastScope > 0 && cls !== "battle");
+  if (opts.toast !== undefined ? opts.toast : auto) toast(msg, opts.kind !== undefined ? opts.kind : cls);
+}
+
+// ---------- ポップアップ通知（toast） ----------
+// 画面上部にすっと現れてすぐ消える非ブロッキングの通知。pointer-events:none なので
+// 盤面のクリック・ダイアログの操作を一切邪魔しない（＝進行フローに影響しない表示専用レイヤー）。
+UI.logToastScope = 0; // >0 の間は log() が既定でポップアップも出す（castSpell のスコープ）
+const TOAST_MAX = 3;         // 同時に見せる最大数。これを超えたら古いものから先に退場させる
+const TOAST_LIFE = 2600;     // 表示時間(ms)＝「すぐ消える」
+const TOAST_LIFE_BUSY = 1500; // 立て込んでいるとき（スペルの連鎖など）の短縮表示(ms)
+function toast(msg, kind = "") {
+  const stack = document.getElementById("toast-stack");
+  if (!stack) return;
+  const el = document.createElement("div");
+  el.className = `toast${kind ? ` t-${kind}` : ""}`;
+  el.textContent = msg;
+  stack.appendChild(el);
+  const live = Array.from(stack.children).filter(c => !c.classList.contains("t-out"));
+  // 溢れた分は先に退場（画面が通知で埋まって盤面が見えなくなるのを防ぐ）
+  live.slice(0, Math.max(0, live.length - TOAST_MAX)).forEach(old => dismissToast(old, 180));
+  requestAnimationFrame(() => el.classList.add("t-in"));
+  el._toastTimer = setTimeout(() => dismissToast(el), live.length > TOAST_MAX ? TOAST_LIFE_BUSY : TOAST_LIFE);
+}
+function dismissToast(el, wait = 320) {
+  if (!el || el.classList.contains("t-out")) return;
+  clearTimeout(el._toastTimer);
+  el.classList.remove("t-in");
+  el.classList.add("t-out");
+  setTimeout(() => el.remove(), wait);
+}
+// castSpell の間だけ「効果ログ＝ポップアップにも出す」スコープを張る（main.js の castSpell が使う）
+function beginLogToast() { UI.logToastScope++; }
+function endLogToast() { UI.logToastScope = Math.max(0, UI.logToastScope - 1); }
+// 対戦をまたいで残らないように（リトライ・タイトルへ戻るとき）
+function clearToasts() {
+  const stack = document.getElementById("toast-stack");
+  if (stack) stack.innerHTML = "";
+  UI.logToastScope = 0;
 }
 
 // ---------- メッセージ（中央の大きな表示） ----------

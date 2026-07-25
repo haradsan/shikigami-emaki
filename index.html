@@ -58,6 +58,11 @@
 <!-- 隠したウィンドウを再表示するチップ -->
 <div id="hud-tabs"></div>
 
+<!-- ポップアップ通知（ui.js toast）: スペルの効果・機能停止など「影響のあった出来事」を
+     画面上部に短く出してすぐ消す。📜ログを閉じて遊んでいても気づけるようにするため。
+     pointer-events:none なので盤面やダイアログの操作を邪魔しない -->
+<div id="toast-stack"></div>
+
 <div id="overlay">
   <div id="dialog"></div>
 </div>

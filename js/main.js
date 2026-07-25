@@ -12,6 +12,7 @@ let _surrendering = false; // 投了確認ダイアログの二重表示防止
 // ---------- ゲーム開始 ----------
 async function startGame(stageIdx, opts = {}) {
   document.body.classList.add("in-game"); // 固定ウィンドウ（ステータス／手札）を表示
+  clearToasts(); // 前の対戦のポップアップ通知が残らないように
   G = newGame(stageIdx, opts);
   G.training = !!opts.training; // トレーニング（練習対戦・進行度を更新せず勝利でカード3枚）
   G.hotseat = !!opts.versus;    // 2人対戦（ホットシート・報酬/進行度なし）
@@ -636,7 +637,19 @@ async function humanPickOpponent(p, title, body, filterFn = null) {
 // ---------- スペル効果 ----------
 // 成功したら true。対象がない/キャンセルなら false（コストは消費しない）
 // 三つ巴では「相手」を選ぶスペル（ドレイン等）は対象プレイヤーを選択する（2人対戦では従来どおり自動）
+// スペルは「何が起きたか」がログにしか出ない手が多いので、castSpell の実行中だけ
+// 「ログ＝ポップアップにも出す」スコープを張る（ui.js beginLogToast）。
+// こうしておけば新しいスペルを足したときに toast の付け忘れが起きない。
 async function castSpell(p, cardId) {
+  beginLogToast();
+  try {
+    return await castSpellEffect(p, cardId);
+  } finally {
+    endLogToast();
+  }
+}
+
+async function castSpellEffect(p, cardId) {
   const c = CARD_BY_ID[cardId];
   const opp = opponentOf(G, p); // 筆頭の相手（総資産トップ）。リベンジ・劣勢判定の基準
   if (c.cost > p.magic) return false;
@@ -1879,14 +1892,14 @@ function arriveCastle(g, p, exact = true) {
     SFX.coin();
     if (bonus.comeback) log(`🔥 逆転の風が吹く！ 劣勢ボーナス1.5倍`, "warn");
     healAllCreatures(g, p); // 周回ボーナス＝魔力＋全回復（城の通過・停止どちらでも）
-    log(`🏰 ${p.name}は周回達成！ +${bonus.gold}G — 自軍クリーチャーのHPが全回復！`);
+    log(`🏰 ${p.name}は周回達成！ +${bonus.gold}G — 自軍クリーチャーのHPが全回復！`, "", { toast: true });
     if (typeof cpuSay === "function") cpuSay(p, "lap");
     result = "lap";
   }
   if (exact) {
     // 城にぴったり停止＝領地コントロール。周回していなくても、拠点で軍に指示を出せる
     p.passAllLands = true;
-    log(`🏰 ${p.name}は城に留まり軍を指揮——全ての自領で1回行動できる！（領地コントロール）`);
+    log(`🏰 ${p.name}は城に留まり軍を指揮——全ての自領で1回行動できる！（領地コントロール）`, "", { toast: true });
     if (!result) result = "stay";
   }
   renderPanels(g);
@@ -1964,16 +1977,16 @@ async function tileAction(p, tile) {
         log(`🎉 大当り！ 女神の祝福で +300G！`, "warn");
       } else if (r < 0.35) {
         p.magic += 150; SFX.coin();
-        log(`💰 当り！ +150G`);
+        log(`💰 当り！ +150G`, "", { toast: true });
       } else if (r < 0.60) {
         const a = drawCard(G, p), b = drawCard(G, p);
-        log(`🎴 運命の導き！ カードを${(a ? 1 : 0) + (b ? 1 : 0)}枚ドロー`);
+        log(`🎴 運命の導き！ カードを${(a ? 1 : 0) + (b ? 1 : 0)}枚ドロー`, "", { toast: true });
         if (a && !p.isCPU) await animateDraw(CARD_BY_ID[a]);
         if (b && !p.isCPU) await animateDraw(CARD_BY_ID[b]);
         await enforceHandLimit(p);
       } else if (r < 0.80) {
         p.diceMult = 2;
-        log(`🎲 追い風の予感！ 次のダイスの出目が2倍になる`);
+        log(`🎲 追い風の予感！ 次のダイスの出目が2倍になる`, "", { toast: true });
       } else if (r < 0.90) {
         // 🌀 時空の渦（v24）: 進行方向が反転するイベント（逆走はスペルとこれでのみ起きる）
         reverseDirection(G, p);
@@ -1993,7 +2006,7 @@ async function tileAction(p, tile) {
       healAllCreatures(G, p);
       p.magic += 60;
       SFX.coin();
-      log(`⛲ ${p.name}は癒しの泉で安らいだ +60G${wounded ? `・負傷クリーチャー${wounded}体が全回復！` : ""}`);
+      log(`⛲ ${p.name}は癒しの泉で安らいだ +60G${wounded ? `・負傷クリーチャー${wounded}体が全回復！` : ""}`, "", { toast: true });
       return false;
     }
     case "CASTLE":
@@ -2348,11 +2361,11 @@ async function enemyLandFlow(p, tile) {
   // 📜通行手形（v20）: 次に払う通行料1回が無料
   if (p.tollFree) {
     p.tollFree = false;
-    log(`📜 ${p.name}は通行手形を差し出した——通行料${toll}Gは無料！`);
+    log(`📜 ${p.name}は通行手形を差し出した——通行料${toll}Gは無料！`, "", { toast: true });
     renderAll(G);
     return false;
   }
-  log(`${p.name}は通行料${toll}Gを${owner.name}に支払う`);
+  log(`${p.name}は通行料${toll}Gを${owner.name}に支払う`, "", { toast: true });
   await forcePay(G, p, toll, owner, log, landSellChooser(p)); // 払いきれなければ城で再起（敗北はしない）
   // 高額の通行料をせしめた相手キャラはほくそ笑む（存在感の演出）
   if (toll >= 150 && typeof cpuSay === "function") cpuSay(owner, "tollGain");
@@ -2490,7 +2503,7 @@ async function doInvade(p, tile, cardId, itemId = null) {
     // 倒された防衛クリーチャー: 💨煙玉で退避／🔁転生なら手札へ／💨遁走なら空き地へ、通常は捨札へ
     if (result.escaped || result.defRebirth) {
       defender.hand.push(defCid);
-      if (result.defRebirth) log(`🔁 ${CARD_BY_ID[defCid].name}の転生！ 倒れても${defender.name}の手札に戻った`);
+      if (result.defRebirth) log(`🔁 ${CARD_BY_ID[defCid].name}の転生！ 倒れても${defender.name}の手札に戻った`, "", { toast: true });
       await enforceHandLimit(defender);
     } else if (!(!defNulled && tryEscapeToEmptyLand(defender, defCid))) {
       defender.discard.push(defCid);
@@ -2503,7 +2516,7 @@ async function doInvade(p, tile, cardId, itemId = null) {
     // 侵略失敗したクリーチャー: 🔁転生なら手札に戻る（v19）
     if (result.attRebirth) {
       p.hand.push(cardId);
-      log(`🔁 ${c.name}の転生！ 倒れても${p.name}の手札に戻った`);
+      log(`🔁 ${c.name}の転生！ 倒れても${p.name}の手札に戻った`, "", { toast: true });
       await enforceHandLimit(p);
     } else {
       p.discard.push(cardId);
@@ -2541,9 +2554,9 @@ function applyBattleLandEffects(tile, defCardId, defenderHeld) {
     const lv = adjustLandLevel(tile, +1);
     if (lv !== null) {
       SFX.coin();
-      log(`🏗 ${dc.name}の築城！ 守り抜いた${tileName(tile)}はLv${lv}に育った（価値${landValue(tile)}G）`, "battle");
+      log(`🏗 ${dc.name}の築城！ 守り抜いた${tileName(tile)}はLv${lv}に育った（価値${landValue(tile)}G）`, "battle", { toast: true });
     } else {
-      log(`🏗 ${dc.name}の築城——${tileName(tile)}はすでに最大レベル`);
+      log(`🏗 ${dc.name}の築城——${tileName(tile)}はすでに最大レベル`, "", { toast: true });
     }
   }
   if (dc.ab.includes("blight")) {
@@ -2569,7 +2582,7 @@ function tryEscapeToEmptyLand(owner, cardId) {
   dst.owner = owner.id;
   dst.creature = { cardId, hp: card.hp }; // HP全快で再配置（傷は逃げる過程で癒える）
   SFX.summon();
-  log(`💨 ${card.name}の遁走！ 敗れても消えず、${tileName(dst)}へ逃げ延びて${owner.name}の領地にした`, "battle");
+  log(`💨 ${card.name}の遁走！ 敗れても消えず、${tileName(dst)}へ逃げ延びて${owner.name}の領地にした`, "battle", { toast: true });
   return true;
 }
 
@@ -2581,7 +2594,7 @@ function grantWarfire(p) {
   const gain = towers * 40;
   p.magic += gain;
   SFX.coin();
-  log(`🔥 狼煙が上がる！ 戦勝の報せで${p.name}は+${gain}G`);
+  log(`🔥 狼煙が上がる！ 戦勝の報せで${p.name}は+${gain}G`, "", { toast: true });
 }
 
 // ---------- クリーチャー侵攻（march） ----------
@@ -2660,7 +2673,7 @@ async function doMarch(p, src, dst, itemId = null) {
     src.owner = p.id;
     src.creature = { cardId: card.id, hp: half };
     SFX.summon();
-    log(`🫧 ${card.name}の分裂！ ${tileName(src)}にも分裂体が残った（HPは${half}ずつに折半）`, "battle");
+    log(`🫧 ${card.name}の分裂！ ${tileName(src)}にも分裂体が残った（HPは${half}ずつに折半）`, "battle", { toast: true });
     return true;
   };
 
@@ -2688,10 +2701,10 @@ async function doMarch(p, src, dst, itemId = null) {
       const lv = adjustLandLevel(dst, -1);
       if (lv !== null) {
         SFX.spell();
-        log(`🐏 ${card.name}の破城！ ${tileName(dst)}の城壁が崩れ、Lv${lv}に落ちた`, "battle");
+        log(`🐏 ${card.name}の破城！ ${tileName(dst)}の城壁が崩れ、Lv${lv}に落ちた`, "battle", { toast: true });
         renderAll(G);
       } else {
-        log(`🐏 ${card.name}の破城——${tileName(dst)}はこれ以上崩せない（Lv1）`);
+        log(`🐏 ${card.name}の破城——${tileName(dst)}はこれ以上崩せない（Lv1）`, "", { toast: true });
       }
     }
     const defCid = dst.creature.cardId;                 // v25: 上書き前に控える（築城/焦土/遁走の判定用）
@@ -2706,7 +2719,7 @@ async function doMarch(p, src, dst, itemId = null) {
       // 勝ち: 占領。侵攻側は傷を持ち越して移動。元の土地は空き地に戻る
       if (result.escaped || result.defRebirth) { // 💨煙玉・🔁転生（v19）: 防衛側は手札へ
         defender.hand.push(defCid);
-        if (result.defRebirth) log(`🔁 ${CARD_BY_ID[defCid].name}の転生！ 倒れても${defender.name}の手札に戻った`);
+        if (result.defRebirth) log(`🔁 ${CARD_BY_ID[defCid].name}の転生！ 倒れても${defender.name}の手札に戻った`, "", { toast: true });
         await enforceHandLimit(defender);
       } else if (!(!defNulled && tryEscapeToEmptyLand(defender, defCid))) { // 💨遁走（v25）
         defender.discard.push(defCid);
@@ -2743,7 +2756,7 @@ async function doMarch(p, src, dst, itemId = null) {
       }
       if (result.attRebirth) {
         p.hand.push(src.creature.cardId);
-        log(`🔁 ${card.name}の転生！ 倒れても${p.name}の手札に戻った（元の土地は失う）`);
+        log(`🔁 ${card.name}の転生！ 倒れても${p.name}の手札に戻った（元の土地は失う）`, "", { toast: true });
         await enforceHandLimit(p);
       } else if (!(!attNulled && tryEscapeToEmptyLand(p, src.creature.cardId))) { // 💨遁走（v25）: 侵攻に敗れても逃げ延びる
         p.discard.push(src.creature.cardId);
@@ -2846,6 +2859,7 @@ async function startSealed(stageIdx) {
 async function titleScreen() {
   document.body.classList.remove("in-game"); // タイトルでは固定ウィンドウを隠す
   document.body.style.background = ""; // ステージのテーマ背景を解除して既定に戻す
+  clearToasts(); // 対戦中のポップアップ通知をタイトルに持ち込まない
   showSurrenderButton(false);
   while (true) {
     const res = await showStageSelect();
@@ -3038,6 +3052,12 @@ function showHelp() {
       （ボスは精霊王を<b>確定でデッキに投入</b>してくる）。<br>
       <b>🎪 ウィークリールール</b>: 毎週月曜に切り替わる特殊ルール（通行料2倍・初期手札レジェンド保証など）。タイトルの「🎪 週替り」でON/OFF。
       ONで正規対戦に勝つと<b>ボーナスカード+${typeof WEEKLY_BONUS_CARDS !== "undefined" ? WEEKLY_BONUS_CARDS : 2}枚</b>（トレーニングには適用されない）。<br>
+      <b>🥇 現状順位</b>: 各プレイヤーのパネルに<b>総資産順の順位</b>と<b>首位との差</b>が常に出る（同額なら同順位）。
+      ヘッダーにも首位が出るほか、パネルを「✕」で隠しているときは<b>右下のチップにも順位メダル</b>が付く。
+      ラウンド上限で決着するときの資産勝負も、この順位のとおり決まる。<br>
+      <b>🔔 ポップアップ通知</b>: <b>スペルの効果・特性の発動・機能停止（スペル封じ・足止め・無力化など）・
+      通行料・魔力不足</b>など「影響のあった出来事」は、📜ログと同じ文言を画面上部に短く表示してすぐ消える。
+      <b>ログを閉じたまま遊んでも見落とさない</b>ための表示で、盤面やダイアログの操作を邪魔することはない。<br>
       <b>🎵 BGM</b>: ヘッダーの🎵でBGMのON/OFF（効果音と同じくオフラインで自動生成。🔊は効果音の切替）。`,
     buttons: [{ label: "閉じる", value: "close", primary: true }],
   });

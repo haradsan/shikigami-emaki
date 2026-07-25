@@ -162,8 +162,9 @@ body.in-game #hud-tabs { display: flex; }
 }
 #win-p0 { top: 54px; left: 12px;  width: 252px; }
 #win-p1 { top: 54px; right: 12px; width: 252px; }
-#win-p2 { top: 216px; right: 12px; width: 252px; } /* 3人目（⚔三つ巴）は相手1の下 */
-#win-log { top: 216px; left: 12px; width: 252px; }
+/* 順位行（v26）でパネルが約20px高くなったぶん、下段のウィンドウを下げて隙間を確保する */
+#win-p2 { top: 232px; right: 12px; width: 252px; } /* 3人目（⚔三つ巴）は相手1の下 */
+#win-log { top: 232px; left: 12px; width: 252px; }
 /* この対戦では使わないウィンドウ（2人対戦時の win-p2）。チップにも出さない */
 .hud-win.unused { display: none !important; }
 #win-hand {
@@ -259,6 +260,23 @@ body.in-game #hud-tabs { display: flex; }
   margin: 4px 0;
 }
 .p-bar div { height: 100%; border-radius: 3px; transition: width 0.4s; }
+
+/* 現状順位（standingsOf・総資産順）: パネルの総資産バーの直下でぱっと見て分かるように */
+.p-row.rank { align-items: center; margin-top: 3px; }
+.p-rank {
+  font-weight: bold;
+  font-size: 13px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 7px;
+  letter-spacing: 0.5px;
+}
+.p-rank.r1 { color: #1a1526; background: linear-gradient(180deg, #ffe9a0, #ffd76a); border-color: #ffd76a; }
+.p-rank.r2 { color: #f2f2f8; background: linear-gradient(180deg, #b8bcd0, #8f93aa); border-color: #b8bcd0; }
+.p-rank.r3 { color: #2a1a10; background: linear-gradient(180deg, #e2a877, #c98550); border-color: #e2a877; }
+.p-gap { font-size: 11.5px; color: var(--dim); }
 
 #log {
   height: 28vh;
@@ -1277,13 +1295,23 @@ body.in-game #hud-tabs { display: flex; }
   /* 領地選択ウインドウ（v25）: 縦リストをやや低くして、下の操作ボタンが必ず画面に入るようにする */
   .tile-pick-list { max-height: 40vh; max-height: 40dvh; gap: 7px; }
   .btn.tile-pick { font-size: 13px; padding: 9px 11px; gap: 7px; }
+  /* 狭い画面はパネルを詰めて、順位行（v26）を足しても高さが増えないようにする
+     （ログ #win-log=258px・3人目 #win-p2=414px・手札=595px前後という既存のレイアウトを崩さないため） */
+  .panel { padding: 7px 9px; }
+  .p-name { font-size: 14px; margin-bottom: 3px; }
+  .p-row { font-size: 12px; margin: 1px 0; }
+  .p-bar { height: 4px; margin: 3px 0; }
+  .p-row.rank { margin-top: 1px; }
+  .p-rank { font-size: 12px; padding: 0 6px; }
+  .p-gap { font-size: 10.5px; }
   /* ヘッダーが2段に折り返すため、ステータス/ログのウィンドウはその下から始める */
   #win-p0 { top: 102px; }
   #win-p1 { top: 102px; }
   #win-p2 { top: 414px; } /* 左のログ（258〜約404px）と重ならない高さ・手札（622px〜）より上 */
   #win-log { top: 258px; }
-  /* セリフ吹き出しはヘッダー2段の下に */
-  #cpu-bubble { top: 100px; }
+  /* ※ セリフ吹き出し(#cpu-bubble)とポップアップ通知(#toast-stack)の狭い画面向け調整は
+     ファイル末尾の「@media (max-width: 700px) 追補」にある（両者の基本ルールがこの
+     メディアクエリより後ろで定義されているため、ここに書くと同じ詳細度で後出しに負ける） */
   /* Androidのジェスチャーバー（ホームバー）と重ならないように */
   #win-hand { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-width: 96vw; }
   /* 手札カードを縮小してスクロール量を減らす（戻るジェスチャーとの衝突を減らし、矢印送りの回数も少なく） */
@@ -1334,6 +1362,46 @@ body.in-game #hud-tabs { display: flex; }
 #cpu-bubble .cb-main b { font-size: 11.5px; }
 #cpu-bubble .cb-text { font-size: 13px; color: var(--text); line-height: 1.45; }
 
+/* ---------- ポップアップ通知（ui.js toast・非ブロッキング） ---------- */
+/* 📜ログを閉じて遊んでいても「スペルの効果」「機能停止」などの影響が伝わるように、
+   画面上部に短く出してすぐ消える。ダイアログ(#overlay=100)・バトルカットイン(120)より上、
+   カード詳細(280)・タイトル(300)より下。pointer-events:none で操作は一切奪わない */
+#toast-stack {
+  position: fixed;
+  /* キャラのセリフ吹き出し（#cpu-bubble: top 52px・最長セリフで高さ70px）の下から積む＝同時に出ても重ならない */
+  top: 130px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 250;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: min(88vw, 460px);
+  pointer-events: none;
+}
+.toast {
+  width: 100%;
+  background: rgba(30, 24, 44, 0.97);
+  border: 1.5px solid var(--border);
+  border-left: 4px solid #b9a3ff; /* 既定＝スペルの効果 */
+  border-radius: 12px;
+  padding: 7px 13px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  box-shadow: 0 8px 26px #000b;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.25s, transform 0.25s;
+}
+.toast.t-in { opacity: 1; transform: translateY(0); }
+.toast.t-out { opacity: 0; transform: translateY(-8px); }
+.toast.t-warn { border-left-color: #ffb84d; }    /* 妨害・機能停止・魔力不足など */
+.toast.t-battle { border-left-color: #ff9a7a; }  /* バトルで発動した特性 */
+.toast.t-sys { border-left-color: var(--gold); }
+
 /* ---------- 対戦前の口上（VS画面・showMatchIntro） ---------- */
 .vs-wrap { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
 .vs-char {
@@ -1352,6 +1420,18 @@ body.in-game #hud-tabs { display: flex; }
 .vs-quote { font-size: 12.5px; color: var(--dim); line-height: 1.55; }
 .vs-and { text-align: center; color: var(--gold); font-weight: bold; font-size: 13px; }
 .vs-stage { text-align: center; color: var(--dim); font-size: 12.5px; margin-top: 4px; }
+
+/* ---------- @media (max-width: 700px) 追補 ---------- */
+/* 上のスマホ用メディアクエリより後ろで定義しているブロック（セリフ吹き出し／ポップアップ通知）の
+   狭い画面向け調整はここに置く。CSSは同じ詳細度なら後に書いたほうが勝つため、
+   メディアクエリ側に書いても基本ルールに上書きされてしまう（実際に効いていなかった） */
+@media (max-width: 700px) {
+  /* ヘッダーが2段に折り返すぶん、セリフ吹き出しをその下へ */
+  #cpu-bubble { top: 100px; }
+  /* ポップアップ通知は吹き出しのさらに下（吹き出しは狭い画面だと3行＝高さ約126pxまで伸びる） */
+  #toast-stack { top: 232px; max-width: 92vw; gap: 5px; }
+  .toast { font-size: 12.5px; padding: 6px 11px; }
+}
 
 /* ---------- スクロールバー ---------- */
 ::-webkit-scrollbar { width: 8px; }
