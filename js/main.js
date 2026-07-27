@@ -12,6 +12,7 @@ let _surrendering = false; // 投了確認ダイアログの二重表示防止
 // ---------- ゲーム開始 ----------
 async function startGame(stageIdx, opts = {}) {
   document.body.classList.add("in-game"); // 上部の情報窓・下段（手札／ダイス）を表示
+  BGM.setTrack("battle"); // 対戦中は走るような8ビートへ（🎵OFFなら次にONにしたときの曲だけ変わる）
   exitMapFocus();  // 前の対戦で🗺マップ確認モードのままだった場合は解除
   clearToasts(); // 前の対戦のポップアップ通知が残らないように
   G = newGame(stageIdx, opts);
@@ -2861,6 +2862,7 @@ async function startSealed(stageIdx) {
 // ---------- タイトル（ステージ選択）画面 ----------
 async function titleScreen() {
   document.body.classList.remove("in-game"); // タイトルでは情報窓・手札・ドックを隠す
+  BGM.setTrack("title"); // タイトルはゆったりした行進曲へ
   exitMapFocus(); // 🗺マップ確認モードをタイトルに持ち込まない
   document.body.style.background = ""; // ステージのテーマ背景を解除して既定に戻す
   clearToasts(); // 対戦中のポップアップ通知をタイトルに持ち込まない

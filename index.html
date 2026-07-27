@@ -9,6 +9,8 @@
 <body>
 <header>
   <h1>✦ マナサーキット ✦</h1>
+  <!-- v28: ヘッダーは「常に横一行」に収める。ズーム枠はゲーム中だけ出し（タイトルでは無意味）、
+       🗑捨札は下の #view-toggles（📜ログ・🗺マップと同列）へ移した -->
   <div class="header-right">
     <div id="zoom-ctrl" title="盤面を拡大／縮小（Ctrl+マウスホイール・2本指ピンチでも可）">
       <button id="zoom-out" class="btn small" title="盤面を縮小">－</button>
@@ -16,10 +18,9 @@
       <button id="zoom-in" class="btn small" title="盤面を拡大">＋</button>
       <button id="zoom-fit" class="btn small" title="盤面全体が画面に収まる倍率に調整する">⛶<span class="lbl"> 全体</span></button>
     </div>
-    <button id="discard-btn" class="btn small in-game-only" title="両者の捨てカードを確認する">🗑<span class="lbl"> 捨札</span></button>
     <button id="surrender-btn" class="btn small danger hidden" title="自分の番でダイスを振る前にゲームを投了できます">🏳<span class="lbl"> 投了</span></button>
     <button id="mute-btn" class="btn small" title="効果音のオン/オフ">🔊</button>
-    <button id="bgm-btn" class="btn small" title="BGMのオン/オフ（WebAudioで自動生成）">🎵</button>
+    <button id="bgm-btn" class="btn small" title="BGMのオン/オフ（ファミコン風チップチューンを自動生成）">🎵</button>
     <button id="help-btn" class="btn small" title="遊び方">❓<span class="lbl"> 遊び方</span></button>
   </div>
 </header>
@@ -37,11 +38,13 @@
   <div id="hud-bar">
     <div id="round-info"></div>
     <div id="message">ようこそ</div>
+    <!-- v28: 🃏手札トグルは親指の届く操作ドック（ダイスの上）へ移動。
+         代わりに🗑捨札をここへ入れ、「見るための窓」を1列にまとめた -->
     <div id="view-toggles">
       <button id="view-panels" class="vt" title="上部の情報窓（3名分）を表示／非表示">👥</button>
       <button id="view-log" class="vt" title="📜ログを表示／非表示">📜</button>
-      <button id="view-hand" class="vt" title="🃏手札を大きく／小さく（折りたたみ）">🃏</button>
       <button id="view-map" class="vt" title="🗺 マップ確認モード（情報窓・ログ・手札を一時的に隠してマス目を優先表示）">🗺</button>
+      <button id="discard-btn" class="vt" title="両者の捨てカードを確認する">🗑</button>
     </div>
   </div>
 </div>
@@ -72,6 +75,8 @@
        ダイスは「出目の表示」と「振るボタン」を同じ丸い場所に重ねてある -->
   <div id="ctrl-dock">
     <button id="action-btn" class="btn primary hidden"></button>
+    <!-- v28: 🃏手札の開閉はダイスのすぐ上。手札を畳んで盤面を見る→すぐ戻す、が片手で完結する -->
+    <button id="view-hand" class="vt dock-vt" title="🃏手札を大きく／小さく（折りたたみ）">🃏</button>
     <div id="dice-slot" title="直前の出目">
       <div id="dice">🎲</div>
       <button id="roll-btn" class="hidden" title="ダイスを振る（Space / Enter キーでも振れます）">

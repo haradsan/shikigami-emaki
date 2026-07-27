@@ -1021,13 +1021,68 @@ function showStageSelect(opts = {}) {
          <button class="btn" data-value="versus">🎮 2人対戦</button>
          <button class="btn" data-value="weekly">🎪 週替り: ${wr.icon}${esc(wr.name)}${wOn ? "" : "（OFF）"}</button>
          <button class="btn" data-value="help">❓ 遊び方</button>`;
-    box.innerHTML = `${header}<div class="stage-list">${rows}</div><div class="dlg-buttons">${buttons}</div>`;
     overlay.classList.add("show");
     const close = v => { overlay.classList.remove("show"); resolve(v); };
-    box.querySelectorAll(".stage-btn:not(.locked)").forEach(btn =>
-      btn.addEventListener("click", () => close(Number(btn.dataset.idx))));
-    box.querySelectorAll(".dlg-buttons .btn").forEach(btn =>
-      btn.addEventListener("click", () => close(btn.dataset.value)));
+
+    // --- ステージ一覧（「← ステージを選び直す」でここへ戻ってくる） ---
+    function renderList() {
+      box.innerHTML = `${header}<div class="stage-list">${rows}</div><div class="dlg-buttons">${buttons}</div>`;
+      box.scrollTop = 0;
+      box.querySelectorAll(".stage-btn:not(.locked)").forEach(btn =>
+        btn.addEventListener("click", () => pick(Number(btn.dataset.idx))));
+      box.querySelectorAll(".dlg-buttons .btn").forEach(btn =>
+        btn.addEventListener("click", () => close(btn.dataset.value)));
+    }
+
+    // v28: ステージを押した瞬間に開戦していたため、押し間違えても戻れなかった。
+    // 出陣確認を1枚挟んで「選び直せる」ようにする。
+    // （🎁シールド戦だけは startSealed 側にパック開封前の確認があるので二重にしない）
+    function pick(idx) {
+      if (sealed) { close(idx); return; }
+      renderConfirm(idx);
+    }
+
+    // --- 出陣確認（相手の顔・盤面の規模・目標・ルールを見てから決める） ---
+    function renderConfirm(idx) {
+      const s = STAGES[idx];
+      const ch = (typeof CHARACTERS !== "undefined" && CHARACTERS[s.id]) || null;
+      const target = (s.rules && s.rules.target) || 4000;
+      const facts = [
+        versus ? `🎮 <b>${esc(versus.names[0])}</b> vs <b>${esc(versus.names[1])}</b>` : "",
+        `🔲 盤面: <b>${buildBoard(s).length}マス</b>`,
+        `🎯 目標資産: <b>${target}G</b>`,
+        `⛩ 周回に必要な関門: <b>${s.gatesNeeded || 3}</b>`,
+        prog.cleared[s.id] ? "⭐ クリア済み" : "🆕 未クリア",
+        training ? "🎯 トレーニング（進行度は変化しません）"
+          : royale ? "⚔ 三つ巴（進行度は変化しません）"
+          : versus ? "🎮 2人対戦（報酬・進行度はありません）" : "",
+        versus ? "" : `⚙ 難易度: <b>${diff.icon}${diff.label}</b>`,
+        weeklyChip, mlChip,
+      ];
+      box.innerHTML = `
+        <div class="ss-confirm">
+          <div class="sc-head">
+            <div class="sc-face">${ch ? charPortraitSVG(ch, 72) : `<span class="sc-emoji">${s.icon}</span>`}</div>
+            <div class="sc-title">
+              <div class="sc-no">STAGE ${idx + 1}</div>
+              <h2>${s.icon} ${esc(s.name)}</h2>
+              ${versus ? "" : `<div class="sc-cpu" style="color:${ch ? ch.color : "var(--gold)"}">🗡 ${esc(s.cpuName)}${royale ? "　＋ 🟢乱入者1名" : ""}</div>`}
+            </div>
+          </div>
+          <p class="sc-desc">${esc(s.desc)}</p>
+          ${ch && !versus ? `<p class="sc-quote">「${esc((ch.lines.greet && ch.lines.greet[0]) || "")}」</p>` : ""}
+          <div class="ss-chips sc-facts">${facts.filter(Boolean).map(t => `<span class="ss-chip">${t}</span>`).join("")}</div>
+        </div>
+        <div class="dlg-buttons">
+          <button class="btn primary" data-go>⚔ この盤面で挑む</button>
+          <button class="btn" data-reselect>← ステージを選び直す</button>
+        </div>`;
+      box.scrollTop = 0;
+      box.querySelector("[data-go]").addEventListener("click", () => close(idx));
+      box.querySelector("[data-reselect]").addEventListener("click", renderList);
+    }
+
+    renderList();
   });
 }
 
