@@ -10,9 +10,15 @@
 //   ・noise  … ドラム（キック＝ピッチ落ち、スネア／ハイハット＝ノイズ）
 //
 // 曲は2つ。BGM.setTrack("title"|"battle") で切り替える（main.js が呼ぶ）。
+//   title  … オープニング／ステージ選択／アルバム・デッキ構築などメニュー全般
+//   battle … 対戦中（startGame で切り替え、タイトルへ戻ると title に戻る）
 // ヘッダーの🎵ボタンでON/OFF（localStorageに保存）。
-// ブラウザの自動再生制限があるため、ONで保存されていても実際の再生開始は
-// 「最初のクリック等のユーザー操作」を待つ（init が pointerdown を1回だけ拾う）。
+//
+// 【スマホで鳴らせるようにするための処理（v28.1）】ここが一番の落とし穴なので触るとき注意:
+//   ・自動再生制限 … ONで保存されていても再生開始は「最初のタップ」を待つ（armUnlock）
+//   ・iPhoneのサイレントスイッチ … WebAudioだけだとマナーモードで無音になる。
+//     無音WAVを <audio> でループ再生してセッションを「メディア再生」に上げる（primeSession）
+//   ・resume() が通らない端末 … 鳴り出すまで「次のタップで再挑戦」を繰り返す（armUnlock の再武装）
 // ============================================================
 "use strict";
 
@@ -223,47 +229,116 @@ const BGM = (() => {
     else if (dr === "h") noise(t, 0.035, 0.05, 6000);
   }
 
+  // ---------- スマホ対策（v28.1） ----------
+  // ① iPhoneの「サイレントスイッチ（マナーモード）」ではWebAudioの音が出ない。
+  //    <audio>要素で何か1つでも再生すると、そのページの音声セッションが「メディア再生」扱いになり
+  //    スイッチONでも鳴るようになる——ので、無音のWAVをループさせておく（iOSの既知の挙動）。
+  // ② 端末やブラウザによっては最初の resume() が通らないことがある。そのときは
+  //    「次のタップでもう一度試す」を鳴り出すまで繰り返す（黙って失敗したままにしない）。
+  let silentEl = null;
+  // 無音WAVを実行時に組み立てる（外部ファイル・base64の呪文を持たずに済む）
+  function silentWavUrl() {
+    const sr = 8000, n = 8000; // 8kHz×1秒＝16KB。中身は全部0＝無音
+    const buf = new ArrayBuffer(44 + n * 2);
+    const v = new DataView(buf);
+    const put = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    put(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); put(8, "WAVE");
+    put(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    put(36, "data"); v.setUint32(40, n * 2, true);
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
+  function primeSession() {
+    try {
+      if (!silentEl) {
+        silentEl = document.createElement("audio");
+        silentEl.loop = true;
+        silentEl.setAttribute("playsinline", ""); // iOSで全画面プレイヤーに乗っ取られないように
+        silentEl.src = silentWavUrl();
+        // DOMに入れておく（切り離したままだと再生を拒む実装がある）。controls無しなので何も表示されない。
+        // display:none にすると逆に再生されない環境があるため、見えない位置に置くだけにする
+        silentEl.style.cssText = "position:fixed;width:0;height:0;opacity:0;pointer-events:none";
+        document.body.appendChild(silentEl);
+      }
+      const p = silentEl.play();
+      if (p && p.catch) p.catch(() => { /* 失敗しても本体の再生には影響しない */ });
+    } catch (e) { /* 無視 */ }
+  }
+  function releaseSession() {
+    try { if (silentEl) silentEl.pause(); } catch (e) { /* 無視 */ }
+  }
+
+  // 「次のユーザー操作でもう一度鳴らしにいく」予約。pointerdown を拾えない端末のために
+  // touchend / click も見る（capture＝ゲーム側のハンドラより先に走る）
+  const UNLOCK_EVENTS = ["pointerdown", "touchend", "click"];
+  let armed = false;
+  function armUnlock() {
+    if (armed) return;
+    armed = true;
+    const go = () => {
+      armed = false;
+      UNLOCK_EVENTS.forEach(t => document.removeEventListener(t, go, true));
+      if (enabled) start();
+    };
+    UNLOCK_EVENTS.forEach(t => document.addEventListener(t, go, true));
+  }
+
   function start() {
-    if (playing) return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
+    primeSession(); // サイレントスイッチ対策は「鳴らそうとするたび」に張り直す
     if (!ctx) {
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = 0.26; // チップチューンは倍音が多く聴感が大きいので控えめに
+      master.gain.value = 0.34; // スマホのスピーカーでも聞こえる程度に（PCで大きすぎない上限）
       master.connect(ctx.destination);
       buildVoices();
     }
-    if (ctx.state === "suspended") ctx.resume();
-    playing = true;
-    step = 0;
-    nextTime = ctx.currentTime + 0.12;
-    // 先読みスケジューラ: 0.4秒先まで音を予約し続ける（タブが重くても途切れにくい）
-    timer = setInterval(() => {
-      if (!playing || !ctx) return;
-      while (nextTime < ctx.currentTime + 0.4) {
-        scheduleStep(step, nextTime);
-        step++;
-        nextTime += stepSec();
-      }
-    }, 130);
+    if (ctx.state !== "running") {
+      const p = ctx.resume();
+      if (p && p.catch) p.catch(() => { /* 下の再判定で拾う */ });
+    }
+    if (!playing) {
+      playing = true;
+      step = 0;
+      nextTime = ctx.currentTime + 0.12;
+      // 先読みスケジューラ: 0.4秒先まで音を予約し続ける（タブが重くても途切れにくい）
+      timer = setInterval(() => {
+        if (!playing || !ctx) return;
+        while (nextTime < ctx.currentTime + 0.4) {
+          scheduleStep(step, nextTime);
+          step++;
+          nextTime += stepSec();
+        }
+      }, 130);
+    }
+    // resume が通っていなければ、次のタップでやり直す（鳴るまで諦めない）
+    setTimeout(() => { if (enabled && ctx && ctx.state !== "running") armUnlock(); }, 350);
   }
 
   function stop() {
     playing = false;
     if (timer) { clearInterval(timer); timer = null; }
+    releaseSession();
   }
 
-  // 裏タブではタイマーが1秒間隔まで間引かれて先読みが破綻するので、AudioContextごと止める。
+  // 裏タブ・スリープではタイマーが1秒間隔まで間引かれて先読みが破綻するので、AudioContextごと止める。
   // suspend 中は currentTime も止まるため、戻ったときに続きから鳴り出す。
   document.addEventListener("visibilitychange", () => {
     if (!ctx || !playing) return;
-    if (document.hidden) ctx.suspend();
-    else ctx.resume();
+    if (document.hidden) { ctx.suspend(); releaseSession(); }
+    else { primeSession(); ctx.resume(); armUnlockIfStuck(); }
   });
+  // 復帰時の resume はユーザー操作なしなので拒否されることがある（特にiOS）。
+  // 少し待って走っていなければ、次のタップで鳴らし直す
+  function armUnlockIfStuck() {
+    setTimeout(() => { if (enabled && ctx && ctx.state !== "running") armUnlock(); }, 350);
+  }
 
   return {
     get enabled() { return enabled; },
+    // 実際に音が出ている状態か（UI側の「鳴らなかった」案内の判定に使う）
+    get running() { return !!(playing && ctx && ctx.state === "running"); },
     toggle() {
       enabled = !enabled;
       try { localStorage.setItem(KEY, enabled ? "1" : "0"); } catch (e) { /* 無視 */ }
@@ -280,10 +355,7 @@ const BGM = (() => {
     // 起動時に呼ぶ。保存がONなら最初のユーザー操作（クリック等）で再生を開始する
     init() {
       try { enabled = localStorage.getItem(KEY) === "1"; } catch (e) { enabled = false; }
-      if (enabled) {
-        const arm = () => { if (enabled) start(); document.removeEventListener("pointerdown", arm); };
-        document.addEventListener("pointerdown", arm);
-      }
+      if (enabled) armUnlock();
       return enabled;
     },
   };

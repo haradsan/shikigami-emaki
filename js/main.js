@@ -3093,7 +3093,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   // BGM（WebAudioループ生成）: 🎵でON/OFF。保存がONなら最初のクリックで再生開始（自動再生制限対応）
   const bgmBtn = document.getElementById("bgm-btn");
   bgmBtn.classList.toggle("off", !BGM.init());
-  bgmBtn.addEventListener("click", () => bgmBtn.classList.toggle("off", !BGM.toggle()));
+  bgmBtn.addEventListener("click", () => {
+    const on = BGM.toggle();
+    bgmBtn.classList.toggle("off", !on);
+    // ONにしたのに音が出ていないときは黙って失敗させない（スマホのマナーモード・音量が原因のことが多い）
+    if (on) setTimeout(() => {
+      if (BGM.enabled && !BGM.running) toast("🎵 BGMが鳴らないときは、端末のマナーモード解除と音量をご確認ください", "warn");
+    }, 1200);
+  });
   // 両者の捨てカード確認（別のダイアログ表示中・決定待ち中は開かない）
   document.getElementById("discard-btn").addEventListener("click", () => {
     if (G && canOpenExtraDialog()) showDiscardViewer();
