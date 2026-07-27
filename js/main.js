@@ -55,8 +55,11 @@ async function startGame(stageIdx, opts = {}) {
   if (G.weekly) log(`🎪 今週のルール「${G.weekly.icon}${G.weekly.name}」: ${G.weekly.desc}`, "warn");
   log(`総資産 ${RULES.target}G に達して城に戻れば勝利です（魔力が尽きても敗北にはならず、城で再起できます）`, "sys");
   // 対戦前の口上: 相手キャラのポートレートと挨拶（トレーニング・2人対戦・リトライでは省略）
+  // v28.2: ここで「← ステージ選択へ戻る」を選べる。まだ gameLoop に入っていないので、
+  //        タイトルへ戻れば盤面・in-game表示・背景は titleScreen が全部片付けてくれる
   if (!G.hotseat && !G.training && !opts.skipIntro && typeof showMatchIntro === "function") {
-    await showMatchIntro(G);
+    const intro = await showMatchIntro(G);
+    if (intro && intro.action === "back") { titleScreen(); return; }
   }
   // 開幕演出: 手札が表紙（カードバック）側で配られ、1枚ずつめくれて対戦が始まる。
   // 2人対戦は交代画面が手札を管理するため対象外（1P の手札が先に見えてしまうのを防ぐ）

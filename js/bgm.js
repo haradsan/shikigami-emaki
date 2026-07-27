@@ -12,7 +12,7 @@
 // 曲は2つ。BGM.setTrack("title"|"battle") で切り替える（main.js が呼ぶ）。
 //   title  … オープニング／ステージ選択／アルバム・デッキ構築などメニュー全般
 //   battle … 対戦中（startGame で切り替え、タイトルへ戻ると title に戻る）
-// ヘッダーの🎵ボタンでON/OFF（localStorageに保存）。
+// ヘッダーの🎵ボタンでON/OFF（localStorageに保存）。**既定はON**（v28.2）。
 //
 // 【スマホで鳴らせるようにするための処理（v28.1）】ここが一番の落とし穴なので触るとき注意:
 //   ・自動再生制限 … ONで保存されていても再生開始は「最初のタップ」を待つ（armUnlock）
@@ -352,9 +352,15 @@ const BGM = (() => {
       // 予約済みの音（先読み0.4秒ぶん）は鳴り切ってから入れ替わる。曲の頭から鳴らし直す
       step = 0;
     },
-    // 起動時に呼ぶ。保存がONなら最初のユーザー操作（クリック等）で再生を開始する
+    // 起動時に呼ぶ。**既定はON**（v28.2）＝初めて遊ぶ人にも音楽が流れる。
+    // 一度でも🎵を押した人はその選択（localStorage）を尊重する。
+    // 実際の再生開始はブラウザの自動再生制限があるため「最初のタップ」を待つ
+    // ＝オープニング画面の「✦ クリック / タップ で始める ✦」がそのまま再生の合図になる
     init() {
-      try { enabled = localStorage.getItem(KEY) === "1"; } catch (e) { enabled = false; }
+      try {
+        const saved = localStorage.getItem(KEY);
+        enabled = saved === null ? true : saved === "1";
+      } catch (e) { enabled = true; }
       if (enabled) armUnlock();
       return enabled;
     },

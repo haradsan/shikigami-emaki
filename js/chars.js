@@ -337,11 +337,15 @@ function showMatchIntro(g) {
       </div>
     </div>`;
   }).join(`<div class="vs-and">＆</div>`);
+  // v28.2: ここが「開戦前に引き返せる最後の地点」。戻ると startGame が中断してステージ選択へ帰る。
+  // 🎁シールド戦だけは戻すとその場で開封したプール（＝組んだデッキ）が消えてしまうので出さない
+  const buttons = [{ label: "⚔ 対戦開始", value: "go", primary: true }];
+  if (!g.sealed) buttons.push({ label: "← ステージ選択へ戻る", value: "back" });
   return showDialog({
     title: cpus.length > 1 ? "⚔ 三つ巴の対戦相手" : "⚔ 対戦相手",
     body: `<div class="vs-wrap">${blocks}</div>
       <p class="vs-stage">${g.stage.icon} ${esc(g.stage.name)} ── 目標資産 <b>${RULES.target}G</b> を成して🏰城へ凱旋せよ</p>`,
-    buttons: [{ label: "⚔ 対戦開始", value: "go", primary: true }],
+    buttons,
   });
 }
 
