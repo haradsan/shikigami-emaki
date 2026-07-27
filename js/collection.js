@@ -651,6 +651,9 @@ function showPackReveal(cardIds, title, sub, opts = {}) {
     cardIds.forEach(id => { packCount[id] = (packCount[id] || 0) + 1; });
     const isNew = id => !opts.noNew && ownedCount(id) === packCount[id];
     let opened = false;
+    // 開封中はきらめく専用BGMへ。閉じたら元の曲（勝利ファンファーレ／タイトル曲）に戻す
+    const bgmBefore = (typeof BGM !== "undefined") ? BGM.track : null;
+    if (bgmBefore) BGM.setTrack("pack");
 
     const cardsHTML = cardIds.map(id => {
       const c = CARD_BY_ID[id];
@@ -683,6 +686,7 @@ function showPackReveal(cardIds, title, sub, opts = {}) {
       box.querySelector("[data-value=ok]").addEventListener("click", async () => {
         await flipAll(); // 伏せたまま受け取ろうとしたら、見せてから閉じる
         overlay.classList.remove("show");
+        if (bgmBefore) BGM.setTrack(bgmBefore); // 開封前の曲へ戻す
         resolve();
       });
     };

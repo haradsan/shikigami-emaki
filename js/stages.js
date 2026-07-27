@@ -410,7 +410,7 @@ const STAGES = [
   {
     // ★ v20（第二弾ボスその1）: 四隅の玉座の間に4体の精霊王が眠る56マスの神殿。
     //   ⛩️関門4つは全て必須（gatesNeeded:"all"）。巫女は精霊王4体を固定エースに従える（cpuAces）。
-    id: "s15", name: "五王の間", icon: "🕯️",
+    id: "s15", name: "五王の間", icon: "🕯️", boss: true, // boss:true＝対戦中のBGMがボス曲になる
     cpuName: "精霊王の巫女セレスティア", ai: "hard",
     cpuAces: ["ignisking", "sylvanking", "terraking", "nereusking"],
     desc: "中央の祭壇から四方の玉座の間へ渡る56マスの大神殿。⛩️4つの玉座はすべて必須通過点。巫女セレスティアは👑火・木・地・水の精霊王を従える——王たちの目覚めが遅いことを祈れ。",
@@ -439,7 +439,7 @@ const STAGES = [
   {
     // ★ v20（第二弾ボスその2・最終）: 時の十字が刻まれた51マスの玉座。
     //   時空王アイオーン自身が盤上に立つ（cpuAces=aeonking×2）。中央は🌋マグマに守られた💎時の泉。
-    id: "s16", name: "時流の玉座", icon: "⏳",
+    id: "s16", name: "時流の玉座", icon: "⏳", boss: true, // 最終決戦もボス曲
     cpuName: "時空王アイオーン", ai: "demon", cpuBias: "water",
     cpuAces: ["aeonking", "aeonking"],
     desc: "第二弾の最終決戦。51マスの大環に「時の十字」が交わる時空の玉座——中央の💎大魔力は🌋時の奔流に守られている。時空王アイオーンは自らの写し身を従え、潤沢な資金で時を支配する。",
