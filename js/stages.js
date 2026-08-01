@@ -2,12 +2,12 @@
 // stages.js — ステージ定義（16面）・盤面グラフ構築・進行度セーブ
 // ============================================================
 // 盤面は「グラフ」: 各マスが next（次のマスidの配列）を持つ。
-// v24（方向つき移動）: ダイス移動は隣接マスへ「進行方向を保って」進む（背後＝cameFrom へは戻れない。
+// v24（方向つき移動）: 賽の移動は隣接マスへ「進行方向を保って」進む（背後＝cameFrom へは戻れない。
 //   moveOptions・state.js）。グラフ自体は双方向で、最初の1歩や反転後は next の逆向きにも歩ける。
 //   next は「正規ルート」（既定の周回方向・AIの近似先読み・walkAhead）と、一方通行の向きの定義に使う。
 //
 // ステージ定義:
-//   board.rings  : 長方形ループの列。{w,h,x0,y0,start?}。最初のリングの先頭マスが城(id 0)。
+//   board.rings  : 長方形ループの列。{w,h,x0,y0,start?}。最初のリングの先頭マスが本宮(id 0)。
 //                  start=[x,y] でループの開始マスを回転指定（八の字の共有マス用）
 //   board.chords : 近道。{from:[x,y], cells:[[x,y]...], to:[x,y]} — from/to はリング上のマス。
 //                  oneway:true を付けると通路の中間マスが➡一方通行マスになる（from→to 方向にしか
@@ -19,7 +19,7 @@
 //                  先頭に4属性を並べれば小さい盤面でも全属性が出る。bias属性を多く入れると偏る。
 //   elemRun      : 属性ブロックの長さ（省略時3）。大きいほど同属性が固まり連鎖が強くなる
 //   elementAt    : {"x,y": element} 個別指定（循環より優先）
-//   gatesNeeded  : 周回に必要な関門数（省略時3）
+//   gatesNeeded  : 周回に必要な鳥居数（省略時3）
 //   rules        : state.js の DEFAULT_RULES への上書き
 "use strict";
 
@@ -81,10 +81,10 @@ function buildBoard(stage) {
     }
   });
 
-  // タイプ・属性の割り当て（id 0 は常に城）
+  // タイプ・属性の割り当て（id 0 は常に本宮）
   // 属性は「同属性を RUN マス連続で置く」クラスタ割当にして連鎖（同属性の隣接地）を出やすくする。
   //   elements は“属性ブロックの並び”を表す短いパレット（bias属性を厚めに）。RUN で各ブロックの長さを決める。
-  //   非LANDマス（関門/カード等）で列が分断されても、隣接する土地同士は同属性になりやすい。
+  //   非LANDマス（鳥居/札等）で列が分断されても、隣接する土地同士は同属性になりやすい。
   //   elementAt の個別指定は循環を消費しない（ci を進めない）ので、指定タイルは連鎖の起点として別枠に置ける。
   let ci = 0;
   const RUN = stage.elemRun || 3;
@@ -108,9 +108,9 @@ function buildBoard(stage) {
 // ---------- ステージ定義 ----------
 const STAGES = [
   {
-    id: "s1", name: "草原の環", icon: "🌿",
-    cpuName: "見習いセプター・ノア", ai: "novice",
-    desc: "ひとまわり20マスの小さな環。テンポよく周回ボーナスを稼ごう。火・木・地・水の4属性バランス型。",
+    id: "s1", name: "はじまりの野辺", icon: "🌿",
+    cpuName: "見習い陰陽師・ひなた", ai: "novice",
+    desc: "ひとまわり20マスの小さな野辺。テンポよく周回ボーナスを稼ごう。火・木・地・水の4属性バランス型。",
     board: { rings: [{ w: 6, h: 6 }] },
     types: {
       "0,2": "GATE", "3,0": "GATE", "5,3": "GATE",
@@ -123,9 +123,9 @@ const STAGES = [
     rules: { target: 3000, maxRounds: 32 },
   },
   {
-    id: "s2", name: "火山峠ヴォルグ", icon: "🌋",
-    cpuName: "火術師ヴォルグ", ai: "easy", cpuBias: "fire",
-    desc: "横に長い22マスの峠道。火の土地が多く、🌋マグマに止まると80G失う。",
+    id: "s2", name: "火伏せの峠", icon: "🌋",
+    cpuName: "火車の妖・紅蓮", ai: "easy", cpuBias: "fire",
+    desc: "横に長い22マスの峠道。火の霊地が多く、🌋火口に止まると80G失う。",
     board: { rings: [{ w: 7, h: 6 }] },
     types: {
       "0,3": "GATE", "3,0": "GATE", "6,3": "GATE",
@@ -139,9 +139,9 @@ const STAGES = [
     rules: { target: 3200, maxRounds: 34 },
   },
   {
-    id: "s3", name: "蒼水の都メルディア", icon: "🌊",
-    cpuName: "水賢者マリナ", ai: "easy", cpuBias: "water",
-    desc: "24マスの環に「水路の橋」が架かる29マスの街。橋を渡れば対岸へ近道、中央には💎魔力の泉。",
+    id: "s3", name: "水鏡の都", icon: "🌊",
+    cpuName: "水神の遣い・みなも", ai: "easy", cpuBias: "water",
+    desc: "24マスの環に「水路の橋」が架かる29マスの都。橋を渡れば対岸へ近道、中央には💎霊力の源。",
     board: {
       rings: [{ w: 7, h: 7 }],
       chords: [{ from: [0, 3], cells: [[1, 3], [2, 3], [3, 3], [4, 3], [5, 3]], to: [6, 3] }],
@@ -159,9 +159,9 @@ const STAGES = [
     rules: { target: 3500, maxRounds: 38 },
   },
   {
-    id: "s4", name: "風走る高地", icon: "🍃",
-    cpuName: "疾風のセイル", ai: "normal", cpuBias: "wood",
-    desc: "横一直線に伸びた24マスの細長い高原。💨疾風マスに乗れば一気に加速、城へ吹き戻されることも。",
+    id: "s4", name: "疾風の尾根道", icon: "🍃",
+    cpuName: "鎌鼬・つむじ", ai: "normal", cpuBias: "wood",
+    desc: "横一直線に伸びた24マスの細長い尾根。💨疾風マスに乗れば一気に加速、本宮へ吹き戻されることも。",
     board: { rings: [{ w: 10, h: 4 }] },
     types: {
       "0,1": "GATE", "5,0": "GATE", "9,2": "GATE",
@@ -176,9 +176,9 @@ const STAGES = [
     rules: { target: 3200, maxRounds: 36 },
   },
   {
-    id: "s5", name: "大地の霊峰ガンド", icon: "⛰️",
-    cpuName: "岩人ドルガ", ai: "normal", cpuBias: "earth",
-    desc: "縦に高い24マスの霊峰＋中腹を横切る「尾根の近道」。尾根の奥には+300Gの地脈💎が眠る。",
+    id: "s5", name: "大地の御山", icon: "⛰️",
+    cpuName: "山の巨人・だいだら坊", ai: "normal", cpuBias: "earth",
+    desc: "縦に高い24マスの御山＋中腹を横切る「尾根の近道」。尾根の奥には+300Gの地脈💎が眠る。",
     board: {
       rings: [{ w: 6, h: 8 }],
       chords: [{ from: [0, 4], cells: [[1, 4], [2, 4], [3, 4], [4, 4]], to: [5, 4] }],
@@ -196,9 +196,9 @@ const STAGES = [
     rules: { target: 3400, maxRounds: 38, magicTileG: 300 },
   },
   {
-    id: "s6", name: "幻影回廊リノア", icon: "🌀",
-    cpuName: "幻術師リノア", ai: "normal",
-    desc: "2つの環が🏰城で交差する31マスの「八の字」回廊。周回には両方の環を巡る必要がある。遠い角同士は🌀ワープで繋がる。",
+    id: "s6", name: "八重の幻廊", icon: "🌀",
+    cpuName: "猫又・くれは", ai: "normal",
+    desc: "2つの環が🏯本宮で交差する31マスの「八の字」回廊。周回には両方の環を巡る必要がある。遠い角同士は🌀神隠しで繋がる。",
     board: {
       rings: [
         { w: 5, h: 5, x0: 0, y0: 0, start: [4, 4] },
@@ -220,9 +220,9 @@ const STAGES = [
     rules: { target: 3000, maxRounds: 40 },
   },
   {
-    id: "s7", name: "黄金市場ゴルド", icon: "💰",
-    cpuName: "大商人ゴルド", ai: "hard", cpuBias: "water",
-    desc: "28マスの大きな市場をぐるりと回る。通行料は割高、💎魔力+250・⛩️関門+150の高額経済戦。",
+    id: "s7", name: "千両門前市", icon: "💰",
+    cpuName: "豪商狸・ぽん兵衛", ai: "hard", cpuBias: "water",
+    desc: "28マスの大きな門前市をぐるりと回る。通行料は割高、💎霊力+250・⛩️鳥居+150の高額経済戦。",
     board: { rings: [{ w: 8, h: 8 }] },
     types: {
       "0,3": "GATE", "4,0": "GATE", "7,4": "GATE",
@@ -235,9 +235,9 @@ const STAGES = [
     rules: { target: 4200, maxRounds: 40, tollRate: 0.85, magicTileG: 250, gateBonus: 150 },
   },
   {
-    id: "s8", name: "闘技場アレナ", icon: "⚔️",
-    cpuName: "剣闘士ガイアス", ai: "hard", cpuBias: "earth",
-    desc: "たった16マスの小さな闘技場。土地の奪い合いは避けられない。侵略ST+10＆土地の加護2倍。周回は関門2つでOK。",
+    id: "s8", name: "鬼の土俵", icon: "⚔️",
+    cpuName: "赤鬼・大牙", ai: "hard", cpuBias: "earth",
+    desc: "たった16マスの小さな土俵。霊地の奪い合いは避けられない。侵略ST+10＆霊地の加護2倍。周回は鳥居2つでOK。",
     board: { rings: [{ w: 5, h: 5 }] },
     types: {
       "0,2": "GATE", "4,2": "GATE",
@@ -250,9 +250,9 @@ const STAGES = [
     rules: { target: 4000, maxRounds: 40, invaderSt: 10, landHpMult: 2 },
   },
   {
-    id: "s9", name: "雷鳴峡谷ズーム", icon: "⚡",
-    cpuName: "雷帝ズーム", ai: "hard", cpuBias: "water",
-    desc: "24マスの環を縦横の谷道が貫く33マスの大峡谷。中央の十字路で道を選べ。谷道には🌋マグマと💨疾風が待つ。",
+    id: "s9", name: "鳴神峡", icon: "⚡",
+    cpuName: "雷公・鳴神", ai: "hard", cpuBias: "water",
+    desc: "24マスの環を縦横の谷道が貫く33マスの大峡谷。中央の十字路で道を選べ。谷道には🌋火口と💨疾風が待つ。",
     board: {
       rings: [{ w: 7, h: 7 }],
       chords: [
@@ -274,9 +274,9 @@ const STAGES = [
     rules: { target: 3200, maxRounds: 42 },
   },
   {
-    id: "s10", name: "魔王城ザルバド", icon: "👑",
-    cpuName: "魔王ザルバド", ai: "demon", cpuBias: "fire",
-    desc: "最終決戦。28マスの城郭の頂から🏰玉座へ一直線に堕ちる「地獄回廊」——ただし🌋マグマだらけ。魔王は初期魔力+200。",
+    id: "s10", name: "大江山の鬼ヶ城", icon: "👑",
+    cpuName: "大江山の鬼王・酒呑童子", ai: "demon", cpuBias: "fire",
+    desc: "第一巻の最終決戦。28マスの鬼ヶ城の頂から🏯本宮へ一直線に堕ちる「地獄回廊」——ただし🌋火口だらけ。鬼王は初期霊力+200。",
     board: {
       rings: [{ w: 9, h: 7 }],
       // 地獄回廊は「堕ちる」だけの➡一方通行（v23: 自由移動化に伴い明示）
@@ -297,10 +297,10 @@ const STAGES = [
   },
   {
     // ★ 非環状（星型）盤面のデモ：中央の環から四方へ小さな環が伸びる「四つ辻」。
-    //   関門はgatesNeeded:"all"で全て必須通過点＝4つ全て回って城へ戻れば1周。対角のショートカットで三叉路になる。
-    id: "s11", name: "星辰の四つ辻", icon: "✴️",
-    cpuName: "星詠みステラ", ai: "normal",
-    desc: "中央の環から四方へ小さな環が伸びる星型の盤面。⛩️関門4つは全てが必須通過点——全て巡って城へ戻れば1周。中央を貫く対角路は三叉路になっている。",
+    //   鳥居はgatesNeeded:"all"で全て必須通過点＝4つ全て回って本宮へ戻れば1周。対角のショートカットで三叉路になる。
+    id: "s11", name: "星宿の辻", icon: "✴️",
+    cpuName: "宿曜師・こよみ", ai: "normal",
+    desc: "中央の環から四方へ小さな環が伸びる星型の盤面。⛩️鳥居4つは全てが必須通過点——全て巡って本宮へ戻れば1周。中央を貫く対角路は三叉路になっている。",
     board: {
       rings: [
         { w: 3, h: 3, x0: 2, y0: 2 },   // 中央の環（城はここ）
@@ -329,10 +329,10 @@ const STAGES = [
   },
   {
     // ★ v18追加: 三つ巴のために設計した大型盤面。外周の大環に「三本の腕」が刺さり、
-    //   どの腕も中央のハブ(3,3)を経て城へ流れ込む＝終盤の凱旋レースが熱い。
-    id: "s12", name: "円卓の三叉界", icon: "🎭",
-    cpuName: "円卓の盟主アルヴィス", ai: "hard",
-    desc: "外周28マスの大環に、三方から城へ流れ込む「円卓の腕」が交わる40マスの決戦場。⚔三つ巴で真価を発揮する広さ——🎰運命と⛲泉が波乱を呼ぶ。",
+    //   どの腕も中央のハブ(3,3)を経て本宮へ流れ込む＝終盤の凱旋レースが熱い。
+    id: "s12", name: "天狗の円座", icon: "👺",
+    cpuName: "大天狗・鞍馬坊", ai: "hard",
+    desc: "外周28マスの大環に、三方から本宮へ流れ込む「天狗の腕」が交わる40マスの決戦場。⚔三つ巴で真価を発揮する広さ——🎋おみくじと♨️霊泉が波乱を呼ぶ。",
     board: {
       rings: [{ w: 8, h: 8 }],
       chords: [
@@ -354,11 +354,11 @@ const STAGES = [
     rules: { target: 3600, maxRounds: 46 },
   },
   {
-    // ★ v20（第二弾）: 「盤面が手狭」への回答その1＝横に広い46マスの大草原。
-    //   経済・建造物・移動スペルがのびのび活きる通常大型ステージ。
-    id: "s13", name: "隊商の大草原", icon: "🐪",
-    cpuName: "隊商長ラシード", ai: "normal", cpuBias: "wood",
-    desc: "地平まで続く46マスの大草原を、隊商路が横切る。道は長く、土地は豊か——🏛建造物や⛏採掘でじっくり富を育てる者が勝つ。",
+    // ★ v20（第二巻）: 「盤面が手狭」への回答その1＝横に広い46マスの大原。
+    //   経済・建造物・移動の呪術がのびのび活きる通常大型ステージ。
+    id: "s13", name: "馬借の大原", icon: "🐴",
+    cpuName: "馬借の頭・吾平", ai: "normal", cpuBias: "wood",
+    desc: "地平まで続く46マスの大原を、馬借の街道が横切る。道は長く、霊地は豊か——🏛建造物や⛏採掘でじっくり富を育てる者が勝つ。",
     board: {
       rings: [{ w: 12, h: 8 }],
       chords: [{ from: [0, 4], cells: [[1, 4], [2, 4], [3, 4], [4, 4], [5, 4], [6, 4], [7, 4], [8, 4], [9, 4], [10, 4]], to: [11, 4] }],
@@ -376,11 +376,11 @@ const STAGES = [
     rules: { target: 3800, maxRounds: 48 },
   },
   {
-    // ★ v20（第二弾）: 「盤面が手狭」への回答その2＝外環と内環を4本の歯車道で結ぶ56マスの機構都市。
+    // ★ v20（第二巻）: 「盤面が手狭」への回答その2＝外環と内環を4本の歯車道で結ぶ56マスのからくりの都。
     //   内環は近道だが出口は南と東のみ＝一方通行の歯車に巻き込まれる緊張感。
-    id: "s14", name: "時計仕掛けの大環", icon: "⚙️",
-    cpuName: "機構技師ギアハルト", ai: "hard", cpuBias: "earth",
-    desc: "巨大な外環と小さな内環が4本の歯車道で噛み合う56マスの機構都市。北と西から内環へ入り、南と東へ吐き出される——歯車の回りを読んだ者が時を制す。",
+    id: "s14", name: "からくりの都", icon: "⚙️",
+    cpuName: "からくり師・惣兵衛", ai: "hard", cpuBias: "earth",
+    desc: "巨大な外環と小さな内環が4本の歯車道で噛み合う56マスのからくりの都。北と西から内環へ入り、南と東へ吐き出される——歯車の回りを読んだ者が時を制す。",
     board: {
       rings: [
         { w: 10, h: 10 },
@@ -408,19 +408,19 @@ const STAGES = [
     rules: { target: 4000, maxRounds: 50 },
   },
   {
-    // ★ v20（第二弾ボスその1）: 四隅の玉座の間に4体の精霊王が眠る56マスの神殿。
-    //   ⛩️関門4つは全て必須（gatesNeeded:"all"）。巫女は精霊王4体を固定エースに従える（cpuAces）。
-    id: "s15", name: "五王の間", icon: "🕯️", boss: true, // boss:true＝対戦中のBGMがボス曲になる
-    cpuName: "精霊王の巫女セレスティア", ai: "hard",
+    // ★ v20（第二巻ボスその1）: 四隅の玉座の間に4柱の帝が眠る56マスの大宮。
+    //   ⛩️鳥居4つは全て必須（gatesNeeded:"all"）。巫女は帝4柱を固定エースに従える（cpuAces）。
+    id: "s15", name: "五帝の宮", icon: "🕯️", boss: true, // boss:true＝対戦中のBGMがボス曲になる
+    cpuName: "五帝の巫女・ちはや", ai: "hard",
     cpuAces: ["ignisking", "sylvanking", "terraking", "nereusking"],
-    desc: "中央の祭壇から四方の玉座の間へ渡る56マスの大神殿。⛩️4つの玉座はすべて必須通過点。巫女セレスティアは👑火・木・地・水の精霊王を従える——王たちの目覚めが遅いことを祈れ。",
+    desc: "中央の祭壇から四方の玉座の間へ渡る56マスの大宮。⛩️4つの玉座はすべて必須通過点。巫女ちはやは👑火・木・地・水の帝を従える——五帝の目覚めが遅いことを祈れ。",
     board: {
       rings: [
-        { w: 4, h: 4, x0: 3, y0: 3 },   // 中央の祭壇（城はここ）
-        { w: 4, h: 4, x0: 0, y0: 0 },   // 焔王の間（角(3,3)を共有）
-        { w: 4, h: 4, x0: 6, y0: 0 },   // 翠王の間（角(6,3)を共有）
-        { w: 4, h: 4, x0: 0, y0: 6 },   // 岩帝の間（角(3,6)を共有）
-        { w: 4, h: 4, x0: 6, y0: 6 },   // 海王の間（角(6,6)を共有）
+        { w: 4, h: 4, x0: 3, y0: 3 },   // 中央の祭壇（本宮はここ）
+        { w: 4, h: 4, x0: 0, y0: 0 },   // 火帝の間（角(3,3)を共有）
+        { w: 4, h: 4, x0: 6, y0: 0 },   // 木帝の間（角(6,3)を共有）
+        { w: 4, h: 4, x0: 0, y0: 6 },   // 地帝の間（角(3,6)を共有）
+        { w: 4, h: 4, x0: 6, y0: 6 },   // 水帝の間（角(6,6)を共有）
       ],
     },
     types: {
@@ -437,12 +437,12 @@ const STAGES = [
     rules: { target: 4200, maxRounds: 50, cpuMagicBonus: 300 },
   },
   {
-    // ★ v20（第二弾ボスその2・最終）: 時の十字が刻まれた51マスの玉座。
-    //   時空王アイオーン自身が盤上に立つ（cpuAces=aeonking×2）。中央は🌋マグマに守られた💎時の泉。
-    id: "s16", name: "時流の玉座", icon: "⏳", boss: true, // 最終決戦もボス曲
-    cpuName: "時空王アイオーン", ai: "demon", cpuBias: "water",
+    // ★ v20（第二巻ボスその2・最終）: 時の十字が刻まれた51マスの玉座。
+    //   百鬼夜行の主・久遠自身が盤上に立つ（cpuAces=aeonking×2）。中央は🌋火口に守られた💎時の霊泉。
+    id: "s16", name: "常世の玉座", icon: "⏳", boss: true, // 最終決戦もボス曲
+    cpuName: "百鬼夜行の主・久遠", ai: "demon", cpuBias: "water",
     cpuAces: ["aeonking", "aeonking"],
-    desc: "第二弾の最終決戦。51マスの大環に「時の十字」が交わる時空の玉座——中央の💎大魔力は🌋時の奔流に守られている。時空王アイオーンは自らの写し身を従え、潤沢な資金で時を支配する。",
+    desc: "第二巻の最終決戦。51マスの大環に「時の十字」が交わる常世の玉座——中央の💎大霊力は🌋時の奔流に守られている。百鬼夜行の主・久遠は自らの写し身を従え、潤沢な資金で時を支配する。",
     board: {
       rings: [{ w: 10, h: 10 }],
       chords: [
@@ -480,7 +480,7 @@ function validateStages() {
       if (!byKey[k]) console.error(`[stages] ${s.id}: elementAt座標 ${k} が盤面にない`);
       else if (byKey[k].type !== "LAND") console.error(`[stages] ${s.id}: elementAt座標 ${k} がLANDでない`);
     });
-    // 全マスが行き先を持ち、城と相互到達可能か
+    // 全マスが行き先を持ち、本宮と相互到達可能か
     tiles.forEach(t => {
       if (t.next.length === 0) console.error(`[stages] ${s.id}: マス${t.id}(${t.x},${t.y})に行き先がない`);
       if (t.type === "WARP" && t.warpTo === undefined) console.error(`[stages] ${s.id}: WARP ${t.x},${t.y} に対応先がない`);
@@ -494,15 +494,15 @@ function validateStages() {
     };
     const fwd = bfs(0, id => tiles[id].next);
     const rev = bfs(0, id => tiles.filter(t => t.next.includes(id)).map(t => t.id));
-    if (fwd.size !== tiles.length) console.error(`[stages] ${s.id}: 城から到達できないマスがある (${fwd.size}/${tiles.length})`);
-    if (rev.size !== tiles.length) console.error(`[stages] ${s.id}: 城へ戻れないマスがある (${rev.size}/${tiles.length})`);
-    // 関門数と gatesNeeded の整合（"all" は全関門必須なので常に妥当）
+    if (fwd.size !== tiles.length) console.error(`[stages] ${s.id}: 本宮から到達できないマスがある (${fwd.size}/${tiles.length})`);
+    if (rev.size !== tiles.length) console.error(`[stages] ${s.id}: 本宮へ戻れないマスがある (${rev.size}/${tiles.length})`);
+    // 鳥居数と gatesNeeded の整合（"all" は全鳥居必須なので常に妥当）
     const gateCount = tiles.filter(t => t.type === "GATE").length;
     const gn = s.gatesNeeded ?? 3;
     if (gn === "all") {
-      if (gateCount === 0) console.error(`[stages] ${s.id}: gatesNeeded:"all" だが関門が0個`);
+      if (gateCount === 0) console.error(`[stages] ${s.id}: gatesNeeded:"all" だが鳥居が0個`);
     } else if (gn > gateCount) {
-      console.error(`[stages] ${s.id}: gatesNeeded(${gn}) > 関門数(${gateCount})`);
+      console.error(`[stages] ${s.id}: gatesNeeded(${gn}) > 鳥居数(${gateCount})`);
     }
   });
 }

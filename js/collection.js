@@ -1,19 +1,19 @@
 // ============================================================
-// collection.js — カード収集とデッキ構築（localStorage永続化・第一弾100種アルバム）
+// collection.js — カード収集とデッキ構築（localStorage永続化・第一巻100種アルバム）
 // ============================================================
 "use strict";
 
 const COLLECTION_KEY = "shiki-emaki-collection";
 const DECK_SIZE     = 30;   // 構築デッキの枚数（現行の自動デッキと同じ）
 const MAX_COPIES    = 3;    // 同名カードの上限
-const MIN_CREATURES = 12;   // デッキに必要な最低クリーチャー数（土地を確保できるように）
+const MIN_CREATURES = 12;   // デッキに必要な最低式神数（土地を確保できるように）
 const DECK_SLOTS    = 5;    // プレイヤーごとに保存できるデッキ数
 
-// レア度（cardRarity / RARITY_WEIGHT / RARITY_META）は cards.js で定義。パックの排出重みに使う。
+// レア度（cardRarity / RARITY_WEIGHT / RARITY_META）は cards.js で定義。文箱の排出重みに使う。
 
 // ---------- 永続化（プレイヤープロファイル別） ----------
-// スターター: 第一弾のコスト75以下のカードを各2枚（最初から30枚デッキを組める）。高コストはパックで集める。
-// 無属性クリーチャーはレア以上の特別枠、第二弾はパック・交換所で集める（スターターには含めない）
+// スターター: 第一巻のコスト75以下のカードを各2枚（最初から30枚デッキを組める）。高コストは文箱で集める。
+// 無属性式神は稀以上の特別枠、第二巻は文箱・交換所で集める（スターターには含めない）
 function defaultCollection() {
   const owned = {};
   CARD_DB.forEach(c => { if (c.cost <= 75 && c.element !== "neutral" && cardSet(c) === 1) owned[c.id] = 2; });
@@ -24,8 +24,8 @@ function loadCollection() {
     const c = JSON.parse(localStorage.getItem(profileStorageKey(COLLECTION_KEY)));
     if (c && typeof c === "object" && c.owned) {
       c.packsGiven = c.packsGiven || {};
-      c.shards = Math.max(0, c.shards | 0); // 🎟パックポイント（旧🔮マナの欠片＝1欠片:1ポイントでそのまま移行・v19）
-      c.packBuys = Math.max(0, c.packBuys | 0); // 交換所のパック購入回数（救いの回の判定用・v19）
+      c.shards = Math.max(0, c.shards | 0); // 🎟文箱ポイント（旧🔮マナの欠片＝1欠片:1ポイントでそのまま移行・v19）
+      c.packBuys = Math.max(0, c.packBuys | 0); // 交換所の文箱購入回数（救いの回の判定用・v19）
       // 旧スキーマ（deck 1本）→ デッキスロット5本へ移行（既存デッキはスロット1へ）
       if (!Array.isArray(c.decks)) {
         c.decks = Array(DECK_SLOTS).fill(null);
@@ -56,7 +56,7 @@ function addCards(cardIds) {
   saveCollection(c);
 }
 
-// ---------- パック開封（返り値: cardId配列） ----------
+// ---------- 文箱開封（返り値: cardId配列） ----------
 // レア度を重みで抽選（minRarity 指定時はそれ以上のレア度からのみ）
 function rollRarity(minRarity = null) {
   let pool = RARITY_ORDER;
@@ -67,14 +67,14 @@ function rollRarity(minRarity = null) {
   for (let i = 0; i < pool.length; i++) { roll -= weights[i]; if (roll < 0) return pool[i]; }
   return pool[pool.length - 1];
 }
-// パックのn枚を引く。ポイントは「先にレア度を決めてから、そのレア度のカードを一様に1枚選ぶ」こと。
+// 文箱のn枚を引く。ポイントは「先にレア度を決めてから、そのレア度のカードを一様に1枚選ぶ」こと。
 // 旧実装はカードごとに重みを積んでいたため、コモンの“種類数”が多いほど排出が全部コモンに偏っていた
 // （＝「コモンばかり出る」問題）。レア度先決め方式なら種類数に左右されずレアも顔を出す。
-// guarantee: このパックに最低 guaranteeCount 枚は保証するレア度（原さん指定）。
+// guarantee: この文箱に最低 guaranteeCount 枚は保証するレア度（原さん指定）。
 //   ＝5枚報酬はレア1枚保証／3枚はアンコモン1枚保証／初クリア10枚はレア2枚以上保証（枚数が倍なので保証も倍が妥当）。
 // 「残り枠を全部使わないと保証枚数に届かない」状況になったら、その枠から保証レア度以上へ格上げする方式。
 // お試し重視で希少性は緩め＝毎回の開封に“当たり枠”があるようにして楽しさを優先する。
-// set: 排出する弾（1=第一弾／2=第二弾。v19で弾別パックに）
+// set: 排出する巻（1=第一巻／2=第二巻。v19で巻別の文箱に）
 function drawPack(n = 3, guarantee = "uncommon", guaranteeCount = 1, set = 1) {
   const out = [];
   const rank = r => RARITY_ORDER.indexOf(r);
@@ -88,16 +88,16 @@ function drawPack(n = 3, guarantee = "uncommon", guaranteeCount = 1, set = 1) {
   }
   return out;
 }
-// 報酬枚数と保証（原さん指定）: 新規クリア=10枚＋レア2枚保証 / 正規勝利=5枚＋レア1枚保証 / トレーニング=3枚＋アンコモン1枚保証
+// 報酬枚数と保証（原さん指定）: 新規クリア=10枚＋レア2枚保証 / 正規勝利=5枚＋レア1枚保証 / 稽古=3枚＋アンコモン1枚保証
 const REWARD_FIRST_CLEAR = 10;
 const REWARD_WIN         = 5;
 const REWARD_ROYALE_BONUS = 2; // ⚔三つ巴の勝利は1対1より+2枚（3人戦の難しさに見合う報酬・v22）
 const REWARD_TRAINING    = 3;
-const GUARANTEE_FIRST_CLEAR = 2; // 初クリアはレア以上を2枚保証（10枚パック）
-const TRAINING_STREAK_FOR_RARE = 3; // トレーニング連勝ボーナス: この連勝数からは毎回レア以上1枚保証
+const GUARANTEE_FIRST_CLEAR = 2; // 初クリアは稀以上を2枚保証（10枚文箱）
+const TRAINING_STREAK_FOR_RARE = 3; // 稽古連勝ボーナス: この連勝数からは毎回稀以上1枚保証
 
-// ステージ初クリアで大型パック（10枚・レア以上2枚保証）。既に付与済みなら null。
-// set: 報酬パックの弾（v19＝勝利時に第一弾/第二弾を選べる）
+// ステージ初クリアで大型文箱（10枚・稀以上2枚保証）。既に付与済みなら null。
+// set: 報酬文箱の巻（v19＝勝利時に第一巻/第二巻を選べる）
 function grantStageClearPack(stageId, n = REWARD_FIRST_CLEAR, set = 1) {
   const c = loadCollection();
   if (c.packsGiven[stageId]) return null;
@@ -113,20 +113,20 @@ function grantWinCards(n = REWARD_WIN, set = 1) {
   addCards(pack);
   return pack;
 }
-// トレーニング勝利で3枚（アンコモン保証）。連勝を重ねると保証が格上げされる（負け・投了でリセット）
+// 稽古勝利で3枚（アンコモン保証）。連勝を重ねると保証が格上げされる（負け・投了でリセット）
 function grantTrainingCards(n = REWARD_TRAINING) {
   const c = loadCollection();
   c.trainingWins = (c.trainingWins || 0) + 1;
   c.trainingStreak = (c.trainingStreak || 0) + 1;
   saveCollection(c);
-  const hot = c.trainingStreak >= TRAINING_STREAK_FOR_RARE; // 3連勝からはレア以上1枚保証
+  const hot = c.trainingStreak >= TRAINING_STREAK_FOR_RARE; // 3連勝からは稀以上1枚保証
   const pack = drawPack(n, hot ? "rare" : "uncommon");
   addCards(pack);
   return pack;
 }
-// 現在のトレーニング連勝数（表示用）
+// 現在の稽古連勝数（表示用）
 function trainingStreakCount() { return loadCollection().trainingStreak || 0; }
-// トレーニングの敗北・投了で連勝をリセット
+// 稽古の敗北・投了で連勝をリセット
 function resetTrainingStreak() {
   const c = loadCollection();
   if (c.trainingStreak) { c.trainingStreak = 0; saveCollection(c); }
@@ -184,7 +184,7 @@ function deckValidity(deck) {
   if (deck.length !== DECK_SIZE) errors.push(`${DECK_SIZE}枚ちょうどにしてください（現在${deck.length}枚）`);
   if (Object.keys(counts).some(id => counts[id] > MAX_COPIES)) errors.push(`同名カードは${MAX_COPIES}枚まで`);
   if (Object.keys(counts).some(id => counts[id] > ownedCount(id))) errors.push(`所持数を超えたカードがあります`);
-  if (creatures < MIN_CREATURES) errors.push(`クリーチャーを${MIN_CREATURES}枚以上入れてください（現在${creatures}枚）`);
+  if (creatures < MIN_CREATURES) errors.push(`式神を${MIN_CREATURES}枚以上入れてください（現在${creatures}枚）`);
   return { ok: errors.length === 0, errors, creatures };
 }
 
@@ -246,15 +246,15 @@ function showAlbum() {
       cards.map(c => albumTile(c, owned[c.id] || 0)).join("") + `</div>`;
     let html = `<h2>📚 カードアルバム <span class="album-count">${distinctOwned()} / ${CARD_DB.length} 種 収集</span></h2>`;
     html += `<div class="album-scroll">`;
-    // 弾（第一弾／第二弾）ごとにまとめて表示（v19）
+    // 巻（第一巻／第二巻）ごとにまとめて表示（v19）
     CARD_SETS.forEach(s => {
       const inSet = CARD_DB.filter(c => cardSet(c) === s.set);
       const have = inSet.filter(c => (owned[c.id] || 0) > 0).length;
       html += `<h3 class="album-h" style="font-size:1.05em">${s.icon} ${esc(s.name)} <span class="album-count">${have} / ${inSet.length} 種</span></h3>`;
       Object.keys(ELEMENTS).forEach(e =>
-        html += section(`${ELEMENTS[e].icon} ${ELEMENTS[e].name}属性クリーチャー`, inSet.filter(c => c.type === "creature" && c.element === e)));
-      html += section("⚔️ アイテム", inSet.filter(c => c.type === "item"));
-      html += section("✨ スペル", inSet.filter(c => c.type === "spell"));
+        html += section(`${ELEMENTS[e].icon} ${ELEMENTS[e].name}属性式神`, inSet.filter(c => c.type === "creature" && c.element === e)));
+      html += section("⚔️ 宝具", inSet.filter(c => c.type === "item"));
+      html += section("✨ 呪術", inSet.filter(c => c.type === "spell"));
     });
     html += `</div><div class="dlg-buttons"><button class="btn primary" data-value="close">閉じる</button></div>`;
     box.innerHTML = html;
@@ -306,10 +306,10 @@ function showDeckBuilder() {
       box.innerHTML = `<h2>🛠 デッキ構築 <span class="album-count">👤 ${esc(currentProfileName())}｜編集中: デッキ${slot + 1}｜${deck.length} / ${DECK_SIZE} 枚</span></h2>
         <div class="deck-slots">${slotTabs}</div>
         <p class="dlg-body">デッキは<b>5つまで保存</b>できます（✔＝対戦で使用中）。タブでスロットを切り替え（未保存の編集は破棄）、<b>保存するとそのデッキが使用中</b>になります。<br>
-        左の所持カードをクリックで追加、右のデッキをクリックで外す。同名は${MAX_COPIES}枚まで／クリーチャーは${MIN_CREATURES}枚以上。</p>
+        左の所持カードをクリックで追加、右のデッキをクリックで外す。同名は${MAX_COPIES}枚まで／式神は${MIN_CREATURES}枚以上。</p>
         <div class="builder">
           <div class="builder-col"><div class="bc-title">📦 所持カード（${ownedIds.length}種）</div><div class="pool-list">${poolHtml}</div></div>
-          <div class="builder-col"><div class="bc-title">🎴 デッキ（クリーチャー ${v.creatures}）</div><div class="deck-list">${deckHtml}</div></div>
+          <div class="builder-col"><div class="bc-title">🎴 デッキ（式神 ${v.creatures}）</div><div class="deck-list">${deckHtml}</div></div>
         </div>
         <div class="builder-status ${v.ok ? "ok" : "ng"}">${v.ok ? "✅ 構築OK！ 保存できます" : "⚠ " + v.errors.join("／")}</div>
         <div class="dlg-buttons">
@@ -353,12 +353,12 @@ function showDeckBuilder() {
 }
 
 // ---------- ♻️ ポイント交換所（v19。旧「カード工房」の生成機能を廃止して置き換え） ----------
-// 同名4枚目以降（MAX_COPIES=3を超える余剰分）を🎟パックポイントにスクラップし、
-// 貯めたポイントで第一弾/第二弾のカードパック（5枚入り）を購入できる。
-// 「任意カードの直接生成」は廃止（原さん指定）＝コンプの出口は購入パックの【救いの回】が担う:
-// パック購入10回ごとに1枠が「未所持カード確定」になる（レア度抽選は通常どおり＝簡単には出ない）。
+// 同名4枚目以降（MAX_COPIES=3を超える余剰分）を🎟文箱ポイントにスクラップし、
+// 貯めたポイントで第一巻/第二巻の文箱（5枚入り）を購入できる。
+// 「任意カードの直接生成」は廃止（原さん指定）＝コンプの出口は購入文箱の【救いの回】が担う:
+// 文箱購入10回ごとに1枠が「未所持カード確定」になる（レア度抽選は通常どおり＝簡単には出ない）。
 const SHARD_DISMANTLE = { common: 1, uncommon: 2, rare: 4, legendary: 8 }; // スクラップで得るポイント
-const EXCHANGE_PACK_COST = 25;  // パック1個（5枚入り）の価格
+const EXCHANGE_PACK_COST = 25;  // 文箱1個（5枚入り）の価格
 const EXCHANGE_PACK_SIZE = 5;
 const PITY_EVERY = 10;          // 購入N回ごとに「救いの回」＝未所持1枚確定
 function shardCount() { return loadCollection().shards || 0; }
@@ -375,13 +375,13 @@ function dismantleCard(id, n = 1) {
   saveCollection(c);
   return gain;
 }
-// 次の救いの回まであと何パックか（1〜PITY_EVERY）
+// 次の救いの回まであと何文箱か（1〜PITY_EVERY）
 function pityRemaining() {
   const buys = loadCollection().packBuys || 0;
   return PITY_EVERY - (buys % PITY_EVERY);
 }
-// ポイントでパックを購入（set=1/2）。足りなければ null。
-// 戻り値: { pack, pity } — pity=true ならこのパックは救いの回（未所持1枚確定）
+// ポイントで文箱を購入（set=1/2）。足りなければ null。
+// 戻り値: { pack, pity } — pity=true ならこの文箱は救いの回（未所持1枚確定）
 function buyPointPack(set = 1) {
   const c = loadCollection();
   if ((c.shards || 0) < EXCHANGE_PACK_COST) return null;
@@ -391,7 +391,7 @@ function buyPointPack(set = 1) {
   saveCollection(c);
   const pack = drawPack(EXCHANGE_PACK_SIZE, "uncommon", 1, set);
   if (pity) {
-    // 救いの回: 1枠目を「その弾の未所持カード」に差し替える。レア度は通常の重みで抽選
+    // 救いの回: 1枠目を「その巻の未所持カード」に差し替える。レア度は通常の重みで抽選
     // （未所持がそのレア度に無ければ別レア度へ）＝未所持は出やすくなるが狙い撃ちはできない
     const owned = loadCollection().owned;
     const unownedByRarity = r => cardsOfRarity(r, set).filter(id => !(owned[id] > 0));
@@ -405,7 +405,7 @@ function buyPointPack(set = 1) {
       if (all.length) picked = all[Math.floor(Math.random() * all.length)];
     }
     if (picked) pack[0] = picked;
-    else { // その弾をコンプ済みならレア以上1枚保証に格上げ
+    else { // その巻をコンプ済みなら稀以上1枚保証に格上げ
       const rares = cardsOfRarity(Math.random() < 0.25 ? "legendary" : "rare", set);
       pack[0] = rares[Math.floor(Math.random() * rares.length)];
     }
@@ -419,7 +419,7 @@ function showWorkshop() {
     const overlay = document.getElementById("overlay");
     const box = document.getElementById("dialog");
     const rarRank = c => RARITY_ORDER.indexOf(cardRarity(c));
-    let pendingReveal = null; // 購入したパック（ダイアログを閉じて開封演出へ）
+    let pendingReveal = null; // 購入した文箱（ダイアログを閉じて開封演出へ）
     const render = () => {
       const col = loadCollection();
       const shards = col.shards || 0;
@@ -441,20 +441,20 @@ function showWorkshop() {
         const have = CARD_DB.filter(c => cardSet(c) === s.set && (col.owned[c.id] || 0) > 0).length;
         return `<button class="stage-btn" data-buy="${s.set}" ${shards >= EXCHANGE_PACK_COST ? "" : "disabled"}>
           <span class="st-icon">${s.icon}</span>
-          <span class="st-main"><b>${esc(s.name)}パック（${EXCHANGE_PACK_SIZE}枚入り）</b>
+          <span class="st-main"><b>${esc(s.name)}文箱（${EXCHANGE_PACK_SIZE}枚入り）</b>
             <small>${EXCHANGE_PACK_COST}🎟 ／ 収集 ${have}/${total}種</small></span>
           <span class="st-star">${shards >= EXCHANGE_PACK_COST ? "🎁" : ""}</span>
         </button>`;
       }).join("");
-      box.innerHTML = `<h2>♻️ ポイント交換所 <span class="album-count">🎟 パックポイント: <b>${shards}</b></span></h2>
-        <p class="dlg-body">同名<b>${MAX_COPIES + 1}枚目以降の余剰カード</b>をスクラップすると<b>🎟パックポイント</b>になり、
-        貯めて<b>カードパック（${EXCHANGE_PACK_SIZE}枚入り・${EXCHANGE_PACK_COST}🎟）</b>を購入できます。<br>
+      box.innerHTML = `<h2>♻️ ポイント交換所 <span class="album-count">🎟 文箱ポイント: <b>${shards}</b></span></h2>
+        <p class="dlg-body">同名<b>${MAX_COPIES + 1}枚目以降の余剰カード</b>をスクラップすると<b>🎟文箱ポイント</b>になり、
+        貯めて<b>文箱（${EXCHANGE_PACK_SIZE}枚入り・${EXCHANGE_PACK_COST}🎟）</b>を購入できます。<br>
         スクラップ: ★+1 ／ ★★+2 ／ ★★★+4 ／ ★★★★+8<br>
-        🌟 <b>救いの回</b>: パック購入<b>${PITY_EVERY}回ごと</b>に1枚が<b>未所持カード確定</b>！（次まで あと<b>${pityLeft}</b>回）</p>
+        🌟 <b>救いの回</b>: 文箱購入<b>${PITY_EVERY}回ごと</b>に1枚が<b>未所持カード確定</b>！（次まで あと<b>${pityLeft}</b>回）</p>
         <div class="builder">
           <div class="builder-col"><div class="bc-title">🔨 スクラップ（余剰 ${dis.length}種）</div><div class="pool-list">${disHtml}</div>
             ${dis.length ? `<button class="btn small ws-all" data-value="disall">🔨 余剰をまとめてスクラップ（+${totalGain}🎟）</button>` : ""}</div>
-          <div class="builder-col"><div class="bc-title">🎁 パック購入</div><div class="stage-list">${setRows}</div></div>
+          <div class="builder-col"><div class="bc-title">🎁 文箱購入</div><div class="stage-list">${setRows}</div></div>
         </div>
         <div class="dlg-buttons"><button class="btn primary" data-value="close">閉じる</button></div>`;
       box.querySelectorAll("[data-dis]").forEach(el => el.addEventListener("click", () => {
@@ -469,8 +469,8 @@ function showWorkshop() {
         overlay.classList.remove("show");
         const setName = CARD_SETS.find(s => s.set === set).name;
         await showPackReveal(res.pack,
-          res.pity ? `🌟 救いの回！ ${setName}パック` : `🎁 ${setName}パック`,
-          res.pity ? `未所持カード1枚確定のパックだ！（購入${PITY_EVERY}回ごとのボーナス）` : `ポイントでパックを購入した（${EXCHANGE_PACK_COST}🎟）`);
+          res.pity ? `🌟 救いの回！ ${setName}文箱` : `🎁 ${setName}文箱`,
+          res.pity ? `未所持カード1枚確定の文箱だ！（購入${PITY_EVERY}回ごとのボーナス）` : `ポイントで文箱を購入した（${EXCHANGE_PACK_COST}🎟）`);
         render();
         overlay.classList.add("show");
       }));
@@ -589,7 +589,7 @@ function showProfilePicker() {
 //   3列×30vhがダイアログを溢れ、内側リストがタッチスクロールを奪って「閉じる」に届かなくなる
 //   袋小路が起きていた（1画面1リストなら常にボタンまで収まる）。
 //   さらに受け身ダイアログ（UI._passiveClose）として登録：三つ巴では閲覧中もCPUの手番が進み、
-//   防衛アイテム選択などの進行ダイアログが割り込むことがある。その際は自動で閉じて
+//   防衛宝具選択などの進行ダイアログが割り込むことがある。その際は自動で閉じて
 //   Promise未解決のまま上書きされるのを防ぐ。
 function showDiscardViewer() {
   return new Promise(resolve => {
@@ -636,17 +636,17 @@ function showDiscardViewer() {
   });
 }
 
-// ---------- カード獲得の演出（パック開封 → 1枚ずつめくる） ----------
-// ① 封のされたカードパックをクリックで開封（封が弾け飛ぶ）
+// ---------- カード獲得の演出（文箱開封 → 1枚ずつめくる） ----------
+// ① 封のされた文箱をクリックで開封（封が弾け飛ぶ）
 // ② 全カードが表紙（カードバック）側で並び、クリックで1枚ずつめくる（🃏全てめくるも可）
-// ③ レア以上はめくった瞬間に光の演出、初入手のカードには NEW リボン
-// opts.noNew: NEWリボンを出さない（シールド戦＝コレクションに加算しない開封で使う。
+// ③ 稀以上はめくった瞬間に光の演出、初入手のカードには NEW リボン
+// opts.noNew: NEWリボンを出さない（封符戦＝コレクションに加算しない開封で使う。
 //   所持数からの初入手判定が成り立たないため）
 function showPackReveal(cardIds, title, sub, opts = {}) {
   return new Promise(resolve => {
     const overlay = document.getElementById("overlay");
     const box = document.getElementById("dialog");
-    // addCards は既に適用済みなので「現在の所持数 == このパック内の枚数」なら今回が初入手
+    // addCards は既に適用済みなので「現在の所持数 == この文箱内の枚数」なら今回が初入手
     const packCount = {};
     cardIds.forEach(id => { packCount[id] = (packCount[id] || 0) + 1; });
     const isNew = id => !opts.noNew && ownedCount(id) === packCount[id];
@@ -696,7 +696,7 @@ function showPackReveal(cardIds, title, sub, opts = {}) {
       <p class="dlg-body">${esc(sub || "新しいカードを手に入れた！")}</p>
       <div class="pack-stage">
         <button class="pack-btn" title="クリックで開封">${typeof PACK_SVG !== "undefined" ? PACK_SVG : "🎁"}</button>
-        <div class="pack-hint">✨ パックをクリックして開封！（${cardIds.length}枚入り）</div>
+        <div class="pack-hint">✨ 文箱をクリックして開封！（${cardIds.length}枚入り）</div>
       </div>
       <div class="dlg-buttons"><button class="btn" data-value="skipall">⏩ 開封してすべて表示</button></div>`;
     overlay.classList.add("show");
@@ -718,15 +718,15 @@ function showPackReveal(cardIds, title, sub, opts = {}) {
   });
 }
 
-// ---------- 🎁 シールド戦（v21） ----------
-// その場で第一弾5＋第二弾5パック（各5枚＝計50枚）を開封し、出たカードだけで30枚デッキを組んで1戦。
+// ---------- 🎁 封符戦（v21） ----------
+// その場で第一巻5＋第二巻5文箱（各5枚＝計50枚）を開封し、出たカードだけで30枚デッキを組んで1戦。
 // 開封したプールはコレクションに加算しない（使い捨て）＝コレクションが浅いプロファイルでも対等に遊べる。
 const SEALED_PACKS_PER_SET = 5;
 const SEALED_PACK_SIZE = 5;
-const SEALED_MIN_CREATURES = 16; // プールに保証するクリーチャー数（MIN_CREATURES=12のデッキを確実に組めるように）
+const SEALED_MIN_CREATURES = 16; // プールに保証する式神数（MIN_CREATURES=12のデッキを確実に組めるように）
 
-// シールド戦のカードプールを引く。戻り値 { set1, set2, pool }（poolはset1+set2の50枚）。
-// クリーチャーが極端に少ないプールはデッキが組めないので引き直す（比率的にまず起きないが保険）
+// 封符戦のカードプールを引く。戻り値 { set1, set2, pool }（poolはset1+set2の50枚）。
+// 式神が極端に少ないプールはデッキが組めないので引き直す（比率的にまず起きないが保険）
 function drawSealedPool() {
   let last = null;
   for (let tries = 0; tries < 20; tries++) {
@@ -742,7 +742,7 @@ function drawSealedPool() {
   return last;
 }
 
-// シールド戦のデッキ構築画面。pool（50枚のcardId配列）から30枚を選ぶ。
+// 封符戦のデッキ構築画面。pool（50枚のcardId配列）から30枚を選ぶ。
 // 通常構築と違い、同名カードは「プールに出た枚数」まで何枚でも使える（所持数・MAX_COPIESは見ない）。
 // 解決値: デッキ（cardId配列）／ null（やめる＝プール破棄）
 function showSealedBuilder(pool) {
@@ -759,10 +759,10 @@ function showSealedBuilder(pool) {
       const creatures = deck.filter(id => CARD_BY_ID[id].type === "creature").length;
       const errors = [];
       if (deck.length !== DECK_SIZE) errors.push(`${DECK_SIZE}枚ちょうどにしてください（現在${deck.length}枚）`);
-      if (creatures < MIN_CREATURES) errors.push(`クリーチャーを${MIN_CREATURES}枚以上入れてください（現在${creatures}枚）`);
+      if (creatures < MIN_CREATURES) errors.push(`式神を${MIN_CREATURES}枚以上入れてください（現在${creatures}枚）`);
       return { ok: errors.length === 0, errors, creatures };
     };
-    // おまかせ構築: プールからクリーチャー18・スペル6・アイテム6を目安に埋める（不足分は何でも）
+    // おまかせ構築: プールから式神18・呪術6・宝具6を目安に埋める（不足分は何でも）
     const autoBuild = () => {
       const avail = { ...poolCount };
       const d = [];
@@ -797,13 +797,13 @@ function showSealedBuilder(pool) {
           <span class="pi-icon">${cardIconOf(c)}</span><span class="pi-name">${esc(c.name)}</span>
           <span class="di-count">×${dc[id]}</span>${infoBtn(id)}</div>`; }).join("")
         || `<div class="deck-empty">左の開封プールをクリックして追加</div>`;
-      box.innerHTML = `<h2>🎁 シールド戦 — デッキ構築 <span class="album-count">${deck.length} / ${DECK_SIZE} 枚</span></h2>
+      box.innerHTML = `<h2>🎁 封符戦 — デッキ構築 <span class="album-count">${deck.length} / ${DECK_SIZE} 枚</span></h2>
         <p class="dlg-body">開封した<b>${pool.length}枚のプール</b>から<b>${DECK_SIZE}枚</b>のデッキを組んでください。
-        同名カードは<b>プールに出た枚数まで</b>使えます（クリーチャーは${MIN_CREATURES}枚以上）。<br>
+        同名カードは<b>プールに出た枚数まで</b>使えます（式神は${MIN_CREATURES}枚以上）。<br>
         ⚠ このプールは<b>この1戦だけの使い捨て</b>です（コレクションには入りません。「やめる」でプールは破棄されます）。</p>
         <div class="builder">
           <div class="builder-col"><div class="bc-title">📦 開封プール（${poolIds.length}種${pool.length}枚）</div><div class="pool-list">${poolHtml}</div></div>
-          <div class="builder-col"><div class="bc-title">🎴 デッキ（クリーチャー ${v.creatures}）</div><div class="deck-list">${deckHtml}</div></div>
+          <div class="builder-col"><div class="bc-title">🎴 デッキ（式神 ${v.creatures}）</div><div class="deck-list">${deckHtml}</div></div>
         </div>
         <div class="builder-status ${v.ok ? "ok" : "ng"}">${v.ok ? "✅ 構築OK！ 出陣できます" : "⚠ " + v.errors.join("／")}</div>
         <div class="dlg-buttons">

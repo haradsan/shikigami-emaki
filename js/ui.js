@@ -4,10 +4,10 @@
 "use strict";
 
 const UI = {};
-UI.selectableTiles = null; // 盤面で選択候補として光らせるマスidの Set（領地・クリーチャー選択中）
+UI.selectableTiles = null; // 盤面で選択候補として光らせるマスidの Set（霊地・式神選択中）
 // 決定待ちのダイアログ数。「👁 盤面を確認」でオーバーレイを一時的に閉じている間も 1 のまま。
 // これが 0 でないときにヘルプ/捨札/マス情報など別のダイアログを開くと、保留中のダイアログが
-// 上書きされて Promise が永遠に解決されず進行が止まる（実際に起きたフリーズバグ）ため、開く側は必ず確認する。
+// 上書きされて Promise が永遠に解決されず進行が止まる（実際に起きた金縛りバグ）ため、開く側は必ず確認する。
 UI.dialogBusy = 0;
 // 受け身ダイアログ（🔍マス情報など・ゲーム進行と無関係なもの）を閉じる関数。
 // 進行フロー側の新しいダイアログが開くとき、開きっぱなしの受け身ダイアログを自動で閉じて
@@ -29,16 +29,16 @@ const TOKEN_OFFSETS = [
   { dx: TILE / 2, dy: -16 }, // P2: 中央やや上（三つ巴）
 ];
 
-// 演出速度の倍率。トレーニングでは小さくして時短にする（startGameで設定）
+// 演出速度の倍率。稽古では小さくして時短にする（startGameで設定）
 let GAME_SPEED = 1;
 function sleep(ms) { return new Promise(r => setTimeout(r, ms * GAME_SPEED)); }
 
-const TILE_ICONS = { CASTLE: "🏰", GATE: "⛩️", CARD: "🎴", MAGIC: "💎", WARP: "🌀", MAGMA: "🌋", BOOST: "💨", FORTUNE: "🎰", SPRING: "⛲" };
-const TILE_LABELS = { CASTLE: "城", GATE: "関門", CARD: "カード", MAGIC: "魔力", WARP: "ワープ", MAGMA: "マグマ", BOOST: "疾風", FORTUNE: "運命", SPRING: "泉" };
+const TILE_ICONS = { CASTLE: "🏯", GATE: "⛩️", CARD: "🎴", MAGIC: "💎", WARP: "🌀", MAGMA: "🌋", BOOST: "💨", FORTUNE: "🎋", SPRING: "♨️" };
+const TILE_LABELS = { CASTLE: "本宮", GATE: "鳥居", CARD: "札", MAGIC: "霊力", WARP: "神隠し", MAGMA: "火口", BOOST: "疾風", FORTUNE: "おみくじ", SPRING: "霊泉" };
 
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-// クリーチャーと土地の属性関係の注記（ダイアログ用）。無属性は一致も不一致もしない（土地の加護なし）
+// 式神と土地の属性関係の注記（ダイアログ用）。無属性は一致も不一致もしない（土地の加護なし）
 function elemNote(card, tile) {
   if (card.element === "neutral") return "・<b>無属性</b>（土地の加護なし）";
   return card.element !== tile.element ? "・<b>属性不一致</b>" : "・属性一致";
@@ -50,7 +50,7 @@ function tilePx(tile) { return { x: tile.x * CELL + 5, y: tile.y * CELL + 5 }; }
 function renderBoard(g) {
   const svg = document.getElementById("board");
   let html = "";
-  // マナの回路（マスをつなぐ道）: タイルの下層に描く。外周の太い道＋中央を流れる魔力の点線。
+  // 霊脈の道（マスをつなぐ道）: タイルの下層に描く。外周の太い道＋中央を流れる霊力の点線。
   // 色はステージのテーマ（stage.theme）で変わり、盤面ごとの雰囲気を出す
   const th = g.stage.theme || {};
   const pathCol = th.path || "#241e33", dotCol = th.dot || "#5c5480";
@@ -102,7 +102,7 @@ function renderBoard(g) {
         const hpStr = wounded ? `${cur}/${c.hp}` : `${c.hp}`;
         const hpFill = wounded ? "#ff8a6a" : "#ffe08a"; // 傷ついていれば赤み
         const cx = x + TILE / 2;
-        // クリーチャーの属性は「丸いバッジ」で表示（＝コマ＝クリーチャーの属性。土地チップと形で区別）
+        // 式神の属性は「丸いバッジ」で表示（＝コマ＝式神の属性。土地チップと形で区別）
         html += `<circle cx="${x + 15}" cy="${y + 46}" r="11" fill="${ce.color}" stroke="#fff" stroke-width="1.5"/>`;
         html += `<text x="${x + 15}" y="${y + 50}" font-size="12" text-anchor="middle">${ce.icon}</text>`;
         html += `<text x="${cx + 9}" y="${y + 44}" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold">${esc(c.name.slice(0, 5))}</text>`;
@@ -116,7 +116,7 @@ function renderBoard(g) {
         html += `<text x="${x + TILE / 2}" y="${y + TILE - 5}" font-size="13" fill="${PLAYER_COLORS[tile.owner]}" text-anchor="middle" font-weight="bold">${toll}G</text>`;
       }
     } else {
-      // 魔力マスは宝石がきらめき、城は少し大きな紋章で特別感を出す
+      // 霊力マスは宝石がきらめき、本宮は少し大きな紋章で特別感を出す
       const iconSize = tile.type === "CASTLE" ? 34 : 30;
       html += `<text x="${x + TILE / 2}" y="${y + 46}" font-size="${iconSize}" text-anchor="middle">${TILE_ICONS[tile.type]}</text>`;
       if (tile.type === "MAGIC") {
@@ -127,7 +127,7 @@ function renderBoard(g) {
       }
       html += `<text x="${x + TILE / 2}" y="${y + 70}" font-size="12" fill="#b8b2cc" text-anchor="middle">${TILE_LABELS[tile.type]}</text>`;
     }
-    // 盤面エフェクト（🛡️結界/🕸️罠/🚧バリケード）のバッジ
+    // 盤面エフェクト（🛡️結界/🕸️罠/🚧関所札）のバッジ
     const ov = overlayOf(g, tile);
     if (ov) {
       const ovIcon = ov.kind === "sanctuary" ? "🛡️" : ov.kind === "snare" ? "🕸️" : ov.kind === "block" ? "🚧" : "✨";
@@ -155,9 +155,9 @@ function renderBoard(g) {
       const neigh = neighborsOf(g, tile).filter(t => !(t.onewayTo != null && t.onewayTo === tile.id));
       if (neigh.length > 2) neigh.forEach(nt => { html += arrow(nt, "#ffd76a", false); });
     }
-    // マスの通し番号（常時表示）。領地・クリーチャー選択の選択肢と盤面を対応づけるための目印
+    // マスの通し番号（常時表示）。霊地・式神選択の選択肢と盤面を対応づけるための目印
     html += `<text x="${x + 6}" y="${y + TILE - 6}" font-size="10" fill="#9a92b5" text-anchor="start">#${tile.id}</text>`;
-    // 選択対象マスの強調（スペル対象／領地売却／侵攻先など）。盤面から直接クリックして選べる
+    // 選択対象マスの強調（呪術対象／霊地売却／侵攻先など）。盤面から直接クリックして選べる
     if (UI.selectableTiles && UI.selectableTiles.has(tile.id)) {
       html += `<rect x="${x - 2}" y="${y - 2}" width="${TILE + 4}" height="${TILE + 4}" rx="12" fill="none" stroke="#ffe066" stroke-width="5"><animate attributeName="opacity" values="1;0.3;1" dur="1s" repeatCount="indefinite"/></rect>`;
       html += `<rect x="${x + TILE / 2 - 19}" y="${y + TILE / 2 - 15}" width="38" height="28" rx="8" fill="#ffe066" opacity="0.96"/>`;
@@ -188,7 +188,7 @@ function renderBoard(g) {
 }
 
 // ---------- 現状順位（standings） ----------
-// 勝利条件は「総資産 → 城へ凱旋」なので、順位は総資産（魔力＋所有地の価値）の多い順で決める。
+// 勝利条件は「総資産 → 本宮へ凱旋」なので、順位は総資産（霊力＋所有地の価値）の多い順で決める。
 // 同額は同順位（1位・1位・3位）。ラウンド上限による資産勝負の判定と同じ基準。
 function standingsOf(g) {
   const rows = g.players.map(p => ({ id: p.id, assets: assetsOf(g, p) }))
@@ -216,7 +216,7 @@ function rankGapText(rows, me) {
 
 // ---------- プレイヤー情報窓（v27: 画面上部に3名分を圧縮して固定） ----------
 // v26までは4隅のフローティング窓だったため盤面が隠れていた。v27では上部のフロー配置に変え、
-// 1人あたり3行（①順位・名前・魔力 ②総資産バー ③連鎖/関門/周回/山札＋首位との差）に圧縮。
+// 1人あたり3行（①順位・名前・霊力 ②総資産バー ③連鎖/鳥居/周回/山札＋首位との差）に圧縮。
 // クリックで詳細ポップアップ（showPlayerDetail）＝畳んだ情報はそこで読める。
 function renderPanels(g) {
   const rows = standingsOf(g); // 現状順位（総資産順）
@@ -236,13 +236,13 @@ function renderPanels(g) {
       .filter(c => c.n > 0)
       .map(c => `${ELEMENTS[c.e].icon}${c.n}`).join("") || "－";
     const gates = "●".repeat(Math.min(p.gates.size, needed)) + "○".repeat(Math.max(0, needed - p.gates.size));
-    const reached = assets >= RULES.target; // 目標達成＝城へ凱旋すれば勝ち（⚑リーチ表示）
+    const reached = assets >= RULES.target; // 目標達成＝本宮へ凱旋すれば勝ち（⚑リーチ表示）
     el.style.setProperty("--pc", PLAYER_COLORS[p.id]); // 左端の色帯＝プレイヤー色
     el.classList.toggle("active", g.current === p.id && !g.over);
     el.classList.toggle("dead", !p.alive);
     el.classList.toggle("reached", reached && !g.over);
     el.dataset.pid = p.id;
-    el.title = `${p.name}の詳細（所有地・関門・山札など）を開く`;
+    el.title = `${p.name}の詳細（所有地・鳥居・山札など）を開く`;
     // CPUはキャラの顔絵（chars.js）を名前の横に出して「相手の存在」を感じさせる
     const ch = (typeof charOf === "function") ? charOf(p) : null;
     const face = ch ? `<span class="p-face">${charPortraitSVG(ch, 20)}</span>` : P_ICONS[p.id];
@@ -250,16 +250,16 @@ function renderPanels(g) {
       <div class="ps-top">
         <span class="p-rank r${me.rank}" title="総資産で決まる現在の順位（ラウンド上限の資産勝負もこの順位）">${rankMedal(me.rank)}${me.rank}</span>
         ${face}<span class="ps-name" style="color:${PLAYER_COLORS[p.id]}">${esc(p.name)}</span>
-        ${reached ? `<span class="p-reach" title="目標資産に到達！ 城へ凱旋すれば勝利">⚑凱旋</span>` : ""}
+        ${reached ? `<span class="p-reach" title="目標資産に到達！ 本宮へ凱旋すれば勝利">⚑凱旋</span>` : ""}
       </div>
       <div class="ps-mid">
-        <span class="ps-magic" title="手持ちの魔力">💎${p.magic}G</span>
-        <span class="ps-assets" title="総資産（魔力＋所有地の価値） / 目標"><b>${assets}</b> / ${RULES.target}G</span>
+        <span class="ps-magic" title="手持ちの霊力">💎${p.magic}G</span>
+        <span class="ps-assets" title="総資産（霊力＋所有地の価値） / 目標"><b>${assets}</b> / ${RULES.target}G</span>
         <div class="ps-bar"><div style="width:${Math.min(100, assets / RULES.target * 100)}%; background:${PLAYER_COLORS[p.id]}"></div></div>
       </div>
       <div class="ps-meta">
         <span title="属性の連鎖（同属性の自領数）">🔗${chains}</span>
-        <span title="通過した関門">⛩️${gates}</span>
+        <span title="通過した鳥居">⛩️${gates}</span>
         <span title="周回数">🔄${p.laps}</span>
         <span title="山札の残り">🎴${p.deck.length}</span>
         <span class="ps-gap">${rankGapText(rows, me)}</span>
@@ -279,7 +279,7 @@ function renderPanels(g) {
 }
 
 // ---------- プレイヤー詳細ポップアップ（v27） ----------
-// 上部の情報窓は圧縮表示なので、細かい情報（所有地の一覧・関門・捨札・手札枚数など）は
+// 上部の情報窓は圧縮表示なので、細かい情報（所有地の一覧・鳥居・捨札・手札枚数など）は
 // 情報窓をクリックしたときのポップアップで見せる。カード詳細（showCardDetail）と同じく
 // #overlay や UI.dialogBusy に触らない独立レイヤー＝どの場面で開いても進行を壊さない。
 function showPlayerDetail(pid) {
@@ -303,12 +303,12 @@ function showPlayerDetail(pid) {
         const cr = t.creature ? CARD_BY_ID[t.creature.cardId] : null;
         const crTxt = cr
           ? `${ELEMENTS[cr.element].icon}${esc(cr.name)}（HP ${currentHp(t.creature)}/${maxHpOf(t.creature)}）`
-          : `<span class="ip-empty">空き（クリーチャー無し）</span>`;
+          : `<span class="ip-empty">空き（式神無し）</span>`;
         return `<div class="ip-land"><span class="ipl-no">#${t.id}</span>` +
           `<span>${ELEMENTS[t.element].icon}Lv${t.level}・価値${landValue(t)}G</span>` +
           `<span>${crTxt}</span><span class="ipl-toll">通行料 ${tollOf(G, t)}G</span></div>`;
       }).join("")
-    : `<div class="ip-empty">まだ領地はありません</div>`;
+    : `<div class="ip-empty">まだ霊地はありません</div>`;
   let pop = document.getElementById("info-pop");
   if (!pop) {
     pop = document.createElement("div");
@@ -318,11 +318,11 @@ function showPlayerDetail(pid) {
   pop.innerHTML = `<div class="ip-box">
       <div class="ip-name" style="color:${PLAYER_COLORS[pid]}">${face} ${esc(p.name)}
         <span class="p-rank r${me.rank}">${rankMedal(me.rank)} ${me.rank}位</span></div>
-      ${row("魔力", `<b>${p.magic}G</b>`)}
-      ${row("総資産", `<b>${me.assets}G</b> / ${RULES.target}G　（魔力 ${p.magic}G ＋ 領地 ${landTotal}G）`)}
+      ${row("霊力", `<b>${p.magic}G</b>`)}
+      ${row("総資産", `<b>${me.assets}G</b> / ${RULES.target}G　（霊力 ${p.magic}G ＋ 霊地 ${landTotal}G）`)}
       ${row("順位", `${rankGapText(rows, me) || "—"}`)}
       ${row("連鎖", chains)}
-      ${row("関門", `${gates}（${p.gates.size} / ${needed}）`)}
+      ${row("鳥居", `${gates}（${p.gates.size} / ${needed}）`)}
       ${row("周回", `${p.laps} 周`)}
       ${row("手札 / 山札 / 捨札", `${p.hand.length}枚 / ${p.deck.length}枚 / ${p.discard.length}枚`)}
       <div class="ip-lands"><div class="cd-abs-t">🏞 所有地 ${lands.length}か所（合計 ${landTotal}G）</div>${landHtml}</div>
@@ -347,12 +347,12 @@ function cardHTML(c, opts = {}) {
   const elemIcon = c.type === "creature" ? ELEMENTS[c.element].icon
     : c.type === "item" ? (c.st > 0 ? "⚔️" : "🛡️") : "✨";
   const rm = RARITY_META[rar];
-  // 額縁＋アート窓＋コスト宝珠＋魔力の光沢（.c-shine）で「魔力の込められたカード」を表現
+  // 額縁＋アート窓＋コスト宝珠＋霊力の光沢（.c-shine）で「霊力の込められたカード」を表現
   return `<div class="${cls.join(" ")}" data-card="${c.id}" title="${esc(c.type === 'spell' ? c.desc : (c.ab || []).map(a => ABILITY_INFO[a].name + ': ' + ABILITY_INFO[a].desc).join(' / '))}">
     <div class="c-art">${typeof cardArtSVG === "function" ? cardArtSVG(c) : ""}</div>
     <span class="c-cost" title="コスト ${c.cost}G">${c.cost}</span>
     <span class="c-rarity" style="color:${rm.color}" title="${rm.label}">${rm.stars}</span>
-    <span class="c-elem" title="${c.type === "creature" ? ELEMENTS[c.element].name + "属性" : c.type === "item" ? "アイテム" : "スペル"}">${elemIcon}</span>
+    <span class="c-elem" title="${c.type === "creature" ? ELEMENTS[c.element].name + "属性" : c.type === "item" ? "宝具" : "呪術"}">${elemIcon}</span>
     <div class="c-name">${esc(c.name)}</div><div class="c-body">${body}</div>
     ${opts.ribbon ? `<span class="c-ribbon ${opts.ribbonCls || ""}">${opts.ribbon}</span>` : ""}
     <div class="c-shine"></div></div>`;
@@ -375,7 +375,7 @@ function elemWheelHTML(hl = []) {
 }
 
 // ---------- カード詳細ポップアップ（v22） ----------
-// 📚アルバム・🛠デッキ構築・🎁シールド戦・🗑捨札から、カード1枚のフルサイズ表示＋
+// 📚アルバム・🛠デッキ構築・🎁封符戦・🗑捨札から、カード1枚のフルサイズ表示＋
 // ステータス＋特性（能力）の説明を確認できる。既存のダイアログ（#overlay）の上に重なる独立レイヤー。
 // クリック（背景・✖）で閉じる。ゲーム進行には一切影響しない（表示のみ）。
 function showCardDetail(cardId) {
@@ -389,8 +389,8 @@ function showCardDetail(cardId) {
   }
   const rm = RARITY_META[cardRarity(c)];
   const setInfo = CARD_SETS.find(s => s.set === cardSet(c));
-  const typeName = c.type === "creature" ? `クリーチャー（${ELEMENTS[c.element].icon}${ELEMENTS[c.element].name}属性）`
-    : c.type === "item" ? "アイテム" : "スペル";
+  const typeName = c.type === "creature" ? `式神（${ELEMENTS[c.element].icon}${ELEMENTS[c.element].name}属性）`
+    : c.type === "item" ? "宝具" : "呪術";
   const row = (k, v) => `<div class="cd-row"><span class="cd-k">${k}</span><span class="cd-v">${v}</span></div>`;
   let info = row("タイプ", typeName) + row("コスト", `${c.cost}G`) +
     row("レア度", `<span style="color:${rm.color}">${rm.stars} ${rm.label}</span>`) +
@@ -433,7 +433,7 @@ function showCardDetail(cardId) {
 }
 
 // 3Dフリップできるカード（裏面=共通のカードバック／表面=カード本体）。
-// .revealed を付けると裏→表にめくれる。手札のオープン・ドロー・パック開封で使う。
+// .revealed を付けると裏→表にめくれる。手札のオープン・ドロー・文箱開封で使う。
 // 表裏が「同じ1枚のカード」に見えるよう、表面は固定サイズ（.card.fixed）で描画し、
 // 裏面はグリッドセル（＝表面と同寸）いっぱいに広がる。
 function flipCardHTML(c, opts = {}) {
@@ -531,13 +531,13 @@ function renderAll(g) {
 }
 
 // ---------- タイトル画面（起動時の世界観演出） ----------
-// マナの粒子が瞬く夜空＋ゆっくり回る大紋章＋地平のクリーチャーシルエット。
+// 霊力の粒子が瞬く夜空＋ゆっくり回る大紋章＋地平の式神シルエット。
 // 画面のどこかをクリック／タップでフェードアウトしてメニューへ。
 function showTitleScreen() {
   return new Promise(resolve => {
     const el = document.createElement("div");
     el.id = "title-screen";
-    // マナの粒子（ランダム配置・明滅）
+    // 霊力の粒子（ランダム配置・明滅）
     const stars = Array.from({ length: 46 }, () => {
       const sz = (Math.random() * 2 + 1).toFixed(1);
       return `<span class="ts-star" style="left:${(Math.random() * 100).toFixed(1)}%;top:${(Math.random() * 88).toFixed(1)}%;` +
@@ -602,7 +602,7 @@ function fitBoard(opts = {}) {
 // ============================================================
 // 表示トグル（v27）— 👥情報窓 / 📜ログ / 🃏手札 / 🗺マップ確認
 // ------------------------------------------------------------
-// 情報窓・手札・ダイスは盤面に重ならないフロー配置になったので、隠す目的は
+// 情報窓・手札・賽は盤面に重ならないフロー配置になったので、隠す目的は
 // 「盤面をもっと広く見たい」ことに絞られた。切り替えは上部バーの4つのボタンに集約し、
 // 各ウィンドウの「✕」も同じ関数を呼ぶ（＝状態が1か所に集まって食い違わない）。
 // 選んだ状態は localStorage に残す（毎回同じ好みで遊べるように）。
@@ -754,9 +754,9 @@ function initHudWindows() {
 // ---------- ログ ----------
 // 📜ログウィンドウを閉じて遊ぶ人のために、「影響のある出来事」は同じ文言をポップアップ（toast）にも出す。
 // どの行を出すかの既定ルール:
-//   ・cls === "warn"      → 出す（このコードベースでは warn ＝ 妨害・機能停止・魔力不足など「効いた」出来事）
-//   ・castSpell 実行中     → 出す（スペルの効果ログ。beginLogToast/endLogToast のスコープ内。
-//                            新しいスペルを足しても toast の付け忘れが起きないようにするため）
+//   ・cls === "warn"      → 出す（このコードベースでは warn ＝ 妨害・機能停止・霊力不足など「効いた」出来事）
+//   ・castSpell 実行中     → 出す（呪術の効果ログ。beginLogToast/endLogToast のスコープ内。
+//                            新しい呪術を足しても toast の付け忘れが起きないようにするため）
 //   ・cls === "battle"    → 出さない（バトル実況は1戦で何行も流れるのでポップアップには不向き）
 //   ・それ以外            → 出さない
 // 個別に上書きしたいときは第3引数で `{ toast: true }` / `{ toast: false }` を渡す
@@ -778,7 +778,7 @@ function log(msg, cls = "", opts = {}) {
 UI.logToastScope = 0; // >0 の間は log() が既定でポップアップも出す（castSpell のスコープ）
 const TOAST_MAX = 3;         // 同時に見せる最大数。これを超えたら古いものから先に退場させる
 const TOAST_LIFE = 2600;     // 表示時間(ms)＝「すぐ消える」
-const TOAST_LIFE_BUSY = 1500; // 立て込んでいるとき（スペルの連鎖など）の短縮表示(ms)
+const TOAST_LIFE_BUSY = 1500; // 立て込んでいるとき（呪術の連鎖など）の短縮表示(ms)
 function toast(msg, kind = "") {
   const stack = document.getElementById("toast-stack");
   if (!stack) return;
@@ -866,7 +866,7 @@ function showDialog(opts) {
   });
 }
 
-// ---------- 盤面から選べるタイルピッカー（領地・クリーチャー選択） ----------
+// ---------- 盤面から選べるタイルピッカー（霊地・式神選択） ----------
 // 候補マスを盤面で光らせ、①ダイアログのボタン ②「👁 盤面から選ぶ」→光ったマスを直接クリック、
 // のどちらでも選べる。どのマスを指しているかは #番号（盤面＆ボタン）で対応づく。
 // candidates: tile配列 / opts: { title, body, labelFn(tile)->string, cancelable?, cancelLabel? }
@@ -916,7 +916,7 @@ function humanPickTileOnMap(candidates, opts) {
     html += `<div class="tile-pick-list">`;
     html += candidates.map(t => {
       const label = opts.labelFn(t);
-      // ラベルに #番号 が含まれない種類のマス（城・関門など）には番号バッジを添えて盤面と対応づける
+      // ラベルに #番号 が含まれない種類のマス（本宮・鳥居など）には番号バッジを添えて盤面と対応づける
       const no = label.includes(`#${t.id}`) ? "" : `<span class="tp-no">#${t.id}</span>`;
       return `<button class="btn tile-pick" data-id="${t.id}">${no}<span class="tp-label">${label}</span></button>`;
     }).join("");
@@ -937,10 +937,10 @@ function humanPickTileOnMap(candidates, opts) {
 }
 
 // ---------- ステージ選択画面 ----------
-// opts.training: トレーニング（練習対戦）モードのステージ選択
+// opts.training: 稽古（練習対戦）モードのステージ選択
 // opts.versus:   2人対戦のステージ選択 {names:[1P名, 2P名]}（全ステージ選択可）
 // opts.royale:   三つ巴（人間1 + CPU2）のステージ選択（全ステージ選択可）
-// opts.sealed:   シールド戦（その場開封の使い捨てプールで構築して1戦）のステージ選択（全ステージ選択可）
+// opts.sealed:   封符戦（その場開封の使い捨てプールで構築して1戦）のステージ選択（全ステージ選択可）
 // 解決値: ステージ index（数値）／ "help" / "album" / "deck" / "training" / "versus" / "royale" / "sealed" / "workshop" / "weekly" / "matchlen" / "back"
 function showStageSelect(opts = {}) {
   const training = !!opts.training;
@@ -952,7 +952,7 @@ function showStageSelect(opts = {}) {
     const box = document.getElementById("dialog");
     const prog = loadProgress();
     const rows = STAGES.map((s, i) => {
-      const unlocked = versus || royale || sealed || isStageUnlocked(i); // 2人対戦・三つ巴・シールド戦は全ステージから選べる
+      const unlocked = versus || royale || sealed || isStageUnlocked(i); // 2人対戦・三つ巴・封符戦は全ステージから選べる
       const cleared = !!prog.cleared[s.id];
       const desc = unlocked
         ? `${versus ? "" : royale ? `VS ${esc(s.cpuName)} ＋ 乱入者1名｜` : `VS ${esc(s.cpuName)}｜`}${buildBoard(s).length}マス｜目標 ${((s.rules && s.rules.target) || 4000)}G<br>${esc(s.desc)}`
@@ -987,24 +987,24 @@ function showStageSelect(opts = {}) {
         `同じ卓を囲み、端末を手渡して覇を競う——友との真剣勝負。<b>全ステージから選択可</b>（報酬・進行度は変化しません）。`,
         [`🔵 <b>${esc(versus.names[0])}</b> vs 🔴 <b>${esc(versus.names[1])}</b>`, weeklyChip, mlChip])
       : sealed
-      ? hero("🎁 シールド戦の間",
-        `その場で開封した<b>第一弾5＋第二弾5パック（計${SEALED_PACKS_PER_SET * SEALED_PACK_SIZE * 2}枚）</b>だけで
+      ? hero("🎁 封符戦の間",
+        `その場で開封した<b>第一巻・第二巻の文箱5つずつ（計${SEALED_PACKS_PER_SET * SEALED_PACK_SIZE * 2}枚）</b>だけで
          ${DECK_SIZE}枚デッキを組み、ステージの主に挑む——<b>コレクションの厚さに関係なく誰でも対等</b>の腕くらべ。
          開封プールはコレクションに入りません（勝てば通常どおりカード${REWARD_WIN}枚獲得・進行度は変化しません）。<b>全ステージから選択可</b>。`,
         [`👤 <b>${esc(currentProfileName())}</b>`, `⚙ 難易度: <b>${diff.icon} ${diff.label}</b>`, weeklyChip, mlChip])
       : royale
       ? hero("⚔ 三つ巴の戦場",
-        `🔵あなた・🔴ステージの主・🟢乱入者——<b>3人の魔導師</b>が同じ盤上で覇を競う。乱入者は毎回ランダム！
+        `🔵あなた・🔴ステージの主・🟢乱入者——<b>3人の陰陽師</b>が同じ盤上で覇を競う。乱入者は毎回ランダム！
          勝てばカードを${REWARD_WIN}枚獲得（進行度は変化しません）。<b>全ステージから選択可</b>。`,
         [`👤 <b>${esc(currentProfileName())}</b>`, `⚙ 難易度: <b>${diff.icon} ${diff.label}</b>`, weeklyChip, mlChip])
       : training
       ? hero("🎯 修練の間",
         `腕とデッキを磨く練習対戦。<b>勝つとカードを${REWARD_TRAINING}枚獲得</b>（何度でも）。` +
-        `🔥<b>${TRAINING_STREAK_FOR_RARE}連勝から</b>は毎回<b>レア以上1枚保証</b>（負け・投了でリセット）。`,
+        `🔥<b>${TRAINING_STREAK_FOR_RARE}連勝から</b>は毎回<b>稀以上1枚保証</b>（負け・投了でリセット）。`,
         [streak >= 1 ? `🔥 <b>${streak}連勝中</b>` : "", `⚙ 難易度: <b>${diff.icon} ${diff.label}</b>`])
-      : hero("✦ 遠征の書 — 旅路を選べ ✦",
-        `大地に張り巡らされた魔力の回路。クリーチャーを従えて土地を繋ぎ、連鎖で通行料を吊り上げ、
-         目標資産を成して🏰城へ帰還せよ。初クリアの<b>カードパック</b>と勝利の<b>カード</b>で、自分だけのデッキを組み上げろ。`,
+      : hero("✦ 遠征の絵巻 — 旅路を選べ ✦",
+        `大地に張り巡らされた霊脈の道。式神を従えて霊地を結び、連鎖で通行料を吊り上げ、
+         目標資産を成して🏯本宮へ凱旋せよ。初クリアの<b>文箱</b>と勝利の<b>カード</b>で、自分だけのデッキを組み上げよ。`,
         [`👤 <b>${esc(currentProfileName())}</b>`, `⚙ 難易度: <b>${diff.icon} ${diff.label}</b>`, weeklyChip, mlChip]);
     const buttons = (versus || training || royale || sealed)
       ? (training || royale || sealed ? `<button class="btn" data-value="difficulty">⚙ 難易度: ${diff.icon}${diff.label}</button>` : "") +
@@ -1015,9 +1015,9 @@ function showStageSelect(opts = {}) {
          <button class="btn" data-value="album">📚 アルバム（${distinctOwned()}/${CARD_DB.length}）</button>
          <button class="btn" data-value="deck">🛠 デッキ構築</button>
          <button class="btn" data-value="workshop">♻️ 交換所（🎟${shardCount()}）</button>
-         <button class="btn" data-value="training">🎯 トレーニング</button>
+         <button class="btn" data-value="training">🎯 稽古</button>
          <button class="btn" data-value="royale">⚔ 三つ巴</button>
-         <button class="btn" data-value="sealed">🎁 シールド戦</button>
+         <button class="btn" data-value="sealed">🎁 封符戦</button>
          <button class="btn" data-value="versus">🎮 2人対戦</button>
          <button class="btn" data-value="weekly">🎪 週替り: ${wr.icon}${esc(wr.name)}${wOn ? "" : "（OFF）"}</button>
          <button class="btn" data-value="help">❓ 遊び方</button>`;
@@ -1036,7 +1036,7 @@ function showStageSelect(opts = {}) {
 
     // v28: ステージを押した瞬間に開戦していたため、押し間違えても戻れなかった。
     // 出陣確認を1枚挟んで「選び直せる」ようにする。
-    // （🎁シールド戦だけは startSealed 側にパック開封前の確認があるので二重にしない）
+    // （🎁封符戦だけは startSealed 側に文箱開封前の確認があるので二重にしない）
     function pick(idx) {
       if (sealed) { close(idx); return; }
       renderConfirm(idx);
@@ -1051,9 +1051,9 @@ function showStageSelect(opts = {}) {
         versus ? `🎮 <b>${esc(versus.names[0])}</b> vs <b>${esc(versus.names[1])}</b>` : "",
         `🔲 盤面: <b>${buildBoard(s).length}マス</b>`,
         `🎯 目標資産: <b>${target}G</b>`,
-        `⛩ 周回に必要な関門: <b>${s.gatesNeeded || 3}</b>`,
+        `⛩ 周回に必要な鳥居: <b>${s.gatesNeeded || 3}</b>`,
         prog.cleared[s.id] ? "⭐ クリア済み" : "🆕 未クリア",
-        training ? "🎯 トレーニング（進行度は変化しません）"
+        training ? "🎯 稽古（進行度は変化しません）"
           : royale ? "⚔ 三つ巴（進行度は変化しません）"
           : versus ? "🎮 2人対戦（報酬・進行度はありません）" : "",
         versus ? "" : `⚙ 難易度: <b>${diff.icon}${diff.label}</b>`,
@@ -1114,7 +1114,7 @@ function showDifficultyPicker() {
 }
 
 // ---------- 決着モード選択（短期戦/標準/長期戦/大戦） ----------
-// 目標資産とラウンド上限に倍率を掛けて、対戦の長さを好みに調整する（v18・トレーニング以外の全モードに適用）
+// 目標資産とラウンド上限に倍率を掛けて、対戦の長さを好みに調整する（v18・稽古以外の全モードに適用）
 function showMatchLengthPicker() {
   return new Promise(resolve => {
     const overlay = document.getElementById("overlay");
@@ -1130,7 +1130,7 @@ function showMatchLengthPicker() {
     }).join("");
     box.innerHTML = `<h2>⏱ 決着モード（対戦の長さ）</h2>
       <p class="dlg-body">ステージの<b>目標資産</b>と<b>ラウンド上限</b>に倍率を掛けて、決着までの長さを調整します。
-      正規対戦・三つ巴・2人対戦に適用（トレーニングは常に時短）。次の対戦から反映されます。</p>
+      正規対戦・三つ巴・2人対戦に適用（稽古は常に時短）。次の対戦から反映されます。</p>
       <div class="stage-list">${rows}</div>
       <div class="dlg-buttons"><button class="btn" data-value="back">← 戻る</button></div>`;
     overlay.classList.add("show");
@@ -1167,11 +1167,11 @@ function openBattleView(g, attackerName, attCard, attItem, tile, defItem) {
         ${extraMods}
       </div>
     </div>`;
-  // 物理/魔法の攻防に関わる要素はカットインにバッジで明示（魔法攻撃はアイテム由来も含む）
+  // 物理/呪力の攻防に関わる要素はカットインにバッジで明示（呪力攻撃は宝具由来も含む）
   const typeMods = (c, item) =>
     (c.ab.includes("physnull") ? `<span class="f-mod">🌫 物理無効</span>` : "") +
     (c.ab.includes("physreflect") ? `<span class="f-mod">🪞 物理反射</span>` : "") +
-    ((c.ab.includes("magicatk") || (item && item.magicatk)) ? `<span class="f-mod">✨ 魔法攻撃</span>` : "");
+    ((c.ab.includes("magicatk") || (item && item.magicatk)) ? `<span class="f-mod">✨ 呪力攻撃</span>` : "");
   // 属性4すくみの有利不利をバッジと相性バナーで明示（v22）
   const rel = elemRelation(attCard.element, defCard.element); // 攻撃側から見た関係
   const elemMod = r =>
@@ -1188,7 +1188,7 @@ function openBattleView(g, attackerName, attCard, attItem, tile, defItem) {
       <div class="bc-wheel">${elemWheelHTML([attCard.element, defCard.element].filter(e => e !== "neutral"))}</div>
     </div>`;
   const defMods =
-    (support > 0 ? `<span class="f-mod">🏰 援護ST+${support}</span>` : "") +
+    (support > 0 ? `<span class="f-mod">🏯 援護ST+${support}</span>` : "") +
     (dCur < defCard.hp ? `<span class="f-mod">🩹 HP残${dCur}</span>` : "") +
     (defCard.ab.includes("capture") ? `<span class="f-mod">🕸️ 捕縛</span>` : "") +
     elemMod(rel === "adv" ? "dis" : rel === "dis" ? "adv" : rel) +
@@ -1226,8 +1226,8 @@ function _battleLineFx(line) {
     el.classList.add(cls);
   };
   if (line.includes("会心")) { pulse(flash, "go-crit"); return; }
-  if (line.startsWith(`${ctx.attName}の攻撃`) || line.startsWith(`${ctx.attName}の魔法攻撃`)) { pulse(att, "bc-lunge-r"); pulse(def, "bc-hurt"); pulse(flash, "go"); return; }
-  if (line.startsWith(`${ctx.defName}の攻撃`) || line.startsWith(`${ctx.defName}の魔法攻撃`)) { pulse(def, "bc-lunge-l"); pulse(att, "bc-hurt"); pulse(flash, "go"); return; }
+  if (line.startsWith(`${ctx.attName}の攻撃`) || line.startsWith(`${ctx.attName}の呪力攻撃`)) { pulse(att, "bc-lunge-r"); pulse(def, "bc-hurt"); pulse(flash, "go"); return; }
+  if (line.startsWith(`${ctx.defName}の攻撃`) || line.startsWith(`${ctx.defName}の呪力攻撃`)) { pulse(def, "bc-lunge-l"); pulse(att, "bc-hurt"); pulse(flash, "go"); return; }
   if (line.includes("物理無効！") || line.includes("物理反射！")) { pulse(flash, "go"); return; }
   if (line.includes("跳ね返った")) { // 物理反射のダメージが攻撃側に返った行（行頭は被弾した側の名前）
     if (line.startsWith(ctx.attName)) pulse(att, "bc-hurt");
@@ -1349,14 +1349,14 @@ async function humanChooseDirection(p, tile, stepsLeft, prevId = null) {
   return Number(res.action);
 }
 
-// ダイスの目を選ぶ（ホーリーワード用）
+// 賽の目を選ぶ（言霊の符用）
 async function showDicePicker() {
   return new Promise(resolve => {
     closePassiveDialog();
     UI.dialogBusy++;
     const overlay = document.getElementById("overlay");
     const box = document.getElementById("dialog");
-    box.innerHTML = `<h2>ホーリーワード</h2><p class="dlg-body">次のダイスの目を選んでください</p>
+    box.innerHTML = `<h2>言霊の符</h2><p class="dlg-body">次の賽の目を選んでください</p>
       <div class="dlg-buttons dice-pick">` +
       [1, 2, 3, 4, 5, 6].map(n => `<button class="btn primary" data-n="${n}">${n}</button>`).join("") +
       `</div>`;
@@ -1370,7 +1370,7 @@ async function showDicePicker() {
 }
 
 // ---------- メインの操作ボタン（v27: 操作ドック） ----------
-// ダイスを振る操作は専用の丸いボタン（#roll-btn＝出目表示に重なる大きな的）で受ける。
+// 賽を振る操作は専用の丸いボタン（#roll-btn＝出目表示に重なる大きな的）で受ける。
 // 盤面中央から下段の右端へ移したので、盤面を隠さずに親指の届く位置で押せる。
 // それ以外のラベル（▶次へ等）は同じドックのピル（#action-btn）に出す。
 function mainActionButton(label) {
@@ -1378,7 +1378,7 @@ function mainActionButton(label) {
 }
 function showActionButton(label) {
   const btn = mainActionButton(label);
-  if (btn.id === "action-btn") btn.textContent = label; // ダイスボタンの中身は固定（🎲＋振る）
+  if (btn.id === "action-btn") btn.textContent = label; // 賽ボタンの中身は固定（🎲＋振る）
   btn.classList.remove("hidden");
   UI._actionBtn = btn; // Space / Enter キーで押せるようにするため覚えておく
   return btn;
@@ -1401,7 +1401,7 @@ function waitButton(label) {
   });
 }
 
-// ダイス演出
+// 賽演出
 async function animateDice(finalValue) {
   const el = document.getElementById("dice");
   el.classList.add("rolling");

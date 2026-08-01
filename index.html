@@ -6,7 +6,7 @@
 <title>式神絵巻 — 式神召喚×絵巻盤上遊戯</title>
 <!-- ?v= はキャッシュ避け。スマホのブラウザは css/js を強く握り続けるため、
      更新したら必ずこの番号を上げること（上げないと端末に古い版が残り続ける） -->
-<link rel="stylesheet" href="css/style.css?v=28.3">
+<link rel="stylesheet" href="css/style.css?v=29">
 </head>
 <body>
 <header>
@@ -20,9 +20,9 @@
       <button id="zoom-in" class="btn small" title="盤面を拡大">＋</button>
       <button id="zoom-fit" class="btn small" title="盤面全体が画面に収まる倍率に調整する">⛶<span class="lbl"> 全体</span></button>
     </div>
-    <button id="surrender-btn" class="btn small danger hidden" title="自分の番でダイスを振る前にゲームを投了できます">🏳<span class="lbl"> 投了</span></button>
+    <button id="surrender-btn" class="btn small danger hidden" title="自分の番で賽を振る前にゲームを投了できます">🏳<span class="lbl"> 投了</span></button>
     <button id="mute-btn" class="btn small" title="効果音のオン/オフ">🔊</button>
-    <button id="bgm-btn" class="btn small" title="BGMのオン/オフ（ファミコン風チップチューンを自動生成）">🎵</button>
+    <button id="bgm-btn" class="btn small" title="BGMのオン/オフ（和風チップチューンを自動生成）">🎵</button>
     <button id="help-btn" class="btn small" title="遊び方">❓<span class="lbl"> 遊び方</span></button>
   </div>
 </header>
@@ -40,7 +40,7 @@
   <div id="hud-bar">
     <div id="round-info"></div>
     <div id="message">ようこそ</div>
-    <!-- v28: 🃏手札トグルは親指の届く操作ドック（ダイスの上）へ移動。
+    <!-- v28: 🃏手札トグルは親指の届く操作ドック（賽の上）へ移動。
          代わりに🗑捨札をここへ入れ、「見るための窓」を1列にまとめた -->
     <div id="view-toggles">
       <button id="view-panels" class="vt" title="上部の情報窓（3名分）を表示／非表示">👥</button>
@@ -61,7 +61,7 @@
   <div id="win-log" class="hud-win"><div id="log"></div><button class="win-close" title="一時的に隠す（👥📜のトグルで戻せます）">✕</button></div>
 </main>
 
-<!-- 下段: 手札 ＋ 操作ドック（ダイス）。ここもフロー配置＝盤面に重ならない -->
+<!-- 下段: 手札 ＋ 操作ドック（賽）。ここもフロー配置＝盤面に重ならない -->
 <div id="bottom-bar">
   <div id="win-hand" class="hud-win framed">
     <div class="win-head"><span id="hand-count"></span></div>
@@ -74,21 +74,21 @@
     <button class="win-close" title="一時的に隠す（🃏のトグルで戻せます）">✕</button>
   </div>
   <!-- 操作ドック（v27）: 盤面中央にあった 🎲 と操作ボタンをここへ集約。
-       ダイスは「出目の表示」と「振るボタン」を同じ丸い場所に重ねてある -->
+       賽は「出目の表示」と「振るボタン」を同じ丸い場所に重ねてある -->
   <div id="ctrl-dock">
     <button id="action-btn" class="btn primary hidden"></button>
-    <!-- v28: 🃏手札の開閉はダイスのすぐ上。手札を畳んで盤面を見る→すぐ戻す、が片手で完結する -->
+    <!-- v28: 🃏手札の開閉は賽のすぐ上。手札を畳んで盤面を見る→すぐ戻す、が片手で完結する -->
     <button id="view-hand" class="vt dock-vt" title="🃏手札を大きく／小さく（折りたたみ）">🃏</button>
     <div id="dice-slot" title="直前の出目">
       <div id="dice">🎲</div>
-      <button id="roll-btn" class="hidden" title="ダイスを振る（Space / Enter キーでも振れます）">
+      <button id="roll-btn" class="hidden" title="賽を振る（Space / Enter キーでも振れます）">
         <span class="rb-face">🎲</span><span class="rb-lbl">振る</span>
       </button>
     </div>
   </div>
 </div>
 
-<!-- ポップアップ通知（ui.js toast）: スペルの効果・機能停止など「影響のあった出来事」を
+<!-- ポップアップ通知（ui.js toast）: 呪術の効果・機能停止など「影響のあった出来事」を
      画面上部に短く出してすぐ消す。📜ログを閉じて遊んでいても気づけるようにするため。
      pointer-events:none なので盤面やダイアログの操作を邪魔しない -->
 <div id="toast-stack"></div>
@@ -103,19 +103,19 @@
 <!-- ダイアログを一旦閉じて盤面/手札を確認しているときに表示する「選択に戻る」ボタン -->
 <button id="peek-restore" class="hidden">▲ 選択ウインドウに戻る</button>
 
-<script src="js/sfx.js?v=28.3"></script>
-<script src="js/bgm.js?v=28.3"></script>
-<script src="js/profile.js?v=28.3"></script>
-<script src="js/cards.js?v=28.3"></script>
-<script src="js/art.js?v=28.3"></script>
-<script src="js/stages.js?v=28.3"></script>
-<script src="js/chars.js?v=28.3"></script>
-<script src="js/weekly.js?v=28.3"></script>
-<script src="js/state.js?v=28.3"></script>
-<script src="js/battle.js?v=28.3"></script>
-<script src="js/ai.js?v=28.3"></script>
-<script src="js/ui.js?v=28.3"></script>
-<script src="js/collection.js?v=28.3"></script>
-<script src="js/main.js?v=28.3"></script>
+<script src="js/sfx.js?v=29"></script>
+<script src="js/bgm.js?v=29"></script>
+<script src="js/profile.js?v=29"></script>
+<script src="js/cards.js?v=29"></script>
+<script src="js/art.js?v=29"></script>
+<script src="js/stages.js?v=29"></script>
+<script src="js/chars.js?v=29"></script>
+<script src="js/weekly.js?v=29"></script>
+<script src="js/state.js?v=29"></script>
+<script src="js/battle.js?v=29"></script>
+<script src="js/ai.js?v=29"></script>
+<script src="js/ui.js?v=29"></script>
+<script src="js/collection.js?v=29"></script>
+<script src="js/main.js?v=29"></script>
 </body>
 </html>

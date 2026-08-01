@@ -1,9 +1,9 @@
 // ============================================================
 // art.js — カード・盤面のビジュアル素材（インラインSVG生成・外部ファイル不要）
 //
-// カードの「絵」は【シルエット＋魔力光】のスタイルで統一する。
-// クリーチャーは「アーキタイプ（基本形）× 属性パレット × オプション」の組み合わせで
-// 全70種をカバーし、名前に合った造形（ドラゴン・狼・ゴーレム・人魚…）を出し分ける。
+// カードの「絵」は【シルエット＋霊力光】のスタイルで統一する。
+// 式神は「アーキタイプ（基本形）× 属性パレット × オプション」の組み合わせで
+// 全70種をカバーし、名前に合った造形（龍・狼・巨人・人魚…）を出し分ける。
 // 個別の描き込みを強化したいときは CREATURE_ART の指定を差し替えるだけでよい
 // （進め方は CREATURE_ART_PLAN.md 参照）。
 // ============================================================
@@ -64,12 +64,12 @@ document.addEventListener("DOMContentLoaded", () => {
   document.body.insertAdjacentHTML("beforeend", artDefsSVG());
 });
 
-// ---------- カードバック／パック／タイトル紋章 ----------
-// クリーチャーアートと同じ「シルエット＋魔力光」様式で統一するため、
+// ---------- カードバック／文箱／タイトル紋章 ----------
+// 式神アートと同じ「シルエット＋霊力光」様式で統一するため、
 // ARCH（造形）定義の後＝ファイル末尾でまとめて定義する（実行時参照なので順序は自由）。
 
 // ============================================================
-// クリーチャーのアーキタイプ（基本形）
+// 式神のアーキタイプ（基本形）
 // 各関数は 120×70 のシーンに置くシルエット図形群を返す。
 // 呼び出し側で <g fill=シルエット色 stroke=輪郭光> に包むため、
 // 光らせたいパーツ（目・角・炎など）だけ fill/stroke を明示上書きする。
@@ -80,7 +80,7 @@ const _spark = (p, x, y, r = 1.2, op = 0.8) => `<circle cx="${x}" cy="${y}" r="$
 const _scale = (inner, s, cx = 60, cy = 46) => `<g transform="translate(${cx} ${cy}) scale(${s}) translate(${-cx} ${-cy})">${inner}</g>`;
 
 const ARCH = {
-  // ドラゴン（右向き・翼を広げた竜）
+  // 龍（右向き・翼を広げた竜）
   dragon(p, o = {}) {
     let s = `
       <path d="M36 54 C20 58 10 48 6 52 C12 60 26 62 40 58 Z"/>
@@ -109,7 +109,7 @@ const ARCH = {
       <path d="M96 24 L104 21 M96 24 L103 27" fill="none" stroke="${p.glow}" stroke-width="1.1" opacity="0.9"/>`;
     return o.big ? _scale(s, 1.1) : s;
   },
-  // 獣（四足・右向き）。heads=3でケルベロス、tusks/spikes/cat対応
+  // 獣（四足・右向き）。heads=3で犬神、tusks/spikes/cat対応
   beast(p, o = {}) {
     const heads = o.heads === 3
       ? `<circle cx="76" cy="28" r="6"/><path d="M81 26 L89 29 L81 32 Z"/>${_eye(p, 78, 27, 1.4)}
@@ -169,7 +169,7 @@ const ARCH = {
     if (o.bow) parts.push(`<path d="M78 14 C90 24 90 40 78 50" fill="none" stroke="${p.sil}" stroke-width="3"/><path d="M78 14 L78 50" fill="none" stroke="${p.glow}" stroke-width="1.2" opacity="0.8"/><path d="M70 32 L84 32" fill="none" stroke="${p.sil}" stroke-width="2.4"/><path d="M84 32 L80 29 M84 32 L80 35" fill="none" stroke="${p.sil}" stroke-width="2"/>`);
     if (o.shield) parts.push(`<path d="M40 36 C48 38 48 52 40 58 C32 52 32 38 40 36 Z"/><circle cx="40" cy="46" r="2.5" fill="${p.glow}" stroke="none" opacity="0.8"/>`);
     if (o.ribbon) parts.push(`<path d="M46 36 C34 30 30 40 24 36 M74 40 C86 46 92 38 98 44" fill="none" stroke="${p.glow}" stroke-width="2" opacity="0.75"/>`);
-    // 軍旗（v25・📣応援の旗手）: 右手に長い旗竿と、風になびく旗
+    // 軍旗（v25・📣加勢の旗手）: 右手に長い旗竿と、風になびく旗
     if (o.banner) parts.push(`<rect x="77" y="6" width="2.6" height="46" rx="1.3"/><path d="M79.6 9 C90 12 94 18 88 22 C94 26 90 32 79.6 30 Z"/><path d="M83 14 C87 16 87 22 83 24" fill="none" stroke="${p.glow}" stroke-width="1.2" opacity="0.85"/><circle cx="78.3" cy="4" r="2.6" fill="${p.glow}" stroke="none" opacity="0.9"/>`);
     if (o.genie) parts.push(`<path d="M53 56 C44 62 56 66 48 70 C64 68 70 62 67 54 Z"/><path d="M58 12 C58 6 62 6 62 1 C66 6 64 10 62 13 Z" fill="${p.glow}" stroke="none" opacity="0.85"/>`);
     let s = parts.join("");
@@ -177,7 +177,7 @@ const ARCH = {
     if (o.big) s = _scale(s, 1.14, 60, 40);
     return s;
   },
-  // ゴーレム（岩・鉄・泥の巨体）
+  // 巨人（岩・鉄・泥の巨体）
   golem(p, o = {}) {
     const body = o.blob
       ? `<path d="M42 56 C38 36 50 26 60 26 C70 26 82 36 78 56 C70 60 50 60 42 56 Z"/>
@@ -197,7 +197,7 @@ const ARCH = {
     let s = body + eyes + extra;
     return o.big ? _scale(s, 1.1, 60, 42) : s;
   },
-  // 樹木（トレント・世界樹）
+  // 樹木（樹木子・世界樹）
   tree(p, o = {}) {
     const face = o.face ? _eye(p, 55, 40, 1.8) + _eye(p, 64, 40, 1.8) +
       `<path d="M56 47 C58 49 62 49 64 47" fill="none" stroke="${p.glow}" stroke-width="1.2" opacity="0.8"/>` : "";
@@ -218,7 +218,7 @@ const ARCH = {
       <circle cx="60" cy="34" r="6" fill="${p.glow}" stroke="none" opacity="0.85"/>
       ${_spark(p, 52, 24, 1.2)}${_spark(p, 70, 18, 1.2)}`;
   },
-  // 食虫植物（マンイーター）
+  // 食虫植物（土蜘蛛）
   jawplant(p) {
     return `
       <path d="M52 62 C50 52 52 46 58 40" fill="none" stroke="${p.sil}" stroke-width="5" stroke-linecap="round"/>
@@ -236,7 +236,7 @@ const ARCH = {
       <path d="M32 42 L26 38 L33 37 Z"/><path d="M44 26 L40 20 L48 22 Z"/><path d="M72 52 L66 48 L73 46 Z"/><path d="M92 34 L88 28 L96 30 Z"/>
       ${_spark(p, 58, 8, 1.6)}${_spark(p, 104, 24, 1.6)}`;
   },
-  // 根の人形（マンドレイク）
+  // 根の人形（葛の精）
   rootman(p) {
     return `
       <path d="M60 12 C50 12 46 22 50 30 L52 44 C54 56 66 56 68 44 L70 30 C74 22 70 12 60 12 Z"/>
@@ -244,7 +244,7 @@ const ARCH = {
       <path d="M54 52 C50 58 46 60 42 64 M66 52 C70 58 74 60 78 64 M60 56 L60 66" fill="none" stroke="${p.sil}" stroke-width="3.5" stroke-linecap="round"/>
       ${_eye(p, 56, 26, 1.5)}${_eye(p, 64, 26, 1.5)}`;
   },
-  // 大輪の花（アルラウネ）
+  // 大輪の花（藤娘）
   flower(p) {
     const petal = a => `<ellipse cx="60" cy="30" rx="7" ry="16" transform="rotate(${a} 60 42)"/>`;
     return `
@@ -254,7 +254,7 @@ const ARCH = {
       <path d="M60 52 L60 64" fill="none" stroke="${p.sil}" stroke-width="4" stroke-linecap="round"/>
       <path d="M60 58 C50 56 46 60 40 58 L58 62 Z"/>`;
   },
-  // 妖精・精霊（wings:falseでコダマ等の精霊）
+  // 妖精・神霊（wings:falseで木霊等の神霊）
   fairy(p, o = {}) {
     const wings = o.wings === false ? "" :
       `<ellipse cx="49" cy="32" rx="9" ry="15" transform="rotate(-24 49 32)" fill="${p.glow}" stroke="none" opacity="0.32"/>
@@ -277,7 +277,7 @@ const ARCH = {
       <rect x="40" y="52" width="7" height="8" rx="3"/><rect x="72" y="52" width="7" height="8" rx="3"/>
       ${_eye(p, 93, 48, 1.4)}`;
   },
-  // カニ（シェルクラブ）
+  // カニ（蟹坊主）
   crab(p) {
     return `
       <ellipse cx="60" cy="46" rx="18" ry="11"/>
@@ -288,7 +288,7 @@ const ARCH = {
       <path d="M48 55 L42 62 M56 57 L52 64 M64 57 L68 64 M72 55 L78 62" fill="none" stroke="${p.sil}" stroke-width="2.5"/>
       ${_eye(p, 54, 40, 1.5)}${_eye(p, 66, 40, 1.5)}`;
   },
-  // 城壁（ストーンウォール・グレートウォール）
+  // 城壁（塗壁・大塗壁）
   wall(p, o = {}) {
     const x0 = o.wide ? 26 : 36, w = o.wide ? 68 : 48;
     const teeth = [];
@@ -301,7 +301,7 @@ const ARCH = {
       <rect x="${x0 + w / 2 - 4}" y="40" width="8" height="12" rx="4" fill="#000" opacity="0.5" stroke="none"/>
       ${_eye(p, x0 + w / 2 - 1.8, 45, 1.3)}${_eye(p, x0 + w / 2 + 1.8, 45, 1.3)}`;
   },
-  // 翼を広げた飛翔体（フェニックス・ガーゴイル）
+  // 翼を広げた飛翔体（不死鳥・狛犬）
   bird(p, o = {}) {
     if (o.gargoyle) return `
       <path d="M50 40 L28 16 L44 30 L40 14 L52 30 Z"/>
@@ -321,7 +321,7 @@ const ARCH = {
       ${o.flame ? `<path d="M46 66 C44 62 46 60 44 57 M74 66 C76 62 74 60 76 57" fill="none" stroke="${p.glow}" stroke-width="1.5" opacity="0.85"/>${_spark(p, 14, 18, 1.6)}${_spark(p, 106, 18, 1.6)}` : ""}
       ${_eye(p, 62, 25, 1.3)}`;
   },
-  // クラゲ・クラーケン
+  // クラゲ・大蛸入道
   jelly(p, o = {}) {
     const dome = o.big
       ? `<path d="M36 40 A24 22 0 0 1 84 40 L84 46 C76 42 70 48 60 46 C50 48 44 42 36 46 Z"/>`
@@ -333,7 +333,7 @@ const ARCH = {
       <circle cx="60" cy="32" r="6" fill="${p.glow}" stroke="none" opacity="0.5"/>
       ${o.big ? _eye(p, 52, 34, 2) + _eye(p, 68, 34, 2) : _spark(p, 60, 32, 2, 0.9)}`;
   },
-  // 人魚（マーメイド・セイレーン・ウンディーネ）
+  // 人魚（人魚・磯女・濡女）
   mermaid(p, o = {}) {
     return `
       <circle cx="54" cy="20" r="6.5"/>
@@ -357,7 +357,7 @@ const ARCH = {
       <rect x="62" y="54" width="4" height="9" rx="2"/><rect x="69" y="52" width="4" height="11" rx="2"/>
       ${_eye(p, 84, 21, 1.3)}`;
   },
-  // 甲虫（ボムビートル）
+  // 甲虫（爆ぜ玉虫）
   insect(p, o = {}) {
     return `
       <ellipse cx="56" cy="46" rx="18" ry="12"/>
@@ -400,7 +400,7 @@ const ARCH = {
     }
     return parts.join("");
   },
-  // キメラ（獅子＋山羊＋蛇尾＋翼）
+  // 鵺（獅子＋山羊＋蛇尾＋翼）
   chimera(p) {
     return `
       <path d="M36 46 C24 44 18 34 24 26 C28 34 32 38 40 42" fill="none" stroke="${p.sil}" stroke-width="4.5" stroke-linecap="round"/>
@@ -417,7 +417,7 @@ const ARCH = {
   },
 };
 
-// ---------- クリーチャー → アーキタイプの割り当て（全70種） ----------
+// ---------- 式神 → アーキタイプの割り当て（全70種） ----------
 // 個別のビジュアルを強化するときは、この表の1行を専用描画に差し替える（CREATURE_ART_PLAN.md）
 const CREATURE_ART = {
   // 火
@@ -499,13 +499,13 @@ const CREATURE_ART = {
   mirage:       { arch: "fairy" },
   doppelganger: { arch: "humanoid", o: { genie: 1, small: 1 } }, // v17: 影のような写し身
   sphinx:       { arch: "beast",    o: { cat: 1, big: 1 } },     // v17: 獅子身の番人
-  // v15: 各属性の術士（魔法攻撃持ち）
+  // v15: 各属性の術士（呪力攻撃持ち）
   flamemage:    { arch: "humanoid", o: { hat: 1, staff: 1 } },
   druid:        { arch: "humanoid", o: { leafhair: 1, staff: 1 } },
   runedwarf:    { arch: "humanoid", o: { small: 1, beard: 1, staff: 1 } },
   frostwizard:  { arch: "humanoid", o: { hat: 1, staff: 1, beard: 1 } },
   // ============================================================
-  // 第二弾「時流の回路」（v19・113種）
+  // 第二巻「時流の帖」（v19・113種）
   // ============================================================
   // 火
   firebaby:      { arch: "lizard",   o: { flame: 1 } },
@@ -622,26 +622,26 @@ const CREATURE_ART = {
   watchtower:    { arch: "tower",    o: { watch: 1 } },
   fortress:      { arch: "wall",     o: { wide: 1 } },
   cathedral:     { arch: "tower",    o: { cross: 1 } },
-  // 👑精霊王
+  // 👑五帝
   ignisking:     { arch: "dragon",   o: { big: 1, flame: 1 } },
   sylvanking:    { arch: "tree",     o: { grand: 1, face: 1 } },
   terraking:     { arch: "golem",    o: { big: 1, crown: 1, moss: 1 } },
   nereusking:    { arch: "humanoid", o: { big: 1, trident: 1, horns: 1 } },
   aeonking:      { arch: "humanoid", o: { big: 1, staff: 1, wings: 1 } },
   // ============================================================
-  // v25追加（築城・焦土・破城・遁走・魔力強奪・応援・二形）
+  // v25追加（築城・焦土・破城・遁走・霊力強奪・加勢・二形）
   // ============================================================
   rampartgolem:  { arch: "golem",    o: { big: 1, shine: 1 } },              // 🏗築城＝城壁を積み上げる石の守将
   scorchworm:    { arch: "serpent",  o: { fins: 1 } },                       // 🔥焦土＝土を焼きながら這う炎蟲
   siegeram:      { arch: "beast",    o: { tusks: 1, big: 1 } },              // 🐏破城＝城門を突き崩す巨獣
   mistrunner:    { arch: "fairy",    o: { wings: 1 } },                      // 💨遁走＝霧に紛れて逃げる俊足
-  manaeater:     { arch: "jelly" },                                          // 💸魔力強奪＝魔力を啜る不定形
-  bannerbearer:  { arch: "humanoid", o: { banner: 1, leafhair: 1 } },        // 📣応援＝軍旗を掲げる木の旗手
+  manaeater:     { arch: "jelly" },                                          // 💸霊力強奪＝霊力を啜る不定形
+  bannerbearer:  { arch: "humanoid", o: { banner: 1, leafhair: 1 } },        // 📣加勢＝軍旗を掲げる木の旗手
   livingblade:   { arch: "humanoid", o: { sword: 1, small: 1 } },            // ⚔二形＝ひとりでに舞う剣
   livingshield:  { arch: "humanoid", o: { shield: 1, small: 1 } },           // 🛡二形＝ひとりでに構える盾
 };
 
-// ---------- アイテムの造形 ----------
+// ---------- 宝具の造形 ----------
 const ITEM_ARCH = {
   sword(p, o = {}) {
     const s = `
@@ -703,7 +703,7 @@ const ITEM_ARCH = {
       <circle cx="46" cy="52" r="6" fill="none" stroke="${p.sil}" stroke-width="4"/>
       <path d="M80 22 C82 26 80 28 82 32" fill="none" stroke="${p.glow}" stroke-width="1.4" opacity="0.8"/>`;
   },
-  // 弓（ハンターボウ・v19）
+  // 弓（遠矢の大弓・v19）
   bow(p) {
     return `
       <path d="M48 8 C72 20 72 48 48 60" fill="none" stroke="${p.sil}" stroke-width="4" stroke-linecap="round"/>
@@ -734,7 +734,7 @@ const ITEM_ARCH = {
       <path d="M56 49 L64 49 L62 62 L58 62 Z"/>
       <circle cx="60" cy="32" r="17" fill="none" stroke="${p.glow}" stroke-width="1.3" opacity="0.8"/>`;
   },
-  // 魔法の杖（マジックワンド／アルカナロッド。big=宝珠が大きく魔力の弧をまとう）
+  // 呪力の杖（御幣／錫杖。big=宝珠が大きく霊力の弧をまとう）
   wand(p, o = {}) {
     const r = o.big ? 8 : 6;
     return `
@@ -756,7 +756,7 @@ const ITEM_ART = {
   warbanner: { arch: "banner" }, dispelward: { arch: "scroll" }, mirrorshield: { arch: "mirror" },
   magicwand: { arch: "wand" }, arcanarod: { arch: "wand", o: { big: 1 } },
   greedfang: { arch: "dagger", o: { dual: 1 } }, // v17: 吸奪の双牙
-  // 第二弾（v19）
+  // 第二巻（v19）
   shortspear: { arch: "lance" }, flail: { arch: "axe" }, warhorn: { arch: "banner" },
   braveblade: { arch: "sword" }, warhammer: { arch: "axe", o: { double: 1 } },
   hunterbow: { arch: "bow" }, souleater: { arch: "sword", o: { ornate: 1 } },
@@ -772,7 +772,7 @@ const ITEM_ART = {
   hazecloak: { arch: "armor", o: { halo: 1 } }, duelglove: { arch: "dagger", o: { dual: 1 } },
 };
 
-// ---------- 背景シーン（属性の魔力が満ちる空間＋魔法陣＋地面の影） ----------
+// ---------- 背景シーン（属性の霊力が満ちる空間＋呪法陣＋地面の影） ----------
 function _sceneBG(palKey, p) {
   return `
     <rect x="0" y="0" width="120" height="70" fill="url(#agBG-${palKey})"/>
@@ -799,7 +799,7 @@ function cardArtSVG(c) {
     inner = `<circle cx="60" cy="36" r="22" fill="${p.glow}" opacity="0.14"/>
       <g fill="#241a08" stroke="${p.glow}" stroke-opacity="0.6" stroke-width="1" stroke-linejoin="round">${draw(p, spec.o || {})}</g>`;
   } else {
-    // スペル: 魔法陣の中央に象徴アイコン
+    // 呪術: 呪法陣の中央に象徴アイコン
     palKey = "spell";
     const p = ART_PAL.spell;
     inner = `
@@ -815,8 +815,8 @@ function cardArtSVG(c) {
 }
 
 // ============================================================
-// マナ回路の紋章（4属性の珠が回路で中央の核に結ばれる意匠）
-// カードバック・パック・タイトル画面で共有する共通パーツ。
+// 霊脈の紋章（4属性の珠が回路で中央の核に結ばれる意匠）
+// カードバック・文箱・タイトル画面で共有する共通パーツ。
 // s = スケール係数（線幅・珠サイズをまとめて拡縮）
 // ============================================================
 function _crest(cx, cy, r, s = 1) {
@@ -841,13 +841,13 @@ function _crest(cx, cy, r, s = 1) {
 }
 
 // ---------- カードバック（象徴的な表紙・全カード共通） ----------
-// クリーチャーアートと同じ様式＝暗い魔力空間＋シルエットの守護竜（光る目）＋紋章。
+// 式神アートと同じ様式＝暗い霊力空間＋シルエットの守護竜（光る目）＋紋章。
 // 額縁の金や四隅の菱形はカード表面（コスト宝珠・額縁線）と揃えて統一感を出す。
 const CARD_BACK_SVG = (() => {
   const p = ART_PAL.neutral;
   const spark = (x, y, r, op) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${p.glow}" opacity="${op}"/>`;
   const corner = (x, y) => `<path d="M${x} ${y - 5} L${x + 5} ${y} L${x} ${y + 5} L${x - 5} ${y} Z" fill="url(#agGold)" opacity="0.9"/>`;
-  // 紋章の上空を舞う守護竜（クリーチャーと同じシルエット＋光る目の造形）
+  // 紋章の上空を舞う守護竜（式神と同じシルエット＋光る目の造形）
   const dragon = `<g transform="translate(15 4) scale(0.75)">
     <g fill="#0f0b1c" stroke="${p.line}" stroke-opacity="0.5" stroke-width="1" stroke-linejoin="round">${ARCH.dragon(p, { flame: 1 })}</g></g>`;
   return `<svg viewBox="0 0 120 168" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
@@ -864,9 +864,9 @@ const CARD_BACK_SVG = (() => {
 })();
 const CARD_BACK_HTML = `<div class="card-back">${CARD_BACK_SVG}</div>`;
 
-// ---------- カードパック（開封演出用） ----------
+// ---------- カード文箱（開封演出用） ----------
 // .pack-svg 内の #pack-top（上端の封）はCSSアニメで切り離せるようグループを分けてある。
-// 意匠はカードバックと同じ「守護竜＋マナ回路の紋章」で統一。
+// 意匠はカードバックと同じ「守護竜＋霊脈の紋章」で統一。
 const PACK_SVG = (() => {
   const p = ART_PAL.neutral;
   const dragon = `<g transform="translate(25 72) scale(0.82)">
@@ -889,7 +889,7 @@ const PACK_SVG = (() => {
 </svg>`;
 })();
 
-// ---------- タイトル画面の大紋章（ゆっくり回る魔法陣＋脈動する核） ----------
+// ---------- タイトル画面の大紋章（ゆっくり回る呪法陣＋脈動する核） ----------
 const TITLE_EMBLEM_SVG = (() => {
   const ring = (r, dur, rev) => `
     <g><animateTransform attributeName="transform" type="rotate" from="${rev ? 360 : 0} 110 110" to="${rev ? 0 : 360} 110 110" dur="${dur}s" repeatCount="indefinite"/>
@@ -905,7 +905,7 @@ const TITLE_EMBLEM_SVG = (() => {
   </svg>`;
 })();
 
-// ---------- タイトル画面のシルエット・フリーズ（地平に並ぶクリーチャーたち） ----------
+// ---------- タイトル画面のシルエット・フリーズ（地平に並ぶ式神たち） ----------
 // カードのアーキタイプをそのまま使い、世界の住人として夜景に並べる
 const TITLE_FRIEZE_SVG = (() => {
   const spot = (arch, elem, x, o = {}, s = 1) => {

@@ -1,6 +1,6 @@
 // ============================================================
-// battle.js — 侵略バトルの解決（アイテム・属性相性・会心対応）
-// v19: 第二弾の新能力（群れ/遠隔/吸収/硬殻/背水/看破/成長）・巻物・建造物に対応
+// battle.js — 侵略バトルの解決（宝具・属性相性・会心対応）
+// v19: 第二巻の新能力（百鬼/遠隔/吸収/硬殻/背水/看破/成長）・巻物・建造物に対応
 // ============================================================
 "use strict";
 
@@ -8,19 +8,19 @@ const CRIT_RATE       = 0.10; // 会心の一撃（ダメージ1.5倍）の基�
 const CRIT_RATE_LUCKY = 0.25; // 豪運持ちの会心確率
 const ARMOR_REDUCE    = 10;   // 硬殻のダメージ軽減量
 const LASTWARD_ST     = 25;   // 背水のST補正（HP半分以下）
-const PACK_ST_MAX     = 30;   // 群れのST上限（+5×6体分）
+const PACK_ST_MAX     = 30;   // 百鬼のST上限（+5×6体分）
 const GROW_STEP       = 5;    // 成長1段階あたりのST/HP上昇（上限は grown=5 ＝ +25）
 const BLIGHT_DEF_HP   = 30;   // 🔥焦土（v25）の防衛時HP補正（代償として土地レベルが下がる）
 
 // 成長（grow）の段階（0〜5）。creature = tile.creature（{cardId, hp, grown}）
 function grownOf(creature) { return Math.min(5, (creature && creature.grown) || 0); }
 
-// attCard: 侵略側カード / tile: 防衛側の土地 / attItem, defItem: 装備アイテム(null可)
+// attCard: 侵略側カード / tile: 防衛側の土地 / attItem, defItem: 装備宝具(null可)
 // opts.rng: true なら会心の一撃あり（実戦用）。false（既定）は決定論的（AIのシミュ用）
-// opts.g: 指定すると土地の援護（隣接自軍領地による防衛ST補正）と群れ（pack）を計算に含める
-// opts.attackerId: 侵略側プレイヤーid（群れの集計に使う。省略時は侵略側の群れは0）
-// opts.attGrown: 侵略側クリーチャーの成長段階（march＝盤上からの侵攻時のみ。手札からの侵略は0）
-// opts.attSrcId: march の出撃元タイルid（群れの集計から自分自身を除くため）
+// opts.g: 指定すると土地の援護（隣接自軍霊地による防衛ST補正）と百鬼（pack）を計算に含める
+// opts.attackerId: 侵略側プレイヤーid（百鬼の集計に使う。省略時は侵略側の百鬼は0）
+// opts.attGrown: 侵略側式神の成長段階（march＝盤上からの侵攻時のみ。手札からの侵略は0）
+// opts.attSrcId: march の出撃元タイルid（百鬼の集計から自分自身を除くため）
 // 返り値: { attackerWins, log, attHp, defHp, attExtra, defExtra, attDrain, defDrain,
 //           attRebirth, defRebirth, defCapture }
 // ※状態は変更しない（AIのシミュレーションにも使う）
@@ -30,7 +30,7 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   const log = [];
 
   // 模倣（mimic・v17）: 相手カードの「基本ST・基本HP・能力」をそっくり写し取って戦う。
-  // 名前と属性（無）はそのまま＝属性相性・土地の加護は発生しない。装備アイテムはコピーしない。
+  // 名前と属性（無）はそのまま＝属性相性・土地の加護は発生しない。装備宝具はコピーしない。
   // 両者が模倣なら互いに写し合うだけなので発動しない。防衛側の傷は「受けたダメージ量」として写し身へ引き継ぐ。
   const attMimicSwap = (attCard.ab || []).includes("mimic") && !(defCard.ab || []).includes("mimic");
   const defMimicSwap = (defCard.ab || []).includes("mimic") && !(attCard.ab || []).includes("mimic");
@@ -45,46 +45,46 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   }
   const defBaseHp = Math.max(1, defCard.hp - defWound); // 戦闘後HP残量（前回の傷／成長分を引き継ぐ）
 
-  // 無力化の霧（v20）: 能力をすべて消された状態（2R）。カード固有の能力を無視する（アイテム付与は残る）
+  // 無力化の霧（v20）: 能力をすべて消された状態（2R）。カード固有の能力を無視する（宝具付与は残る）
   const attCardNulled = !!opts.attNulled;
   const defCardNulled = !!(opts.g && typeof creatureNulled === "function" && creatureNulled(opts.g, tile.creature));
   if (attCardNulled) log.push(`🌫️ ${attCard.name}は無力化の霧に包まれている——能力を使えない！`);
   if (defCardNulled) log.push(`🌫️ ${defCard.name}は無力化の霧に包まれている——能力を使えない！`);
 
-  // アイテム打消し: 🚫nullifyアイテム（ディスペルワード）または能力「看破」（グレムリン・v19）。
-  // 看破はアイテムではないので打ち消されない（ただし無力化の霧では消える）
+  // 宝具打消し: 🚫nullify宝具（解呪の御札）または能力「看破」（天邪鬼・v19）。
+  // 看破は宝具ではないので打ち消されない（ただし無力化の霧では消える）
   const attDispel = !attCardNulled && (attCard.ab || []).includes("dispel");
   const defDispel = !defCardNulled && (defCard.ab || []).includes("dispel");
   const attNull = !!(attItem && attItem.nullify);
   const defNull = !!(defItem && defItem.nullify);
-  const attItemEff = (defNull || defDispel) ? null : attItem; // 実際に効果を発揮する侵略側アイテム
-  const defItemEff = (attNull || attDispel) ? null : defItem; // 実際に効果を発揮する防衛側アイテム
+  const attItemEff = (defNull || defDispel) ? null : attItem; // 実際に効果を発揮する侵略側宝具
+  const defItemEff = (attNull || attDispel) ? null : defItem; // 実際に効果を発揮する防衛側宝具
   if (attNull && defItem) log.push(`🚫 ${attItem.name}が${defCard.name}の${defItem.name}を打ち消した！`);
   if (defNull && attItem) log.push(`🚫 ${defItem.name}が${attCard.name}の${attItem.name}を打ち消した！`);
   if (attDispel && defItem && !attNull) log.push(`👁 ${attCard.name}の看破！ ${defCard.name}の${defItem.name}を打ち消した！`);
   if (defDispel && attItem && !defNull) log.push(`👁 ${defCard.name}の看破！ ${attCard.name}の${attItem.name}を打ち消した！`);
 
-  // アイテムが付与する能力（アサシンダガーの先制など）も合算（打消し後の有効アイテムで判定）。
-  // 無力化の霧（v20）中はカード固有の能力を除外（アイテム由来だけ残る）
+  // 宝具が付与する能力（忍びの苦無の居合など）も合算（打消し後の有効宝具で判定）。
+  // 無力化の霧（v20）中はカード固有の能力を除外（宝具由来だけ残る）
   const abilities = (c, item, nulled) => new Set([...(nulled ? [] : (c.ab || [])), ...((item && item.grant) || [])]);
   const attAb = abilities(attCard, attItemEff, attCardNulled);
   const defAb = abilities(defCard, defItemEff, defCardNulled);
   const attReflect = (attItemEff && attItemEff.reflect) || 0; // 受けた攻撃を反射する割合
   const defReflect = (defItemEff && defItemEff.reflect) || 0;
-  // 攻撃タイプ（v15）: 能力 magicatk か magicatk:true のアイテム（打消し後の有効アイテム）で攻撃が「魔法」になる。
-  // 📜巻物（scroll・v19）も魔法攻撃扱い。物理無効・物理反射は「物理攻撃」だけを防ぐ／跳ね返す。
+  // 攻撃タイプ（v15）: 能力 magicatk か magicatk:true の宝具（打消し後の有効宝具）で攻撃が「呪力」になる。
+  // 📜巻物（scroll・v19）も呪力攻撃扱い。物理無効・物理反射は「物理攻撃」だけを防ぐ／跳ね返す。
   const attScroll = attItemEff && attItemEff.scroll ? (attItemEff.scrollMirror ? defCard.st : attItemEff.scroll) : 0;
   const defScroll = defItemEff && defItemEff.scroll ? (defItemEff.scrollMirror ? attCard.st : defItemEff.scroll) : 0;
   const attMagic = attAb.has("magicatk") || !!(attItemEff && attItemEff.magicatk) || attScroll > 0;
   const defMagic = defAb.has("magicatk") || !!(defItemEff && defItemEff.magicatk) || defScroll > 0;
 
   // 成長（grow・v19）: 防衛側は tile.creature.grown、侵略側は opts.attGrown（march時のみ）。
-  // v20: 🕊️ブレッシング（永続強化）も同じ grown 枠＝能力の有無に関わらず加算する
+  // v20: 🕊️言祝ぎ（永続強化）も同じ grown 枠＝能力の有無に関わらず加算する
   const attGrown = Math.min(5, opts.attGrown || 0);
   const defGrown = grownOf(tile.creature);
   // 戦火の世（v20）: 2Rの間、侵略側ST+20（全員）
   const warFx = (opts.g && typeof activeFx === "function" && activeFx(opts.g, "war")) ? 20 : 0;
-  // バトル支援スペル（v20）: ウォークライ/攻城の号令/護りの風/決死の覚悟（fightForがoptsで渡す）
+  // バトル支援呪術（v20）: 鬨の声/攻城の号令/護りの風/決死の覚悟（fightForがoptsで渡す）
   const attSpellSt = opts.attStBonus || 0;
   const defSpellSt = opts.defStBonus || 0;
 
@@ -97,9 +97,9 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   const advDef = hasElemAdvantage(defCard.element, attCard.element);
   if (advAtt) attSt += ELEM_ADV_ST;
   if (advDef) defSt += ELEM_ADV_ST;
-  const support = opts.g ? landSupportSt(opts.g, tile) : 0; // 隣接自軍領地の援護（見張り塔の烽火も含む）
+  const support = opts.g ? landSupportSt(opts.g, tile) : 0; // 隣接自軍霊地の援護（見張り塔の烽火も含む）
 
-  // 群れ（pack・v19）: 盤面の自軍同属性クリーチャー1体につきST+5（自分自身は除く・上限+30）
+  // 百鬼（pack・v19）: 盤面の自軍同属性式神1体につきST+5（自分自身は除く・上限+30）
   const packCount = (playerId, element, excludeId) => {
     if (!opts.g || playerId == null) return 0;
     return opts.g.tiles.filter(t => t.type === "LAND" && t.owner === playerId &&
@@ -108,8 +108,8 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   const attPack = attAb.has("pack") ? Math.min(PACK_ST_MAX, packCount(opts.attackerId, attCard.element, opts.attSrcId ?? -1) * 5) : 0;
   const defPack = defAb.has("pack") ? Math.min(PACK_ST_MAX, packCount(tile.owner, defCard.element, tile.id) * 5) : 0;
 
-  // 📣応援（cheer・v25）: 隣接する自領の応援役が「武具を貸す」ようにST/HPを上乗せする。
-  // 防衛側はその土地、侵略側は march の出撃元タイル（手札からの侵略は盤上にいないので応援を受けられない）
+  // 📣加勢（cheer・v25）: 隣接する自領の加勢役が「武具を貸す」ようにST/HPを上乗せする。
+  // 防衛側はその土地、侵略側は march の出撃元タイル（手札からの侵略は盤上にいないので加勢を受けられない）
   const cheerAt = t => (opts.g && t && typeof cheerCount === "function") ? cheerCount(opts.g, t) : 0;
   const attCheer = cheerAt(opts.attSrcId != null && opts.g ? opts.g.tiles[opts.attSrcId] : null) * CHEER_BONUS;
   const defCheer = cheerAt(tile) * CHEER_BONUS;
@@ -131,10 +131,10 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   let attHp = attCard.hp + attGrown * GROW_STEP + attExtra;
   let defHp = defBaseHp + defExtra;
 
-  // 📜巻物: 攻撃が「記載ST固定の魔法攻撃」に置き換わる＝本体ST・強襲・属性・援護・群れの補正は乗らない
-  if (attScroll > 0) { attSt = attScroll; log.push(`📜 ${attCard.name}は${attItemEff.name}を展開！ 攻撃がST${attScroll}固定の魔法砲撃になる`); }
-  if (defScroll > 0) { defSt = defScroll; log.push(`📜 ${defCard.name}は${defItemEff.name}を展開！ 反撃がST${defScroll}固定の魔法砲撃になる`); }
-  // 幻惑のマント（stDebuff・v19）: 相手のSTを下げる（最低10）
+  // 📜巻物: 攻撃が「記載ST固定の呪力攻撃」に置き換わる＝本体ST・強襲・属性・援護・百鬼の補正は乗らない
+  if (attScroll > 0) { attSt = attScroll; log.push(`📜 ${attCard.name}は${attItemEff.name}を展開！ 攻撃がST${attScroll}固定の呪力砲撃になる`); }
+  if (defScroll > 0) { defSt = defScroll; log.push(`📜 ${defCard.name}は${defItemEff.name}を展開！ 反撃がST${defScroll}固定の呪力砲撃になる`); }
+  // 幻惑の羽衣（stDebuff・v19）: 相手のSTを下げる（最低10）
   if (defItemEff && defItemEff.stDebuff) { attSt = Math.max(10, attSt - defItemEff.stDebuff); log.push(`🌫 ${defItemEff.name}の幻惑！ ${attCard.name}のST-${defItemEff.stDebuff}`); }
   if (attItemEff && attItemEff.stDebuff) { defSt = Math.max(10, defSt - attItemEff.stDebuff); log.push(`🌫 ${attItemEff.name}の幻惑！ ${defCard.name}のST-${attItemEff.stDebuff}`); }
   // 平静のお守り（noCrit・v19）: 相手の会心を封じる
@@ -147,32 +147,32 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   if (attAb.has("assault") && !attScroll) log.push(`⚔ ${attCard.name}の強襲！ ST+20`);
   if (attGrown > 0) log.push(`🌱 ${attCard.name}は成長している！ ST/HP+${attGrown * GROW_STEP}`);
   if (defGrown > 0) log.push(`🌱 ${defCard.name}は成長している！ ST/HP+${defGrown * GROW_STEP}`);
-  if (attPack > 0 && !attScroll) log.push(`🐺 ${attCard.name}の群れ！ 仲間の数だけST+${attPack}`);
-  if (defPack > 0 && !defScroll) log.push(`🐺 ${defCard.name}の群れ！ 仲間の数だけST+${defPack}`);
+  if (attPack > 0 && !attScroll) log.push(`🐺 ${attCard.name}の百鬼！ 仲間の数だけST+${attPack}`);
+  if (defPack > 0 && !defScroll) log.push(`🐺 ${defCard.name}の百鬼！ 仲間の数だけST+${defPack}`);
   if (RULES.invaderSt > 0) log.push(`🏟 闘技場の熱気！ 侵略側ST+${RULES.invaderSt}`);
-  if (support > 0 && !defScroll) log.push(`🏰 ${defCard.name}は隣接する味方領地の援護！ ST+${support}`);
+  if (support > 0 && !defScroll) log.push(`🏯 ${defCard.name}は隣接する味方霊地の援護！ ST+${support}`);
   if (advAtt && !attScroll) log.push(`${ELEMENTS[attCard.element].icon} 属性の優位！ ${attCard.name}のST+${ELEM_ADV_ST}`);
   if (advDef && !defScroll) log.push(`${ELEMENTS[defCard.element].icon} 属性の優位！ ${defCard.name}のST+${ELEM_ADV_ST}`);
   if (attAb.has("pierce") && landHpBonus(tile, defCard) > 0) {
-    log.push(`⚔ ${attCard.name}の貫通！ 土地ボーナス無効`);
+    log.push(`⚔ ${attCard.name}の破魔！ 土地ボーナス無効`);
   } else if (defBonus > 0) {
     log.push(`🛡 ${defCard.name}は土地の加護でHP+${defBonus}`);
   }
   if (guardBonus > 0) log.push(`🛡 ${defCard.name}の守護！ HP+${guardBonus}`);
   if (blightHp > 0) log.push(`🔥 ${defCard.name}の焦土！ HP+${blightHp}（このバトルの後、土地は痩せる）`);
-  if (attCheer > 0) log.push(`📣 隣接する味方の応援！ ${attCard.name}のST+${attCheer} / HP+${attCheer}`);
-  if (defCheer > 0) log.push(`📣 隣接する味方の応援！ ${defCard.name}のST+${defCheer} / HP+${defCheer}`);
-  if (attMagic) log.push(`✨ ${attCard.name}の攻撃は魔法攻撃！（物理無効・物理反射を貫く）`);
-  if (defMagic) log.push(`✨ ${defCard.name}の攻撃は魔法攻撃！（物理無効・物理反射を貫く）`);
+  if (attCheer > 0) log.push(`📣 隣接する味方の加勢！ ${attCard.name}のST+${attCheer} / HP+${attCheer}`);
+  if (defCheer > 0) log.push(`📣 隣接する味方の加勢！ ${defCard.name}のST+${defCheer} / HP+${defCheer}`);
+  if (attMagic) log.push(`✨ ${attCard.name}の攻撃は呪力攻撃！（物理無効・物理反射を貫く）`);
+  if (defMagic) log.push(`✨ ${defCard.name}の攻撃は呪力攻撃！（物理無効・物理反射を貫く）`);
 
-  // 遠隔（ranged・v19）: 侵略側が遠隔なら防衛側は一切反撃できない（先制でも）。
+  // 遠隔（ranged・v19）: 侵略側が遠隔なら防衛側は一切反撃できない（居合でも）。
   // 建造物（structure・v19）: 防衛してもST0の施設なので反撃しない
   const attRanged = attAb.has("ranged");
   const defStruct = !!defCard.structure;
   if (attRanged) log.push(`🏹 ${attCard.name}の遠隔攻撃！ 相手の反撃を受けない`);
   if (defStruct) log.push(`🏛 ${defCard.name}は建造物——反撃できない`);
 
-  // 攻撃順: 通常は侵略側が先。防衛側だけが先制持ちなら防衛側が先（侵略側が遠隔なら無効）
+  // 攻撃順: 通常は侵略側が先。防衛側だけが居合持ちなら防衛側が先（侵略側が遠隔なら無効）
   const defFirst = defAb.has("first") && !attAb.has("first") && !attRanged && !defStruct;
 
   // 背水（lastward・v19）: HPがバトル開始時の半分以下になるとST+25（バトル中の被弾でも発動する）
@@ -197,13 +197,13 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   if (attScroll > 0) {
     log.push(`📊【式】侵略 ${attCard.name}: ST ${attSt}（📜巻物固定） ／ HP ${bd(attHp, attCard.hp, [["成長", attGrown * GROW_STEP], ["装備", attExtra]])}`);
   } else {
-    log.push(`📊【式】侵略 ${attCard.name}: ST ${bd(attSt, attCard.st, [["装備", attItemEff ? attItemEff.st : 0], ["強襲", attAb.has("assault") ? 20 : 0], ["属性", advAtt ? ELEM_ADV_ST : 0], ["成長", attGrown * GROW_STEP], ["群れ", attPack], ["応援", attCheer], ["闘技場", RULES.invaderSt]])} ／ HP ${bd(attHp, attCard.hp, [["成長", attGrown * GROW_STEP], ["装備", attItemEff ? attItemEff.hp : 0], ["応援", attCheer]])}`);
+    log.push(`📊【式】侵略 ${attCard.name}: ST ${bd(attSt, attCard.st, [["装備", attItemEff ? attItemEff.st : 0], ["強襲", attAb.has("assault") ? 20 : 0], ["属性", advAtt ? ELEM_ADV_ST : 0], ["成長", attGrown * GROW_STEP], ["百鬼", attPack], ["加勢", attCheer], ["闘技場", RULES.invaderSt]])} ／ HP ${bd(attHp, attCard.hp, [["成長", attGrown * GROW_STEP], ["装備", attItemEff ? attItemEff.hp : 0], ["加勢", attCheer]])}`);
   }
-  const defHpParts = [["装備", defItemEff ? defItemEff.hp : 0], ["土地の加護", defBonus], ["守護", guardBonus], ["焦土", blightHp], ["応援", defCheer], ["護りの風", defWindHp]];
+  const defHpParts = [["装備", defItemEff ? defItemEff.hp : 0], ["土地の加護", defBonus], ["守護", guardBonus], ["焦土", blightHp], ["加勢", defCheer], ["護りの風", defWindHp]];
   if (defScroll > 0) {
     log.push(`📊【式】防衛 ${defCard.name}: ST ${defSt}（📜巻物固定） ／ HP ${bd(defHp, defBaseHp, defHpParts)}`);
   } else {
-    log.push(`📊【式】防衛 ${defCard.name}: ST ${bd(defSt, defCard.st, [["装備", defItemEff ? defItemEff.st : 0], ["属性", advDef ? ELEM_ADV_ST : 0], ["成長", defGrown * GROW_STEP], ["群れ", defPack], ["援護", support], ["応援", defCheer]])} ／ HP ${bd(defHp, defBaseHp, defHpParts)}`);
+    log.push(`📊【式】防衛 ${defCard.name}: ST ${bd(defSt, defCard.st, [["装備", defItemEff ? defItemEff.st : 0], ["属性", advDef ? ELEM_ADV_ST : 0], ["成長", defGrown * GROW_STEP], ["百鬼", defPack], ["援護", support], ["加勢", defCheer]])} ／ HP ${bd(defHp, defBaseHp, defHpParts)}`);
   }
   // 侵略は「一撃で相手の実効HPを削り切れば占領」。硬殻は一撃ごとに-10されるためここで織り込む。
   const attBlocked = !attMagic && (defAb.has("physnull") || defAb.has("physreflect")); // 侵略の攻撃が通らない
@@ -217,10 +217,10 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   if (attBlocked) {
     log.push(`📊【式】決着: ${defCard.name}の${defAb.has("physnull") ? "物理無効" : "物理反射"}により侵略の物理攻撃は通らない → 占領不可${defAb.has("physreflect") ? "（攻撃はそっくり跳ね返る）" : ""}${defBlocked ? "　※反撃も通らない（両者無傷）" : ""}`);
   } else {
-    log.push(`📊【式】決着: 侵略の一撃 ${attHitOnce}${defArmorCut ? `（硬殻-${defArmorCut}後）` : ""}${attAb.has("double") ? `×2(連撃)＝${attTotal}` : ""} ${canOneShot ? "≥" : "<"} 防衛の実効HP${defHp} → ${canOneShot ? "撃破して占領" : `守られる（あと${defHp - attTotal}届かない${critReach ? "／💫会心が出れば届く" : ""}）`}${defFirst ? "　※防衛が先制（侵略側HPが低いと反撃で討死）" : ""}${attRanged ? "　※遠隔＝反撃なし" : ""}${defBlocked && !attRanged ? `　※侵略側の${attAb.has("physnull") ? "物理無効" : "物理反射"}で防衛の反撃は通らない` : ""}`);
+    log.push(`📊【式】決着: 侵略の一撃 ${attHitOnce}${defArmorCut ? `（硬殻-${defArmorCut}後）` : ""}${attAb.has("double") ? `×2(連撃)＝${attTotal}` : ""} ${canOneShot ? "≥" : "<"} 防衛の実効HP${defHp} → ${canOneShot ? "撃破して占領" : `守られる（あと${defHp - attTotal}届かない${critReach ? "／💫会心が出れば届く" : ""}）`}${defFirst ? "　※防衛が居合（侵略側HPが低いと反撃で討死）" : ""}${attRanged ? "　※遠隔＝反撃なし" : ""}${defBlocked && !attRanged ? `　※侵略側の${attAb.has("physnull") ? "物理無効" : "物理反射"}で防衛の反撃は通らない` : ""}`);
   }
 
-  // 一撃を計算（会心込み）。物理無効/物理反射（対象の能力）と魔法攻撃（攻撃側）・硬殻をここで解決する。
+  // 一撃を計算（会心込み）。物理無効/物理反射（対象の能力）と呪力攻撃（攻撃側）・硬殻をここで解決する。
   // { remain: 対象の残HP, dmg: 与えたダメージ, bounced: 物理反射で攻撃側へ跳ね返ったダメージ } を返す
   const strike = (name, st, ab, isMagic, noCrit, critRate, targetName, targetAb, targetHp) => {
     let dmg = st;
@@ -243,15 +243,15 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
       if (dmg <= 0) { log.push(`${name}の攻撃は${targetName}の殻に阻まれた（0ダメージ）`); return { remain: targetHp, dmg: 0, bounced: 0 }; }
     }
     const remain = targetHp - dmg;
-    log.push(`${name}の${isMagic ? "魔法攻撃" : "攻撃"}！ ${targetName}に${dmg}ダメージ（残りHP ${Math.max(0, remain)}）`);
+    log.push(`${name}の${isMagic ? "呪力攻撃" : "攻撃"}！ ${targetName}に${dmg}ダメージ（残りHP ${Math.max(0, remain)}）`);
     return { remain, dmg, bounced: 0 };
   };
-  // 反射（ミラーシールド）: 攻撃を受けた側が、受けたダメージの一部を攻撃側へ跳ね返す
+  // 反射（神鏡）: 攻撃を受けた側が、受けたダメージの一部を攻撃側へ跳ね返す
   const reflectBack = (targetReflect, dmg, attackerName, reflectorName, attackerHp) => {
     if (targetReflect <= 0 || dmg <= 0) return attackerHp;
     const rf = Math.floor(dmg * targetReflect);
     if (rf <= 0) return attackerHp;
-    // v23: 反射持ちアイテムはミラーシールドの他にスパイクメイルもあるため、装備名を出さない汎用文言にする
+    // v23: 反射持ち宝具は神鏡の他に棘鎧もあるため、装備名を出さない汎用文言にする
     log.push(`🪞 ${reflectorName}の装備が攻撃を弾く！ ${attackerName}に${rf}ダメージ反射`);
     return attackerHp - rf;
   };
@@ -311,12 +311,12 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
       defAbsorb(r.dmg);
     }
   };
-  // 相手の手番中に反射ダメージで自分が倒れることがある（物理反射/ミラーシールド）ため、
+  // 相手の手番中に反射ダメージで自分が倒れることがある（物理反射/神鏡）ため、
   // 反撃側は「自分も相手も生存」のときだけ手番を得る。
   // 遠隔（侵略側）＝防衛側は反撃できない。建造物（防衛側）＝反撃しない。
   const defCanCounter = !attRanged && !defStruct;
   if (defFirst) {
-    log.push(`🛡 ${defCard.name}の先制攻撃！`);
+    log.push(`🛡 ${defCard.name}の居合！ 先手を取った`);
     defTurn();
     if (attHp > 0 && defHp > 0) attTurn();
   } else {
@@ -332,27 +332,27 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   } else {
     log.push(`⚖ 両者生存。侵略失敗！ ${attCard.name}は撤退した`);
   }
-  // 吸奪（drainMagic・v17）＋💸魔力強奪（siphon・v25の能力）: 与えたダメージ×倍率の魔力を相手から強奪する。
-  // 武器の倍率と能力の等倍は加算される（グリードファング×2 ＋ 魔力強奪×1 ＝ ダメージ×3）
+  // 吸奪（drainMagic・v17）＋💸霊力強奪（siphon・v25の能力）: 与えたダメージ×倍率の霊力を相手から強奪する。
+  // 武器の倍率と能力の等倍は加算される（餓鬼の牙×2 ＋ 霊力強奪×1 ＝ ダメージ×3）
   const drainMul = (itemEff, ab) => ((itemEff && itemEff.drainMagic) || 0) + (ab.has("siphon") ? 1 : 0);
   const attMul = drainMul(attItemEff, attAb), defMul = drainMul(defItemEff, defAb);
   const attDrain = (attMul > 0 && attDealt > 0) ? attDealt * attMul : 0;
   const defDrain = (defMul > 0 && defDealt > 0) ? defDealt * defMul : 0;
   const drainSrc = (itemEff, ab, name) =>
-    (itemEff && itemEff.drainMagic) ? (ab.has("siphon") ? `${itemEff.name}と${name}の魔力強奪` : itemEff.name) : `${name}の魔力強奪`;
+    (itemEff && itemEff.drainMagic) ? (ab.has("siphon") ? `${itemEff.name}と${name}の霊力強奪` : itemEff.name) : `${name}の霊力強奪`;
   if (attDrain) log.push(`💰 ${drainSrc(attItemEff, attAb, attCard.name)}！ 与えたダメージ${attDealt}×${attMul}＝${attDrain}Gを強奪！`);
   if (defDrain) log.push(`💰 ${drainSrc(defItemEff, defAb, defCard.name)}！ 与えたダメージ${defDealt}×${defMul}＝${defDrain}Gを強奪！`);
   return {
     attackerWins, log, attHp, defHp, attExtra, defExtra, attDrain, defDrain,
-    // 転生（rebirth・v19）: 倒されたとき捨札ではなく手札に戻る（アイテム由来の付与も含めた実効判定）
+    // 転生（rebirth・v19）: 倒されたとき捨札ではなく手札に戻る（宝具由来の付与も含めた実効判定）
     attRebirth: attAb.has("rebirth"),
     defRebirth: defAb.has("rebirth"),
-    // 捕縛の実効判定（チェインネット等アイテム由来の捕縛も含める・v19）
+    // 捕縛の実効判定（チェインネット等宝具由来の捕縛も含める・v19）
     defCapture: defAb.has("capture"),
   };
 }
 
-// 戦闘後にクリーチャーへ持ち越す実HP（最大値でキャップ、生存中は最低1）。
+// 戦闘後に式神へ持ち越す実HP（最大値でキャップ、生存中は最低1）。
 // maxHp には成長分を含めた実最大HP（maxHpOf）を渡すこと（v19）
 function woundedHp(finalHp, extra, maxHp) {
   return Math.max(1, Math.min(maxHp, finalHp - extra));

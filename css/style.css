@@ -1,5 +1,10 @@
 /* ============================================================
-   式神絵巻 — スタイル（ダークファンタジー基調 → 和紙×墨×金泥テーマへ換装予定・PLAN.md P1）
+   式神絵巻 — スタイル（和紙×墨×金泥の「夜の絵巻」テーマ）
+   設計意図: 盤面SVGとカードアートは暗色前提のため、真っ白な和紙ではなく
+   「夜、灯りの下で広げた絵巻」＝墨がかった焦げ茶の揉み紙を地にする。
+   役割: 墨（地・枠）／金泥（題字・強調・帯）／朱（決定ボタン・危険）／藍（情報・呪術系）。
+   題字・見出しのみ明朝（--serif）、本文は可読性優先で現行ゴシックを維持。
+   レイアウト・サイズ・メディアクエリは旧版から変更しない（色・フォント・飾りのみ）。
    ============================================================ */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -9,19 +14,23 @@
 html, body { overscroll-behavior: none; }
 
 :root {
-  --bg: #17131f;
-  --bg2: #221c30;
-  --panel: #2a2438;
-  --border: #4a4260;
-  --text: #e8e4f2;
-  --dim: #a89fc0;
-  --gold: #ffd76a;
-  --p0: #4da3ff;
-  --p1: #ff5b5b;
+  --bg: #1b1712;      /* 墨がかった焦げ茶（夜の絵巻の地） */
+  --bg2: #262019;     /* ひとつ明るい和紙の陰 */
+  --panel: #2e2820;   /* パネル・ボタンの地 */
+  --border: #5c4d33;  /* 揉み紙の折り目色の枠線 */
+  --text: #f0e8d6;    /* 生成りの文字色 */
+  --dim: #bfae8c;     /* 薄茶の補足文字 */
+  --gold: #ffd76a;    /* 金泥（強調・題字） */
+  --p0: #5b9bd8;      /* 藍（プレイヤー1） */
+  --p1: #e8604a;      /* 朱（プレイヤー2） */
+  --serif: "Yu Mincho", "Hiragino Mincho ProN", "BIZ UDMincho", serif;
 }
 
 body {
-  background: radial-gradient(ellipse at 50% 0%, #2b2340 0%, var(--bg) 60%);
+  /* 揉み紙の繊維（斜めの極細ライン）＋上からの灯りのグラデで和紙の質感を出す */
+  background:
+    repeating-linear-gradient(-42deg, #ffffff04 0 1px, transparent 1px 7px),
+    radial-gradient(ellipse at 50% 0%, #332a1f 0%, var(--bg) 60%);
   color: var(--text);
   font-family: "Yu Gothic UI", "Meiryo", sans-serif;
   /* v27: 画面ぴったりの高さに固定する。上部エリアと下段（手札＋ダイス）をフロー配置にしたので、
@@ -45,6 +54,8 @@ header {
   flex: none;
 }
 h1 {
+  font-family: var(--serif); /* 題字は明朝＋金の箔感 */
+  font-weight: bold;
   font-size: 21px;
   letter-spacing: 5px;
   white-space: nowrap;
@@ -96,7 +107,7 @@ body.in-game #hud-top { display: flex; }
 .pstrip {
   position: relative;
   min-width: 0;
-  background: rgba(42, 36, 56, 0.94);
+  background: rgba(46, 40, 31, 0.94);
   border: 1px solid var(--border);
   border-left: 3px solid var(--pc, var(--border));
   border-radius: 10px;
@@ -116,7 +127,7 @@ body.in-game #hud-top { display: flex; }
 .ps-mid { display: flex; align-items: center; gap: 7px; margin: 2px 0 1px; }
 .ps-assets { flex: none; font-size: 12px; line-height: 1.2; white-space: nowrap; }
 .ps-assets b { color: var(--gold); }
-.ps-bar { flex: 1; min-width: 24px; height: 5px; background: #17131f; border-radius: 3px; overflow: hidden; }
+.ps-bar { flex: 1; min-width: 24px; height: 5px; background: #1b1712; border-radius: 3px; overflow: hidden; }
 .ps-bar div { height: 100%; border-radius: 3px; transition: width 0.4s; }
 .ps-meta { display: flex; align-items: center; gap: 8px; font-size: 10.5px; line-height: 1.3; color: var(--dim); white-space: nowrap; overflow: hidden; }
 .ps-meta .ps-gap { margin-left: auto; }
@@ -169,7 +180,7 @@ body.in-game #view-toggles { display: flex; }
   width: 74px;
   height: 30px;
   font-size: 15px;
-  background: rgba(42, 36, 56, 0.94);
+  background: rgba(46, 40, 31, 0.94);
   box-shadow: 0 4px 14px #0007;
 }
 
@@ -191,6 +202,12 @@ main {
   align-items: safe center;
   overflow: auto;
   padding: 4px;
+  /* 絵巻の余白: 左右に紙の陰り＋上下に金泥の極細ラインで「開いた巻物」の気配を出す */
+  background:
+    linear-gradient(90deg, #00000038, transparent 26px, transparent calc(100% - 26px), #00000038),
+    radial-gradient(ellipse at 50% 42%, #2a2316 0%, #211b11 78%);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 #c9a24d2e, inset 0 -1px 0 #c9a24d2e;
   /* スマホ: 1本指スクロールは許可しつつ、2本指ピンチは自前のズーム処理（main.js）へ渡す */
   touch-action: pan-x pan-y;
 }
@@ -232,7 +249,7 @@ body.in-game #bottom-bar { display: flex; }
   width: 74px;
   height: 74px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 28%, #3a3153, #201a2e 72%);
+  background: radial-gradient(circle at 35% 28%, #3d3427, #262013 72%);
   border: 2px solid var(--border);
   box-shadow: 0 6px 20px #000a, inset 0 0 16px #0009;
   display: flex;
@@ -292,11 +309,13 @@ body.in-game #bottom-bar { display: flex; }
 }
 .btn:hover { border-color: var(--gold); color: var(--gold); }
 .btn.primary {
-  background: linear-gradient(180deg, #8a6d1f, #6b520f);
+  /* 朱印風: 決定ボタンは朱塗り＋金の縁 */
+  background: linear-gradient(180deg, #a8402a, #7e2b1a);
   border-color: var(--gold);
   color: #fff;
   font-weight: bold;
-  box-shadow: 0 0 14px #ffd76a33;
+  box-shadow: 0 0 14px #e8604a44;
+  text-shadow: 0 1px 2px #00000088;
 }
 .btn.primary:hover { filter: brightness(1.2); color: #fff; }
 .btn.danger { color: #ff9a9a; border-color: #a04a4a; }
@@ -314,7 +333,7 @@ body.in-game #bottom-bar { display: flex; }
 body.in-game .hud-win { display: block; }
 body.in-game .hud-win.hidden { display: none !important; }
 .hud-win.framed {
-  background: rgba(34, 28, 48, 0.94);
+  background: rgba(42, 35, 26, 0.94);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 8px 10px 10px;
@@ -359,13 +378,13 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 8, 16, 0.72);
+  background: rgba(13, 10, 6, 0.72);
   padding: 16px;
   backdrop-filter: blur(2px);
 }
 #info-pop.show { display: flex; }
 .ip-box {
-  background: linear-gradient(180deg, #2c2540, #211b30);
+  background: linear-gradient(180deg, #342c1e, #272013);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 16px 18px;
@@ -377,19 +396,19 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 }
 .ip-name { font-size: 17px; font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; }
 .ip-lands { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
-.ip-land { display: flex; gap: 8px; font-size: 12px; color: #d8d2e8; line-height: 1.75; }
+.ip-land { display: flex; gap: 8px; font-size: 12px; color: #e4dac2; line-height: 1.75; }
 .ip-land .ipl-no { color: var(--dim); min-width: 34px; }
 .ip-land .ipl-toll { margin-left: auto; color: var(--gold); }
 .ip-empty { font-size: 12px; color: var(--dim); }
 
 /* キャラの顔絵（chars.js） */
 .p-face { display: inline-block; vertical-align: -4px; }
-/* 目標資産に到達（⚑凱旋リーチ）＝「あとは城へ帰るだけ」を全員に見せる金のバッジ */
+/* 目標資産に到達（⚑凱旋リーチ）＝「あとは本宮へ帰るだけ」を全員に見せる金のバッジ */
 .p-reach {
   display: inline-block;
   flex: none;
   font-size: 10.5px;
-  color: #1a1526;
+  color: #26200f;
   background: linear-gradient(180deg, #ffe9a0, #ffd76a);
   border-radius: 8px;
   padding: 1px 6px;
@@ -409,7 +428,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   padding: 0 7px;
   letter-spacing: 0.5px;
 }
-.p-rank.r1 { color: #1a1526; background: linear-gradient(180deg, #ffe9a0, #ffd76a); border-color: #ffd76a; }
+.p-rank.r1 { color: #26200f; background: linear-gradient(180deg, #ffe9a0, #ffd76a); border-color: #ffd76a; }
 .p-rank.r2 { color: #f2f2f8; background: linear-gradient(180deg, #b8bcd0, #8f93aa); border-color: #b8bcd0; }
 .p-rank.r3 { color: #2a1a10; background: linear-gradient(180deg, #e2a877, #c98550); border-color: #e2a877; }
 
@@ -417,7 +436,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   /* 広い画面ではサイドバーいっぱいに伸びる（狭い画面は @media 側で固定高さにする） */
   flex: 1;
   min-height: 0;
-  background: rgba(28, 23, 40, 0.94);
+  background: rgba(39, 32, 24, 0.94);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 10px 12px;
@@ -475,10 +494,10 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 #hand .c-name { font-size: 11.5px; }
 #hand .c-desc { font-size: 10.5px; }
 
-/* カード = 額縁＋アート窓＋コスト宝珠＋魔力の光沢。属性色の縁取りとレア度の輝きで差をつける */
+/* カード = 額縁＋アート窓＋コスト宝珠＋霊力の光沢。属性色の縁取りとレア度の輝きで差をつける */
 .card {
   width: 128px;
-  background: linear-gradient(180deg, #3a3153, #241e33);
+  background: linear-gradient(180deg, #3d3427, #292217);
   border: 1.5px solid var(--border);
   border-radius: 10px;
   padding: 5px 6px 6px;
@@ -502,19 +521,19 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .card.el-wood  { border-color: #4e9a2faa; }
 .card.el-water { border-color: #3d7de0aa; }
 .card.el-earth { border-color: #8a6b3aaa; }
-.card.el-neutral { border-color: #9d97b5aa; } /* 無属性（v13） */
-.card.spell    { border-color: #b06fd6aa; }
+.card.el-neutral { border-color: #a89f8faa; } /* 無属性（v13） */
+.card.spell    { border-color: #9678b4aa; }
 .card.item     { border-color: #c9a755aa; }
-.card.disabled { opacity: 0.38; pointer-events: none; } /* コスト不足カードはクリック自体を無効化（魔力不足での召喚防止） */
+.card.disabled { opacity: 0.38; pointer-events: none; } /* コスト不足カードはクリック自体を無効化（霊力不足での召喚防止） */
 .card.selectable, .card.castable { cursor: pointer; }
 .card.selectable:hover, .card.castable:hover {
   transform: translateY(-4px);
   border-color: var(--gold);
   box-shadow: 0 6px 16px #000a, 0 0 10px #ffd76a44;
 }
-.card.castable { box-shadow: 0 0 10px #b06fd666; }
+.card.castable { box-shadow: 0 0 10px #9678b466; }
 
-/* アート窓（クリーチャーの造形が描かれる） */
+/* アート窓（式神の造形が描かれる） */
 .c-art {
   height: 64px;
   border-radius: 7px;
@@ -570,15 +589,15 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .c-ab { min-height: 16px; text-align: center; }
 .ab {
   display: inline-block;
-  background: #4a2a5a;
-  color: #e0b0ff;
+  background: #2c3a54;
+  color: #b8cce8;
   border-radius: 4px;
   padding: 0 5px;
   font-size: 10.5px;
   margin-right: 3px;
   margin-top: 3px;
 }
-/* 魔力の光沢（ゆっくり流れる斜めのきらめき） */
+/* 霊力の光沢（ゆっくり流れる斜めのきらめき） */
 .c-shine {
   position: absolute;
   inset: 0;
@@ -606,7 +625,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   pointer-events: none;
   filter: drop-shadow(0 1px 2px #000);
 }
-.card.rar-rare { box-shadow: 0 3px 10px #0007, 0 0 10px #4da3ff44; }
+.card.rar-rare { box-shadow: 0 3px 10px #0007, 0 0 10px #5b9bd844; }
 .card.rar-legendary {
   border-color: #ffb14d;
   box-shadow: 0 3px 10px #0007, 0 0 14px #ffb14d55;
@@ -617,7 +636,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   50%      { box-shadow: 0 3px 10px #0007, 0 0 20px #ffb14d77; }
 }
 .at-rarity { position: absolute; top: 2px; left: 4px; font-size: 8px; letter-spacing: -1.5px; z-index: 2; }
-.album-tile.rar-rare { border-color: #4da3ff66; }
+.album-tile.rar-rare { border-color: #5b9bd866; }
 .album-tile.rar-legendary { border-color: #ffb14d77; box-shadow: 0 0 8px #ffb14d33; }
 /* アルバムのミニアート */
 .at-art { height: 38px; border-radius: 5px; overflow: hidden; margin-bottom: 2px; border: 1px solid #0006; }
@@ -634,8 +653,13 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   z-index: 100;
 }
 #overlay.show { display: flex; }
+/* 巻物の一葉: 上下端に「軸」の暗帯＋金泥の細線を inset shadow で描く
+   （枠のサイズを変えずに済み、中身がスクロールしても帯は端に留まる） */
 #dialog {
-  background: linear-gradient(180deg, #2a2340, var(--bg2) 120px);
+  background:
+    radial-gradient(ellipse at 16% 6%, #ffffff07, transparent 44%),
+    radial-gradient(ellipse at 86% 94%, #00000028, transparent 46%),
+    linear-gradient(180deg, #3a3120, var(--bg2) 140px);
   border: 1px solid var(--gold);
   outline: 1px solid #ffd76a33; /* 二重の額縁線 */
   outline-offset: 3px;
@@ -644,14 +668,16 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   max-width: 720px;
   max-height: 84vh;
   overflow-y: auto;
-  box-shadow: 0 12px 48px #000c, 0 0 30px #ffd76a22, inset 0 1px 0 #ffffff14;
+  box-shadow: 0 12px 48px #000c, 0 0 30px #ffd76a22,
+    inset 0 5px 0 #16110a, inset 0 6px 0 #c9a24d88,
+    inset 0 -5px 0 #16110a, inset 0 -6px 0 #c9a24d88;
 }
-#dialog h2 { font-size: 18px; color: var(--gold); margin-bottom: 8px; }
+#dialog h2 { font-family: var(--serif); font-size: 18px; color: var(--gold); margin-bottom: 8px; letter-spacing: 2px; }
 .dlg-body { font-size: 13.5px; color: var(--dim); line-height: 1.7; margin-bottom: 12px; }
 .dlg-body b { color: var(--gold); }
 .dlg-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .dlg-buttons { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
-/* ---------- 盤面タイルピッカー（領地選択ウインドウ・v25） ---------- */
+/* ---------- 盤面タイルピッカー（霊地選択ウインドウ・v25） ---------- */
 /* 候補は縦1列のリスト。ラベルが長くても折り返して全文が読める（スマホで右端が見切れないように）。
    候補が多いときはこの枠だけがスクロールし、下の「👁 盤面から選ぶ／やめる」は常に見える位置に残る */
 .tile-pick-list {
@@ -730,7 +756,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   outline: 1px solid #ffd76a14;
   outline-offset: 2px;
   border-radius: 12px;
-  background: radial-gradient(ellipse at 18% -10%, #352c4e, #1d1830 72%);
+  background: radial-gradient(ellipse at 18% -10%, #3b3120, #211b12 72%);
   position: relative;
   overflow: hidden;
 }
@@ -744,6 +770,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .ss-crest svg { display: block; width: 100%; height: 100%; }
 .ss-hero-main { flex: 1; min-width: 0; }
 .ss-hero h2 {
+  font-family: var(--serif);
   margin-bottom: 4px;
   letter-spacing: 2px;
   background: linear-gradient(180deg, #fff3c4 10%, #ffd76a 45%, #c9962e 75%, #ffe9a0);
@@ -759,7 +786,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   font-size: 11.5px;
   color: var(--dim);
   border: 1px solid var(--border);
-  background: #241e33cc;
+  background: #292217cc;
   border-radius: 20px;
   padding: 2px 10px;
   white-space: nowrap;
@@ -775,7 +802,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   outline: 1px solid #ffd76a14;
   outline-offset: 2px;
   border-radius: 12px;
-  background: radial-gradient(ellipse at 18% -10%, #352c4e, #1d1830 72%);
+  background: radial-gradient(ellipse at 18% -10%, #3b3120, #211b12 72%);
 }
 .sc-head { display: flex; align-items: center; gap: 14px; }
 .sc-face { flex: none; filter: drop-shadow(0 0 12px #ffd76a33); }
@@ -784,6 +811,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .sc-title { flex: 1; min-width: 0; }
 .sc-no { font-size: 11px; letter-spacing: 2px; color: var(--dim); }
 .sc-title h2 {
+  font-family: var(--serif);
   margin-bottom: 3px;
   letter-spacing: 2px;
   background: linear-gradient(180deg, #fff3c4 10%, #ffd76a 45%, #c9962e 75%, #ffe9a0);
@@ -811,7 +839,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   gap: 12px;
   width: 100%;
   text-align: left;
-  background: linear-gradient(180deg, #2e2742, #221c31);
+  background: linear-gradient(180deg, #332b1d, #262019);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -825,7 +853,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 }
 .stage-btn:hover:not(.locked) {
   border-color: var(--gold);
-  background: linear-gradient(180deg, #38304f, #292239);
+  background: linear-gradient(180deg, #3f351f, #2d2617);
   transform: translateX(3px);
   box-shadow: 0 0 12px #ffd76a22;
 }
@@ -849,7 +877,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   align-items: center;
   justify-content: center;
   font-size: 21px;
-  background: radial-gradient(circle at 35% 28%, #4a3f68, #241e33 72%);
+  background: radial-gradient(circle at 35% 28%, #4e4229, #292217 72%);
   border: 1px solid #ffd76a44;
   border-radius: 50%;
   box-shadow: inset 0 0 8px #000a, 0 0 8px #ffd76a22;
@@ -868,7 +896,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   vertical-align: 1.5px;
 }
 .st-star { font-size: 16px; width: 22px; text-align: center; filter: drop-shadow(0 0 6px #ffd76a88); }
-.stage-btn.diff-current { border-color: var(--gold); background: #332b48; box-shadow: 0 0 10px #ffd76a33; }
+.stage-btn.diff-current { border-color: var(--gold); background: #3a311e; box-shadow: 0 0 10px #ffd76a33; }
 
 /* ---------- バトル演出 ---------- */
 .battle-arena {
@@ -881,11 +909,11 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .fighter { text-align: center; }
 .f-side { font-size: 12px; color: var(--dim); margin-bottom: 6px; font-weight: bold; }
 .fighter.att .f-side { color: #ff9a7a; }
-.fighter.def .f-side { color: #7ab8ff; }
+.fighter.def .f-side { color: #8fb3e0; }
 .f-mods { margin-top: 6px; min-height: 20px; }
 .f-mod {
   display: inline-block;
-  background: #3a3050;
+  background: #3d3322;
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 1px 7px;
@@ -905,28 +933,28 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .bc-elems {
   display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
   margin: 4px 0 8px; padding: 6px 10px;
-  background: #221c33cc; border: 1px solid var(--border); border-radius: 10px;
+  background: #262019cc; border: 1px solid var(--border); border-radius: 10px;
 }
 .be-elem {
   display: inline-block; padding: 2px 10px; border-radius: 8px; font-weight: bold; font-size: 14px;
   border: 1.5px solid var(--ec, var(--border)); color: var(--ec, #fff);
-  background: #17131f; text-shadow: 0 1px 2px #000;
+  background: #1b1712; text-shadow: 0 1px 2px #000;
 }
 .be-rel { font-size: 13px; font-weight: bold; padding: 2px 10px; border-radius: 8px; }
 .be-rel.be-adv  { color: #8ee0a0; background: #1e3a24; box-shadow: 0 0 10px #57c26a44; }
 .be-rel.be-dis  { color: #ff9a8a; background: #3a1e1e; box-shadow: 0 0 10px #e0553744; }
 .be-rel.be-even { color: var(--dim); }
-.be-rel.be-none { color: #c8c2dd; }
+.be-rel.be-none { color: #d6cbae; }
 .bc-wheel { width: 100%; text-align: center; }
 /* 4すくみの輪（🔥→🌳→⛰️→💧→🔥）: 対戦中の2属性を光らせる */
 .elem-wheel { font-size: 11.5px; color: var(--dim); white-space: nowrap; }
 .ew-chip { display: inline-block; padding: 1px 5px; border-radius: 6px; color: var(--ec, var(--dim)); opacity: 0.55; }
 .ew-chip.ew-hl {
-  opacity: 1; font-weight: bold; background: #17131f;
+  opacity: 1; font-weight: bold; background: #1b1712;
   border: 1px solid var(--ec, var(--gold)); box-shadow: 0 0 8px var(--ec, #ffd76a);
 }
 .ew-arrow { color: var(--dim); opacity: 0.7; margin: 0 1px; }
-/* カード右上の相性リボン（侵略時のクリーチャー選択・v22） */
+/* カード右上の相性リボン（侵略時の式神選択・v22） */
 .c-ribbon {
   position: absolute; top: 30px; right: -6px; z-index: 4;
   font-size: 10.5px; font-weight: bold; padding: 2px 7px; border-radius: 6px;
@@ -936,7 +964,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .c-ribbon.rib-adv { background: #1e3a24; border: 1px solid #57c26a; color: #8ee0a0; }
 .c-ribbon.rib-dis { background: #3a1e1e; border: 1px solid #e05537; color: #ff9a8a; }
 #battle-log {
-  background: #17131f;
+  background: #1b1712;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 14px;
@@ -959,7 +987,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .album-h { font-size: 14px; color: var(--gold); margin: 12px 0 6px; border-bottom: 1px solid var(--border); padding-bottom: 3px; }
 .album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 7px; }
 .album-tile {
-  background: linear-gradient(180deg, #322a48, #262034);
+  background: linear-gradient(180deg, #372e1d, #2b2415);
   border: 1px solid var(--border); border-radius: 8px; padding: 6px 4px; text-align: center; position: relative;
 }
 .album-tile.locked { opacity: 0.4; filter: grayscale(0.6); }
@@ -972,12 +1000,12 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .album-tile.clickable { cursor: pointer; }
 .album-tile.clickable:hover { border-color: var(--gold); box-shadow: 0 0 10px #ffd76a44; }
 .disc-item.clickable { cursor: pointer; }
-.disc-item.clickable:hover { background: #332b48; }
+.disc-item.clickable:hover { background: #3a311e; }
 .pi-info {
   flex: none; font-size: 13px; padding: 1px 4px; border-radius: 6px; cursor: pointer;
   opacity: 0.6; border: 1px solid transparent;
 }
-.pi-info:hover { opacity: 1; background: #17131f; border-color: var(--gold); }
+.pi-info:hover { opacity: 1; background: #1b1712; border-color: var(--gold); }
 #card-pop {
   position: fixed; inset: 0; z-index: 280; /* ダイアログ(#overlay=100)の上に重なる独立レイヤー */
   display: none; align-items: center; justify-content: center;
@@ -985,12 +1013,16 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 }
 #card-pop.show { display: flex; }
 .cd-box {
-  background: linear-gradient(180deg, #2a2340, var(--bg2) 120px);
+  background:
+    radial-gradient(ellipse at 16% 6%, #ffffff07, transparent 44%),
+    linear-gradient(180deg, #3a3120, var(--bg2) 120px);
   border: 1px solid var(--gold);
   outline: 1px solid #ffd76a33; outline-offset: 3px;
   border-radius: 16px; padding: 20px 24px;
   max-width: min(92vw, 560px); max-height: 86vh; overflow-y: auto;
-  box-shadow: 0 12px 48px #000d, 0 0 30px #ffd76a22;
+  box-shadow: 0 12px 48px #000d, 0 0 30px #ffd76a22,
+    inset 0 4px 0 #16110a, inset 0 5px 0 #c9a24d77,
+    inset 0 -4px 0 #16110a, inset 0 -5px 0 #c9a24d77;
   position: relative;
 }
 .cd-close {
@@ -1001,18 +1033,18 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .cd-flex { display: flex; gap: 18px; align-items: flex-start; }
 .cd-card { flex: none; }
 .cd-info { flex: 1; min-width: 0; }
-.cd-name { font-size: 17px; font-weight: bold; color: var(--gold); margin-bottom: 8px; }
+.cd-name { font-family: var(--serif); font-size: 17px; font-weight: bold; color: var(--gold); margin-bottom: 8px; }
 .cd-row { display: flex; gap: 8px; font-size: 12.5px; line-height: 1.7; }
 .cd-k { flex: none; width: 64px; color: var(--dim); }
-.cd-v { flex: 1; color: #e8e2f5; }
+.cd-v { flex: 1; color: #eee5cf; }
 .cd-v b { color: var(--gold); }
 .cd-wheel { margin-top: 2px; }
 .cd-abs { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
 .cd-abs-t { font-size: 12px; color: var(--gold); font-weight: bold; margin-bottom: 4px; }
 .cd-ab { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; line-height: 1.6; margin-bottom: 4px; }
 .cd-ab b { flex: none; }
-.cd-ab span { color: #d8d2e8; }
-.cd-desc { font-size: 12.5px; color: #d8d2e8; line-height: 1.7; }
+.cd-ab span { color: #e4dac2; }
+.cd-desc { font-size: 12.5px; color: #e4dac2; line-height: 1.7; }
 .cd-hint { text-align: center; color: var(--dim); font-size: 11px; margin-top: 10px; }
 @media (max-width: 700px) {
   .cd-flex { flex-direction: column; align-items: center; }
@@ -1023,14 +1055,14 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .builder-col { flex: 1; min-width: 0; }
 .bc-title { font-size: 13px; color: var(--gold); font-weight: bold; margin-bottom: 5px; }
 .pool-list, .deck-list {
-  height: 44vh; overflow-y: auto; background: #1c1728; border: 1px solid var(--border);
+  height: 44vh; overflow-y: auto; background: #201a11; border: 1px solid var(--border);
   border-radius: 8px; padding: 5px;
 }
 .pool-item, .deck-item {
   display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 6px;
   font-size: 12px; cursor: pointer; border: 1px solid transparent;
 }
-.pool-item:hover, .deck-item:hover { background: #332b48; border-color: var(--gold); }
+.pool-item:hover, .deck-item:hover { background: #3a311e; border-color: var(--gold); }
 .pool-item.exhausted { opacity: 0.38; cursor: default; }
 .pool-item.exhausted:hover { background: transparent; border-color: transparent; }
 .pi-icon { font-size: 14px; }
@@ -1055,16 +1087,16 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .profile-row .stage-btn { flex: 1; }
 .profile-row .btn { align-self: center; }
 
-/* ---------- 伏せカード（共通のカードバック＝守護竜とマナ回路の紋章） ---------- */
+/* ---------- 伏せカード（共通のカードバック） ---------- */
 /* サイズは親（フリップの面や伏せ手札）いっぱいに広がる＝表面のカードと常に同寸になる */
 .card-back {
   width: 100%;
   height: 100%;
   border-radius: 10px;
   overflow: hidden;
-  border: 1.5px solid #6a5a8a;
+  border: 1.5px solid #7a6845;
   box-shadow: 0 3px 10px #0007, inset 0 0 14px #0009;
-  background: #1c1630;
+  background: #201910;
 }
 .card-back svg { display: block; width: 100%; height: 100%; }
 /* 2人対戦（ホットシート）: 交代中の伏せ手札（フリップカードと同寸） */
@@ -1090,7 +1122,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   justify-content: center;
   overflow: hidden;
 }
-/* 長いスペル説明は4行で省略（全文はアルバム・手札・ダイアログで読める） */
+/* 長い呪術説明は4行で省略（全文はアルバム・手札・ダイアログで読める） */
 .card.fixed .c-desc {
   min-height: 0;
   display: -webkit-box;
@@ -1149,8 +1181,8 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 /* ---------- BGMボタン（OFF時は薄く） ---------- */
 #bgm-btn.off { opacity: 0.4; }
 
-/* ---------- パック開封 ---------- */
-/* ① パック（クリックで封が弾け飛ぶ） */
+/* ---------- 文箱開封 ---------- */
+/* ① 文箱（クリックで封が弾け飛ぶ） */
 .pack-stage { text-align: center; padding: 8px 0 14px; }
 .pack-btn {
   background: none;
@@ -1213,8 +1245,8 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .pr-glow-rare .flip3d.revealed { animation: pr-ring-rare 0.9s ease; border-radius: 10px; }
 .pr-glow-legendary .flip3d.revealed { animation: pr-ring-legend 1.1s ease; border-radius: 10px; }
 @keyframes pr-ring-rare {
-  0% { box-shadow: 0 0 0 0 #4da3ffcc; }
-  100% { box-shadow: 0 0 26px 14px #4da3ff00; }
+  0% { box-shadow: 0 0 0 0 #5b9bd8cc; }
+  100% { box-shadow: 0 0 26px 14px #5b9bd800; }
 }
 @keyframes pr-ring-legend {
   0% { box-shadow: 0 0 0 0 #ffd76add; }
@@ -1230,7 +1262,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at center, #100c1cd8, #05030aee 75%);
+  background: radial-gradient(ellipse at center, #141008d8, #080603ee 75%);
   overflow: hidden;
 }
 #battle-cutin.bc-out { transition: opacity 0.3s; opacity: 0; }
@@ -1246,6 +1278,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 @keyframes bc-lines { from { transform: translateX(0); } to { transform: translateX(133px); } }
 .bc-inner { width: min(94vw, 720px); position: relative; z-index: 1; }
 .bc-title {
+  font-family: var(--serif);
   text-align: center;
   color: var(--gold);
   font-size: 22px;
@@ -1289,8 +1322,8 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 @keyframes bc-flash-crit { 0% { opacity: 0; background: #ffd76a; } 25% { opacity: 0.55; background: #ffd76a; } 100% { opacity: 0; } }
 .bc-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 #battle-cutin.bc-skipping #battle-skip { opacity: 0.4; pointer-events: none; }
-#battle-cutin #battle-log { background: #17131fd9; }
-#battle-log .formula { color: #9a92b5; font-size: 11.5px; }
+#battle-cutin #battle-log { background: #1b1712d9; }
+#battle-log .formula { color: #a2967a; font-size: 11.5px; }
 
 /* ---------- 勝利の祝福 ---------- */
 #victory-fx {
@@ -1333,6 +1366,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   right: 0;
   top: 26%;
   text-align: center;
+  font-family: var(--serif);
   font-size: clamp(42px, 9vw, 76px);
   font-weight: bold;
   letter-spacing: 10px;
@@ -1377,16 +1411,16 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(ellipse at 50% 118%, #3a2c58 0%, transparent 55%),
-    radial-gradient(ellipse at 50% -10%, #2b2340 0%, #17131f 55%, #0d0a16 100%);
+    radial-gradient(ellipse at 50% 118%, #463824 0%, transparent 55%),
+    radial-gradient(ellipse at 50% -10%, #332a1f 0%, #1b1712 55%, #0f0c07 100%);
 }
 #title-screen.ts-out { transition: opacity 0.65s ease; opacity: 0; }
-/* マナの粒子（明滅する星） */
+/* 金砂の粒子（夜の絵巻に散る金箔のきらめき） */
 .ts-star {
   position: absolute;
   border-radius: 50%;
-  background: #d9d2f2;
-  box-shadow: 0 0 6px #d9d2f288;
+  background: #f0e2b8;
+  box-shadow: 0 0 6px #f0e2b888;
   animation: ts-twinkle 3s ease-in-out infinite;
 }
 @keyframes ts-twinkle { 0%, 100% { opacity: 0.08; } 50% { opacity: 0.85; } }
@@ -1400,6 +1434,8 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .ts-emblem svg { display: block; width: 100%; height: auto; }
 @keyframes ts-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
 .ts-title {
+  font-family: var(--serif); /* 絵巻の題字は明朝 */
+  font-weight: bold;
   font-size: clamp(34px, 9vw, 58px);
   letter-spacing: 12px;
   padding-left: 12px; /* letter-spacingの右余白ぶんを相殺して中央に */
@@ -1410,7 +1446,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   color: transparent;
   filter: drop-shadow(0 0 18px #ffd76a55) drop-shadow(0 3px 3px #000);
 }
-.ts-sub { color: #c9b874; letter-spacing: 7px; font-size: clamp(10px, 2.4vw, 13px); margin-top: 2px; opacity: 0.85; }
+.ts-sub { font-family: var(--serif); color: #c9b874; letter-spacing: 7px; font-size: clamp(10px, 2.4vw, 13px); margin-top: 2px; opacity: 0.85; }
 .ts-flavor {
   color: var(--dim);
   line-height: 2.05;
@@ -1427,7 +1463,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   text-shadow: 0 0 12px #ffd76a66;
 }
 @keyframes ts-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
-/* 地平に並ぶクリーチャーのシルエット */
+/* 地平に並ぶ式神のシルエット */
 .ts-frieze { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none; opacity: 0.95; }
 .ts-frieze svg { display: block; width: 100%; height: auto; max-height: 17vh; margin: 0 auto; }
 
@@ -1500,7 +1536,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   #hud-top { padding: 0 6px 3px; gap: 3px; }
   #dialog { padding: 14px 14px; max-width: 94vw; max-height: 88vh; max-height: 88dvh; overflow-x: hidden; }
   #dialog h2 { font-size: 16px; }
-  /* 領地選択ウインドウ（v25）: 縦リストをやや低くして、下の操作ボタンが必ず画面に入るようにする */
+  /* 霊地選択ウインドウ（v25）: 縦リストをやや低くして、下の操作ボタンが必ず画面に入るようにする */
   .tile-pick-list { max-height: 40vh; max-height: 40dvh; gap: 7px; }
   .btn.tile-pick { font-size: 13px; padding: 9px 11px; gap: 7px; }
   /* 3列に詰めるため、情報窓は3行目（連鎖・関門・周回・山札）を畳んで名前＋金額＋バーの3行にする。
@@ -1509,7 +1545,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   .ps-top { font-size: 11.5px; gap: 3px; }
   .ps-magic { font-size: 10px; }
   .ps-assets { font-size: 10px; }
-  /* 魔力・総資産で1行使い、バーは折り返して独立した行にする（横に3つ並べると潰れる） */
+  /* 霊力・総資産で1行使い、バーは折り返して独立した行にする（横に3つ並べると潰れる） */
   .ps-mid { gap: 5px; margin: 2px 0 1px; flex-wrap: wrap; }
   .ps-bar { flex: 1 1 100%; }
   .pstrip { padding: 4px 6px 5px; }
@@ -1567,7 +1603,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
   align-items: center;
   gap: 9px;
   max-width: min(86vw, 460px);
-  background: rgba(30, 24, 44, 0.96);
+  background: rgba(42, 35, 26, 0.96);
   border: 1.5px solid var(--border);
   border-radius: 14px;
   padding: 7px 14px 7px 8px;
@@ -1583,7 +1619,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 #cpu-bubble .cb-text { font-size: 13px; color: var(--text); line-height: 1.45; }
 
 /* ---------- ポップアップ通知（ui.js toast・非ブロッキング） ---------- */
-/* 📜ログを閉じて遊んでいても「スペルの効果」「機能停止」などの影響が伝わるように、
+/* 📜ログを閉じて遊んでいても「呪術の効果」「機能停止」などの影響が伝わるように、
    画面上部に短く出してすぐ消える。ダイアログ(#overlay=100)・バトルカットイン(120)より上、
    カード詳細(280)・タイトル(300)より下。pointer-events:none で操作は一切奪わない */
 #toast-stack {
@@ -1603,9 +1639,9 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 }
 .toast {
   width: 100%;
-  background: rgba(30, 24, 44, 0.97);
+  background: rgba(42, 35, 26, 0.97);
   border: 1.5px solid var(--border);
-  border-left: 4px solid #b9a3ff; /* 既定＝スペルの効果 */
+  border-left: 4px solid #a9c0e8; /* 既定＝呪術の効果 */
   border-radius: 12px;
   padding: 7px 13px;
   font-size: 13px;
@@ -1618,7 +1654,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 }
 .toast.t-in { opacity: 1; transform: translateY(0); }
 .toast.t-out { opacity: 0; transform: translateY(-8px); }
-.toast.t-warn { border-left-color: #ffb84d; }    /* 妨害・機能停止・魔力不足など */
+.toast.t-warn { border-left-color: #ffb84d; }    /* 妨害・機能停止・霊力不足など */
 .toast.t-battle { border-left-color: #ff9a7a; }  /* バトルで発動した特性 */
 .toast.t-sys { border-left-color: var(--gold); }
 
@@ -1636,7 +1672,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .vs-portrait { flex: none; display: flex; filter: drop-shadow(0 3px 8px #0008); }
 .vs-info { min-width: 0; }
 .vs-title { font-size: 11.5px; letter-spacing: 1px; }
-.vs-name { font-size: 17px; font-weight: bold; margin: 1px 0 4px; }
+.vs-name { font-family: var(--serif); font-size: 17px; font-weight: bold; margin: 1px 0 4px; }
 .vs-quote { font-size: 12.5px; color: var(--dim); line-height: 1.55; }
 .vs-and { text-align: center; color: var(--gold); font-weight: bold; font-size: 13px; }
 .vs-stage { text-align: center; color: var(--dim); font-size: 12.5px; margin-top: 4px; }
@@ -1668,7 +1704,7 @@ body.map-focus #hud-bar::before {
   content: "🗺 マップ確認モード";
   flex: none;
   font-size: 11.5px;
-  color: #1a1526;
+  color: #26200f;
   background: linear-gradient(180deg, #ffe9a0, #ffd76a);
   border-radius: 8px;
   padding: 1px 8px;
