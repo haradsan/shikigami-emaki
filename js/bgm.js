@@ -28,7 +28,7 @@
 "use strict";
 
 const BGM = (() => {
-  const KEY = "mana-circuit-bgm"; // ON/OFF はプレイヤー共通
+  const KEY = "shiki-emaki-bgm"; // ON/OFF はプレイヤー共通
   let ctx = null, master = null, timer = null;
   let nextTime = 0, step = 0;
   let enabled = false; // ユーザーの希望（ONでも再生開始はユーザー操作後）

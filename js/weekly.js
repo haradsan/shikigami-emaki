@@ -6,7 +6,7 @@
 // ============================================================
 "use strict";
 
-const WEEKLY_KEY = "mana-circuit-weekly"; // ON/OFF はプレイヤー共通
+const WEEKLY_KEY = "shiki-emaki-weekly"; // ON/OFF はプレイヤー共通
 const WEEKLY_BONUS_CARDS = 2; // ONで正規対戦に勝ったときの追加報酬
 
 // apply(r): DEFAULT_RULES＋ステージrules 適用後の RULES をさらに上書きする。

@@ -38,7 +38,7 @@ function aiNearTilesOfOpponents(g, p) {
 // ---------- ゲーム難易度（イージー / ノーマル / ハード） ----------
 // 各ステージ固有のプロファイル（相手ごとの違い）に、プレイヤーが選ぶ全体難易度の補正を掛け合わせる。
 // ＝「相手ごとの強さの違い」と「全体の手ごたえ」を独立に調整できる（req11）。
-const DIFFICULTY_KEY = "mana-circuit-difficulty";
+const DIFFICULTY_KEY = "shiki-emaki-difficulty";
 const DIFFICULTIES = {
   easy:   { label: "イージー", icon: "🟢", desc: "CPUは開発も侵略も控えめで弱いデッキ・資金も少なめ。じっくり攻めれば勝てる",
             reserveMul: 1.5, invadeRatioMul: 1.4, deckMaxCostMul: 0.8, hesitateAdd: 0.2,  levelSingleAdd: -1, magicAdd: -140 },

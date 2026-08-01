@@ -859,7 +859,7 @@ const CARD_BACK_SVG = (() => {
     <rect x="4" y="4" width="112" height="160" rx="9" fill="none" stroke="url(#agGold)" stroke-width="2"/>
     <rect x="8.5" y="8.5" width="103" height="151" rx="7" fill="none" stroke="#8a7a4a" stroke-width="0.8" opacity="0.7"/>
     ${corner(16, 17)}${corner(104, 17)}${corner(16, 151)}${corner(104, 151)}
-    <text x="60" y="161.5" text-anchor="middle" font-size="6.5" fill="#c9b874" letter-spacing="2.5" opacity="0.85">✦ MANA CIRCUIT ✦</text>
+    <text x="60" y="161.5" text-anchor="middle" font-size="6.5" fill="#c9b874" letter-spacing="2.5" opacity="0.85">✦ SHIKIGAMI EMAKI ✦</text>
   </svg>`;
 })();
 const CARD_BACK_HTML = `<div class="card-back">${CARD_BACK_SVG}</div>`;

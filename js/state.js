@@ -23,7 +23,7 @@ let RULES = { ...DEFAULT_RULES };
 const HAND_LIMIT  = 6;
 // ---------- 決着モード（対戦の長さ・全員共通の設定） ----------
 // 目標資産とラウンド上限に倍率を掛けて、短期決戦〜じっくり長期戦を選べる（トレーニングには適用しない）
-const MATCH_LENGTH_KEY = "mana-circuit-matchlen";
+const MATCH_LENGTH_KEY = "shiki-emaki-matchlen";
 const MATCH_LENGTHS = {
   blitz:  { label: "短期戦", icon: "⚡", targetMul: 0.75, roundsMul: 0.85, desc: "目標資産 -25%・ラウンド上限 -15%。テンポよくサクッと決着" },
   normal: { label: "標準",   icon: "🏳", targetMul: 1,    roundsMul: 1,    desc: "ステージ本来の目標資産とラウンド上限で戦う" },

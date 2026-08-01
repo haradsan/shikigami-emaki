@@ -509,7 +509,7 @@ function validateStages() {
 validateStages();
 
 // ---------- 進行度（localStorage・プレイヤープロファイル別） ----------
-const PROGRESS_KEY = "mana-circuit-progress";
+const PROGRESS_KEY = "shiki-emaki-progress";
 
 function loadProgress() {
   try {

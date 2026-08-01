@@ -3,7 +3,7 @@
 // ============================================================
 "use strict";
 
-const COLLECTION_KEY = "mana-circuit-collection";
+const COLLECTION_KEY = "shiki-emaki-collection";
 const DECK_SIZE     = 30;   // 構築デッキの枚数（現行の自動デッキと同じ）
 const MAX_COPIES    = 3;    // 同名カードの上限
 const MIN_CREATURES = 12;   // デッキに必要な最低クリーチャー数（土地を確保できるように）

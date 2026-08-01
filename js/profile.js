@@ -5,7 +5,7 @@
 // ============================================================
 "use strict";
 
-const PROFILE_KEY = "mana-circuit-profiles"; // プロファイル一覧はプレイヤー共通で1つ
+const PROFILE_KEY = "shiki-emaki-profiles"; // プロファイル一覧はプレイヤー共通で1つ
 const PROFILE_COUNT = 5;
 
 function defaultProfiles() {

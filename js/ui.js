@@ -547,11 +547,11 @@ function showTitleScreen() {
       ${stars}
       <div class="ts-center">
         <div class="ts-emblem">${TITLE_EMBLEM_SVG}</div>
-        <h1 class="ts-title">マナサーキット</h1>
-        <div class="ts-sub">— MANA CIRCUIT —</div>
-        <p class="ts-flavor">大地に張り巡らされた魔力の回路が、いま目を覚ます。<br>
-          クリーチャーを従え、土地を繋ぎ、四大のマナを我が手に。<br>
-          環を制する者こそ、次代の大魔導師。</p>
+        <h1 class="ts-title">式神絵巻</h1>
+        <div class="ts-sub">— SHIKIGAMI EMAKI —</div>
+        <p class="ts-flavor">古の絵巻に封じられた霊脈が、いま解き放たれる。<br>
+          呪符より式神を呼び覚まし、霊地を結び、五つの神器を求めよ。<br>
+          絵巻を制する者こそ、当代随一の陰陽師。</p>
         <div class="ts-start">✦ クリック / タップ で始める ✦</div>
       </div>
       <div class="ts-frieze">${TITLE_FRIEZE_SVG}</div>`;
@@ -607,7 +607,7 @@ function fitBoard(opts = {}) {
 // 各ウィンドウの「✕」も同じ関数を呼ぶ（＝状態が1か所に集まって食い違わない）。
 // 選んだ状態は localStorage に残す（毎回同じ好みで遊べるように）。
 // ============================================================
-const HUD_PREF_KEY = "mana-circuit-hud";
+const HUD_PREF_KEY = "shiki-emaki-hud";
 // 既定: 情報窓＝出す／ログ＝広い画面だけ出す（狭い画面ではログが盤面に重なるため既定オフ。
 // 通知トースト（v26）があるので閉じていても重要な出来事は分かる）／手札＝開いた状態
 function defaultHudPrefs() {
@@ -630,7 +630,7 @@ function saveHudPrefs() {
   try { localStorage.setItem(HUD_PREF_KEY, JSON.stringify(HUD_PREFS)); } catch (e) { /* 無視 */ }
 }
 // v27でレイアウトが変わったので、最初の1回だけ切り替え方を案内する（保存できない環境では出さない）
-const HUD_HINT_KEY = "mana-circuit-hint-v27";
+const HUD_HINT_KEY = "shiki-emaki-hint-v27";
 function showLayoutHintOnce() {
   try {
     if (localStorage.getItem(HUD_HINT_KEY)) return;
