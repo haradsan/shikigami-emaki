@@ -1,5 +1,5 @@
 // ============================================================
-// collection.js — カード収集とデッキ構築（localStorage永続化・第一巻100種アルバム）
+// collection.js — カード収集とデッキ構築（localStorage永続化・壱の巻100種アルバム）
 // ============================================================
 "use strict";
 
@@ -12,8 +12,8 @@ const DECK_SLOTS    = 5;    // プレイヤーごとに保存できるデッキ�
 // レア度（cardRarity / RARITY_WEIGHT / RARITY_META）は cards.js で定義。文箱の排出重みに使う。
 
 // ---------- 永続化（プレイヤープロファイル別） ----------
-// スターター: 第一巻のコスト75以下のカードを各2枚（最初から30枚デッキを組める）。高コストは文箱で集める。
-// 無属性式神は稀以上の特別枠、第二巻は文箱・交換所で集める（スターターには含めない）
+// スターター: 壱の巻のコスト75以下のカードを各2枚（最初から30枚デッキを組める）。高コストは文箱で集める。
+// 無属性式神は稀以上の特別枠、弐の巻は文箱・交換所で集める（スターターには含めない）
 function defaultCollection() {
   const owned = {};
   CARD_DB.forEach(c => { if (c.cost <= 75 && c.element !== "neutral" && cardSet(c) === 1) owned[c.id] = 2; });
@@ -34,6 +34,16 @@ function loadCollection() {
       }
       while (c.decks.length < DECK_SLOTS) c.decks.push(null);
       c.activeDeck = Math.min(Math.max(0, c.activeDeck | 0), DECK_SLOTS - 1);
+      // v30「五行改元」: カード全面刷新の移行。存在しない旧カードidを所持から除き、
+      // 旧カード入りの保存デッキは解除（→自動デッキにフォールバック）。所持が旧世代だけだった
+      // プレイヤーにはスターターを配り直す（枚数は既存所持と高い方を採用）
+      if (Object.keys(c.owned).some(id => !CARD_BY_ID[id])) {
+        Object.keys(c.owned).forEach(id => { if (!CARD_BY_ID[id]) delete c.owned[id]; });
+        c.decks = c.decks.map(d => (Array.isArray(d) && d.every(id => CARD_BY_ID[id])) ? d : null);
+        const starter = defaultCollection().owned;
+        Object.entries(starter).forEach(([id, n]) => { c.owned[id] = Math.max(c.owned[id] || 0, n); });
+        saveCollection(c);
+      }
       return c;
     }
   } catch (e) { /* 壊れていたら初期化 */ }
@@ -74,7 +84,7 @@ function rollRarity(minRarity = null) {
 //   ＝5枚報酬はレア1枚保証／3枚はアンコモン1枚保証／初クリア10枚はレア2枚以上保証（枚数が倍なので保証も倍が妥当）。
 // 「残り枠を全部使わないと保証枚数に届かない」状況になったら、その枠から保証レア度以上へ格上げする方式。
 // お試し重視で希少性は緩め＝毎回の開封に“当たり枠”があるようにして楽しさを優先する。
-// set: 排出する巻（1=第一巻／2=第二巻。v19で巻別の文箱に）
+// set: 排出する巻（1=壱の巻／2=弐の巻。v19で巻別の文箱に）
 function drawPack(n = 3, guarantee = "uncommon", guaranteeCount = 1, set = 1) {
   const out = [];
   const rank = r => RARITY_ORDER.indexOf(r);
@@ -97,7 +107,7 @@ const GUARANTEE_FIRST_CLEAR = 2; // 初クリアは稀以上を2枚保証（10�
 const TRAINING_STREAK_FOR_RARE = 3; // 稽古連勝ボーナス: この連勝数からは毎回稀以上1枚保証
 
 // ステージ初クリアで大型文箱（10枚・稀以上2枚保証）。既に付与済みなら null。
-// set: 報酬文箱の巻（v19＝勝利時に第一巻/第二巻を選べる）
+// set: 報酬文箱の巻（v19＝勝利時に壱の巻/弐の巻を選べる）
 function grantStageClearPack(stageId, n = REWARD_FIRST_CLEAR, set = 1) {
   const c = loadCollection();
   if (c.packsGiven[stageId]) return null;
@@ -246,7 +256,7 @@ function showAlbum() {
       cards.map(c => albumTile(c, owned[c.id] || 0)).join("") + `</div>`;
     let html = `<h2>📚 カードアルバム <span class="album-count">${distinctOwned()} / ${CARD_DB.length} 種 収集</span></h2>`;
     html += `<div class="album-scroll">`;
-    // 巻（第一巻／第二巻）ごとにまとめて表示（v19）
+    // 巻（壱の巻／弐の巻）ごとにまとめて表示（v19）
     CARD_SETS.forEach(s => {
       const inSet = CARD_DB.filter(c => cardSet(c) === s.set);
       const have = inSet.filter(c => (owned[c.id] || 0) > 0).length;
@@ -354,7 +364,7 @@ function showDeckBuilder() {
 
 // ---------- ♻️ ポイント交換所（v19。旧「カード工房」の生成機能を廃止して置き換え） ----------
 // 同名4枚目以降（MAX_COPIES=3を超える余剰分）を🎟文箱ポイントにスクラップし、
-// 貯めたポイントで第一巻/第二巻の文箱（5枚入り）を購入できる。
+// 貯めたポイントで壱の巻/弐の巻の文箱（5枚入り）を購入できる。
 // 「任意カードの直接生成」は廃止（原さん指定）＝コンプの出口は購入文箱の【救いの回】が担う:
 // 文箱購入10回ごとに1枠が「未所持カード確定」になる（レア度抽選は通常どおり＝簡単には出ない）。
 const SHARD_DISMANTLE = { common: 1, uncommon: 2, rare: 4, legendary: 8 }; // スクラップで得るポイント
@@ -719,7 +729,7 @@ function showPackReveal(cardIds, title, sub, opts = {}) {
 }
 
 // ---------- 🎁 封符戦（v21） ----------
-// その場で第一巻5＋第二巻5文箱（各5枚＝計50枚）を開封し、出たカードだけで30枚デッキを組んで1戦。
+// その場で壱の巻5＋弐の巻5文箱（各5枚＝計50枚）を開封し、出たカードだけで30枚デッキを組んで1戦。
 // 開封したプールはコレクションに加算しない（使い捨て）＝コレクションが浅いプロファイルでも対等に遊べる。
 const SEALED_PACKS_PER_SET = 5;
 const SEALED_PACK_SIZE = 5;

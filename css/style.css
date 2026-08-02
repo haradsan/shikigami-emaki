@@ -521,6 +521,7 @@ body.hand-min #win-hand .win-head { margin-bottom: 0; }
 .card.el-wood  { border-color: #4e9a2faa; }
 .card.el-water { border-color: #3d7de0aa; }
 .card.el-earth { border-color: #8a6b3aaa; }
+.card.el-metal { border-color: #c9a227aa; } /* 金（五行・v30） */
 .card.el-neutral { border-color: #a89f8faa; } /* 無属性（v13） */
 .card.spell    { border-color: #9678b4aa; }
 .card.item     { border-color: #c9a755aa; }

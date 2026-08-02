@@ -51,7 +51,7 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   if (attCardNulled) log.push(`🌫️ ${attCard.name}は無力化の霧に包まれている——能力を使えない！`);
   if (defCardNulled) log.push(`🌫️ ${defCard.name}は無力化の霧に包まれている——能力を使えない！`);
 
-  // 宝具打消し: 🚫nullify宝具（解呪の御札）または能力「看破」（天邪鬼・v19）。
+  // 宝具打消し: 🚫nullify宝具（清めの塩）または能力「看破」（v19）。
   // 看破は宝具ではないので打ち消されない（ただし無力化の霧では消える）
   const attDispel = !attCardNulled && (attCard.ab || []).includes("dispel");
   const defDispel = !defCardNulled && (defCard.ab || []).includes("dispel");
@@ -151,12 +151,14 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   if (defPack > 0 && !defScroll) log.push(`🐺 ${defCard.name}の百鬼！ 仲間の数だけST+${defPack}`);
   if (RULES.invaderSt > 0) log.push(`🏟 闘技場の熱気！ 侵略側ST+${RULES.invaderSt}`);
   if (support > 0 && !defScroll) log.push(`🏯 ${defCard.name}は隣接する味方霊地の援護！ ST+${support}`);
-  if (advAtt && !attScroll) log.push(`${ELEMENTS[attCard.element].icon} 属性の優位！ ${attCard.name}のST+${ELEM_ADV_ST}`);
-  if (advDef && !defScroll) log.push(`${ELEMENTS[defCard.element].icon} 属性の優位！ ${defCard.name}のST+${ELEM_ADV_ST}`);
+  if (advAtt && !attScroll) log.push(`${ELEMENTS[attCard.element].icon} 相剋！ ${ELEMENTS[attCard.element].name}は${ELEMENTS[defCard.element].name}を剋す — ${attCard.name}のST+${ELEM_ADV_ST}`);
+  if (advDef && !defScroll) log.push(`${ELEMENTS[defCard.element].icon} 相剋！ ${ELEMENTS[defCard.element].name}は${ELEMENTS[attCard.element].name}を剋す — ${defCard.name}のST+${ELEM_ADV_ST}`);
   if (attAb.has("pierce") && landHpBonus(tile, defCard) > 0) {
     log.push(`⚔ ${attCard.name}の破魔！ 土地ボーナス無効`);
   } else if (defBonus > 0) {
-    log.push(`🛡 ${defCard.name}は土地の加護でHP+${defBonus}`);
+    log.push(isSouseiBlessed(tile, defCard)
+      ? `🌱 相生の恵み！ ${ELEMENTS[tile.element].name}は${ELEMENTS[defCard.element].name}を生む — ${defCard.name}のHP+${defBonus}`
+      : `🛡 ${defCard.name}は土地の加護でHP+${defBonus}`);
   }
   if (guardBonus > 0) log.push(`🛡 ${defCard.name}の守護！ HP+${guardBonus}`);
   if (blightHp > 0) log.push(`🔥 ${defCard.name}の焦土！ HP+${blightHp}（このバトルの後、土地は痩せる）`);
@@ -197,13 +199,13 @@ function resolveBattle(attCard, tile, attItem = null, defItem = null, opts = {})
   if (attScroll > 0) {
     log.push(`📊【式】侵略 ${attCard.name}: ST ${attSt}（📜巻物固定） ／ HP ${bd(attHp, attCard.hp, [["成長", attGrown * GROW_STEP], ["装備", attExtra]])}`);
   } else {
-    log.push(`📊【式】侵略 ${attCard.name}: ST ${bd(attSt, attCard.st, [["装備", attItemEff ? attItemEff.st : 0], ["強襲", attAb.has("assault") ? 20 : 0], ["属性", advAtt ? ELEM_ADV_ST : 0], ["成長", attGrown * GROW_STEP], ["百鬼", attPack], ["加勢", attCheer], ["闘技場", RULES.invaderSt]])} ／ HP ${bd(attHp, attCard.hp, [["成長", attGrown * GROW_STEP], ["装備", attItemEff ? attItemEff.hp : 0], ["加勢", attCheer]])}`);
+    log.push(`📊【式】侵略 ${attCard.name}: ST ${bd(attSt, attCard.st, [["装備", attItemEff ? attItemEff.st : 0], ["強襲", attAb.has("assault") ? 20 : 0], ["相剋", advAtt ? ELEM_ADV_ST : 0], ["成長", attGrown * GROW_STEP], ["百鬼", attPack], ["加勢", attCheer], ["闘技場", RULES.invaderSt]])} ／ HP ${bd(attHp, attCard.hp, [["成長", attGrown * GROW_STEP], ["装備", attItemEff ? attItemEff.hp : 0], ["加勢", attCheer]])}`);
   }
-  const defHpParts = [["装備", defItemEff ? defItemEff.hp : 0], ["土地の加護", defBonus], ["守護", guardBonus], ["焦土", blightHp], ["加勢", defCheer], ["護りの風", defWindHp]];
+  const defHpParts = [["装備", defItemEff ? defItemEff.hp : 0], [isSouseiBlessed(tile, defCard) ? "相生の恵み" : "土地の加護", defBonus], ["守護", guardBonus], ["焦土", blightHp], ["加勢", defCheer], ["護りの風", defWindHp]];
   if (defScroll > 0) {
     log.push(`📊【式】防衛 ${defCard.name}: ST ${defSt}（📜巻物固定） ／ HP ${bd(defHp, defBaseHp, defHpParts)}`);
   } else {
-    log.push(`📊【式】防衛 ${defCard.name}: ST ${bd(defSt, defCard.st, [["装備", defItemEff ? defItemEff.st : 0], ["属性", advDef ? ELEM_ADV_ST : 0], ["成長", defGrown * GROW_STEP], ["百鬼", defPack], ["援護", support], ["加勢", defCheer]])} ／ HP ${bd(defHp, defBaseHp, defHpParts)}`);
+    log.push(`📊【式】防衛 ${defCard.name}: ST ${bd(defSt, defCard.st, [["装備", defItemEff ? defItemEff.st : 0], ["相剋", advDef ? ELEM_ADV_ST : 0], ["成長", defGrown * GROW_STEP], ["百鬼", defPack], ["援護", support], ["加勢", defCheer]])} ／ HP ${bd(defHp, defBaseHp, defHpParts)}`);
   }
   // 侵略は「一撃で相手の実効HPを削り切れば占領」。硬殻は一撃ごとに-10されるためここで織り込む。
   const attBlocked = !attMagic && (defAb.has("physnull") || defAb.has("physreflect")); // 侵略の攻撃が通らない

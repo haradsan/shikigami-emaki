@@ -38,10 +38,12 @@ const TILE_LABELS = { CASTLE: "本宮", GATE: "鳥居", CARD: "札", MAGIC: "霊
 
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-// 式神と土地の属性関係の注記（ダイアログ用）。無属性は一致も不一致もしない（土地の加護なし）
+// 式神と土地の属性関係の注記（ダイアログ用）。無属性は一致も相生もしない（土地の加護・恵みなし）
 function elemNote(card, tile) {
   if (card.element === "neutral") return "・<b>無属性</b>（土地の加護なし）";
-  return card.element !== tile.element ? "・<b>属性不一致</b>" : "・属性一致";
+  if (card.element === tile.element) return "・属性一致（土地の加護）";
+  if (isSouseiParent(tile.element, card.element)) return `・<b>相生の恵み</b>（防衛HP+${SOUSEI_HP}）`;
+  return "・<b>属性不一致</b>";
 }
 
 // ---------- 盤面 ----------
@@ -358,20 +360,28 @@ function cardHTML(c, opts = {}) {
     <div class="c-shine"></div></div>`;
 }
 
-// 属性相性（4すくみ）の関係を返す: "adv"=meが有利 / "dis"=meが不利 / "even"=互角 / "none"=無属性が絡む（輪の外）
+// 五行・相剋の関係を返す: "adv"=meが剋す / "dis"=meが剋される / "even"=互角 / "none"=無属性が絡む（輪の外）
 function elemRelation(myElem, foeElem) {
   if (myElem === "neutral" || foeElem === "neutral") return "none";
   if (hasElemAdvantage(myElem, foeElem)) return "adv";
   if (hasElemAdvantage(foeElem, myElem)) return "dis";
   return "even";
 }
-// 相性の輪（🔥→🌳→⛰️→💧→🔥）のミニ表示。hl に指定した属性を光らせる
+// 相剋の輪（🌳剋⛰️剋💧剋🔥剋🪙剋🌳）のミニ表示。hl に指定した属性を光らせる
 function elemWheelHTML(hl = []) {
-  const ring = ["fire", "wood", "earth", "water"];
+  const ring = ["wood", "earth", "water", "fire", "metal"]; // 相剋順: 木剋土・土剋水・水剋火・火剋金・金剋木
   const chip = e => `<span class="ew-chip ${hl.includes(e) ? "ew-hl" : ""}" style="--ec:${ELEMENTS[e].color}">${ELEMENTS[e].icon}${ELEMENTS[e].name}</span>`;
-  return `<span class="elem-wheel" title="属性相性の輪: 左が右に強い（4すくみ）">` +
-    ring.map(chip).join(`<span class="ew-arrow">→</span>`) +
-    `<span class="ew-arrow">→</span>${chip("fire")}</span>`;
+  return `<span class="elem-wheel" title="相剋の輪: 左が右を剋す（打ち破る）">` +
+    ring.map(chip).join(`<span class="ew-arrow">剋</span>`) +
+    `<span class="ew-arrow">剋</span>${chip("wood")}</span>`;
+}
+// 相生の輪（🌳生🔥生⛰️生🪙生💧生🌳）のミニ表示（カード詳細・ヘルプ用）
+function souseiWheelHTML(hl = []) {
+  const ring = ["wood", "fire", "earth", "metal", "water"]; // 相生順: 木生火・火生土・土生金・金生水・水生木
+  const chip = e => `<span class="ew-chip ${hl.includes(e) ? "ew-hl" : ""}" style="--ec:${ELEMENTS[e].color}">${ELEMENTS[e].icon}${ELEMENTS[e].name}</span>`;
+  return `<span class="elem-wheel" title="相生の輪: 左が右を生み育てる">` +
+    ring.map(chip).join(`<span class="ew-arrow">生</span>`) +
+    `<span class="ew-arrow">生</span>${chip("wood")}</span>`;
 }
 
 // ---------- カード詳細ポップアップ（v22） ----------
@@ -398,13 +408,17 @@ function showCardDetail(cardId) {
   if (c.type === "creature") {
     info += row("ST / HP", `⚔ ${c.st} ／ ❤️ ${c.hp}`);
     if (c.element === "neutral") {
-      info += row("属性相性", `⚪ 相性の輪の<b>外</b>＝有利・不利なし（土地の加護も受けない）`);
+      info += row("五行", `⚪ 五行の輪の<b>外</b>＝相剋・相生なし（土地の加護・恵みも受けない）`);
     } else {
-      const beats = ELEM_ADVANTAGE[c.element]; // この属性が有利を取る相手
-      const beatenBy = LAND_ELEMENTS.find(e => ELEM_ADVANTAGE[e] === c.element); // この属性に有利を取る相手
-      info += row("属性相性", `${ELEMENTS[beats].icon}${ELEMENTS[beats].name}に<b>有利</b>（ST+${ELEM_ADV_ST}）／` +
-        `${ELEMENTS[beatenBy].icon}${ELEMENTS[beatenBy].name}が<b>苦手</b>（相手にST+${ELEM_ADV_ST}）` +
+      const beats = ELEM_ADVANTAGE[c.element]; // この属性が剋す相手
+      const beatenBy = LAND_ELEMENTS.find(e => ELEM_ADVANTAGE[e] === c.element); // この属性を剋す相手
+      const parent = souseiParentOf(c.element); // この属性を生む親属性（恵みを受けられる土地）
+      info += row("相剋", `${ELEMENTS[beats].icon}${ELEMENTS[beats].name}を<b>剋す</b>（ST+${ELEM_ADV_ST}）／` +
+        `${ELEMENTS[beatenBy].icon}${ELEMENTS[beatenBy].name}に<b>剋される</b>（相手にST+${ELEM_ADV_ST}）` +
         `<div class="cd-wheel">${elemWheelHTML([c.element])}</div>`);
+      info += row("相生", `${ELEMENTS[parent].icon}${ELEMENTS[parent].name}は${ELEMENTS[c.element].name}を生む＝` +
+        `<b>${ELEMENTS[parent].name}の土地</b>でも防衛HP+${SOUSEI_HP}の<b>恵み</b>を受ける` +
+        `<div class="cd-wheel">${souseiWheelHTML([parent, c.element])}</div>`);
     }
   }
   if (c.type === "item") info += row("補正", `${c.st ? `ST+${c.st} ` : ""}${c.hp ? `HP+${c.hp}` : ""}` || "—");
@@ -549,8 +563,8 @@ function showTitleScreen() {
         <div class="ts-emblem">${TITLE_EMBLEM_SVG}</div>
         <h1 class="ts-title">式神絵巻</h1>
         <div class="ts-sub">— SHIKIGAMI EMAKI —</div>
-        <p class="ts-flavor">古の絵巻に封じられた霊脈が、いま解き放たれる。<br>
-          呪符より式神を呼び覚まし、霊地を結び、五つの神器を求めよ。<br>
+        <p class="ts-flavor">木は火を生み、火は土を生む——五行の理、いま絵巻に顕れる。<br>
+          呪符より式神を呼び覚まし、相生に養い、相剋にて討て。<br>
           絵巻を制する者こそ、当代随一の陰陽師。</p>
         <div class="ts-start">✦ クリック / タップ で始める ✦</div>
       </div>
@@ -988,7 +1002,7 @@ function showStageSelect(opts = {}) {
         [`🔵 <b>${esc(versus.names[0])}</b> vs 🔴 <b>${esc(versus.names[1])}</b>`, weeklyChip, mlChip])
       : sealed
       ? hero("🎁 封符戦の間",
-        `その場で開封した<b>第一巻・第二巻の文箱5つずつ（計${SEALED_PACKS_PER_SET * SEALED_PACK_SIZE * 2}枚）</b>だけで
+        `その場で開封した<b>壱の巻・弐の巻の文箱5つずつ（計${SEALED_PACKS_PER_SET * SEALED_PACK_SIZE * 2}枚）</b>だけで
          ${DECK_SIZE}枚デッキを組み、ステージの主に挑む——<b>コレクションの厚さに関係なく誰でも対等</b>の腕くらべ。
          開封プールはコレクションに入りません（勝てば通常どおりカード${REWARD_WIN}枚獲得・進行度は変化しません）。<b>全ステージから選択可</b>。`,
         [`👤 <b>${esc(currentProfileName())}</b>`, `⚙ 難易度: <b>${diff.icon} ${diff.label}</b>`, weeklyChip, mlChip])
@@ -1172,14 +1186,14 @@ function openBattleView(g, attackerName, attCard, attItem, tile, defItem) {
     (c.ab.includes("physnull") ? `<span class="f-mod">🌫 物理無効</span>` : "") +
     (c.ab.includes("physreflect") ? `<span class="f-mod">🪞 物理反射</span>` : "") +
     ((c.ab.includes("magicatk") || (item && item.magicatk)) ? `<span class="f-mod">✨ 呪力攻撃</span>` : "");
-  // 属性4すくみの有利不利をバッジと相性バナーで明示（v22）
+  // 五行相剋の有利不利をバッジと相性バナーで明示（v22・v30五行対応）
   const rel = elemRelation(attCard.element, defCard.element); // 攻撃側から見た関係
   const elemMod = r =>
-    r === "adv" ? `<span class="f-mod f-adv">⚡ 属性有利 ST+${ELEM_ADV_ST}</span>` :
-    r === "dis" ? `<span class="f-mod f-dis">⚠ 属性不利</span>` : "";
+    r === "adv" ? `<span class="f-mod f-adv">⚡ 相剋 ST+${ELEM_ADV_ST}</span>` :
+    r === "dis" ? `<span class="f-mod f-dis">⚠ 剋される</span>` : "";
   const relBanner =
-    rel === "adv"  ? `<span class="be-rel be-adv">⚡ 有利 ST+${ELEM_ADV_ST} ▶</span>` :
-    rel === "dis"  ? `<span class="be-rel be-dis">◀ 不利（相手にST+${ELEM_ADV_ST}）</span>` :
+    rel === "adv"  ? `<span class="be-rel be-adv">⚡ 剋す ST+${ELEM_ADV_ST} ▶</span>` :
+    rel === "dis"  ? `<span class="be-rel be-dis">◀ 剋される（相手にST+${ELEM_ADV_ST}）</span>` :
     rel === "none" ? `<span class="be-rel be-none">⚪ 相性なし（無属性）</span>` :
                      `<span class="be-rel be-even">— 互角 —</span>`;
   const elemChip = e => `<span class="be-elem" style="--ec:${ELEMENTS[e].color}">${ELEMENTS[e].icon} ${ELEMENTS[e].name}</span>`;
@@ -1349,14 +1363,14 @@ async function humanChooseDirection(p, tile, stepsLeft, prevId = null) {
   return Number(res.action);
 }
 
-// 賽の目を選ぶ（言霊の符用）
+// 賽の目を選ぶ（辻占用）
 async function showDicePicker() {
   return new Promise(resolve => {
     closePassiveDialog();
     UI.dialogBusy++;
     const overlay = document.getElementById("overlay");
     const box = document.getElementById("dialog");
-    box.innerHTML = `<h2>言霊の符</h2><p class="dlg-body">次の賽の目を選んでください</p>
+    box.innerHTML = `<h2>辻占</h2><p class="dlg-body">次の賽の目を選んでください</p>
       <div class="dlg-buttons dice-pick">` +
       [1, 2, 3, 4, 5, 6].map(n => `<button class="btn primary" data-n="${n}">${n}</button>`).join("") +
       `</div>`;

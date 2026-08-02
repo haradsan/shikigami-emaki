@@ -77,7 +77,7 @@ function snareOn(g, tile, moverId) {
   return !!ov && ov.kind === "snare" && ov.owner !== moverId;
 }
 
-// ---------- 全体エフェクト（第二巻呪術 v20: g.fxList = [{kind, owner, until}]） ----------
+// ---------- 全体エフェクト（弐の巻呪術 v20: g.fxList = [{kind, owner, until}]） ----------
 // kind: market(市場開放) / bud(春の芽吹き) / war(戦火の世) / manastorm(霊力嵐) /
 //       silence(静寂のとばり) / goddess(神域の加護) / truce(停戦協定) / mirage(蜃気楼)
 function addFx(g, kind, ownerId, rounds = 2) {
@@ -99,7 +99,7 @@ const TARGETED_SPELLS = new Set([
 ]);
 // 停戦協定: 侵略・侵攻が禁止されているか
 function truceActive(g) { return !!activeFx(g, "truce"); }
-// 蜃気楼: この土地は敵の土地対象呪術（山崩しの符/祟り地の呪等）の対象にならないか
+// 蜃気楼: この土地は敵の土地対象呪術（地割れの符/祟り地の呪等）の対象にならないか
 function landSpellShielded(g, tile) {
   if (isSanctuaryProtected(g, tile)) return true;
   return tile.owner !== null && !!activeFx(g, "mirage", tile.owner);
@@ -195,7 +195,7 @@ function neighborsOf(g, tile) {
 //   ① 背後のマス（prevId＝移動中は直前のマス・移動開始時は p.cameFrom＝前のターンに来た方向）へは戻れない
 //      ＝通常は逆走できない。分岐・交差では背後以外から行く手を選べる。
 //      逆方向へ進めるのは 🔄時流逆転（呪術）・🎋おみくじマスの時空の渦（イベント）で反転させられた時だけ
-//      （reverseDirection＝背後を「前方」に差し替える）。ゲーム開始直後・雲隠れの符等の直後は
+//      （reverseDirection＝背後を「前方」に差し替える）。ゲーム開始直後・雲隠れ等の直後は
 //      cameFrom=null＝どの方向へも出発できる
 //   ② ➡一方通行マス（tile.onewayTo）からは指定方向へしか出られず、出口側から入ることもできない
 //      （盤面の特別マス。S10地獄回廊・S14歯車道など）
@@ -257,12 +257,12 @@ function marchTargets(g, p, srcTile) {
   return [...out.values()];
 }
 
-// 神風の符（強制移動呪術）で敵式神を押し出せる先＝隣接する空き地（未所有のLAND）
+// 風神の袋（強制移動呪術）で敵式神を押し出せる先＝隣接する空き地（未所有のLAND）
 function gustDests(g, srcTile) {
   return neighborsOf(g, srcTile).filter(t => t.type === "LAND" && t.owner === null);
 }
 
-// 兎跳びの符（跳躍呪術・v17）で自分の式神を移動できる先＝ちょうど2マス先（グラフ前後両方向）の空き地。
+// 飛び石（跳躍呪術・v17）で自分の式神を移動できる先＝ちょうど2マス先（グラフ前後両方向）の空き地。
 // 隣接マス（1マス先）と自分自身は含めない＝「2つ先のマスに移動させる」
 function leapDests(g, srcTile) {
   const d1 = neighborsOf(g, srcTile);
@@ -279,13 +279,13 @@ function leapDests(g, srcTile) {
 // 「このターン通過した自領」（lastPath の末尾＝停止マスは除く）のみが対象。
 // 出発マス（ターン開始時にいたマス）は含めない——前のターンに①（到達アクション）で命令できたマスなので、
 // 含めると同じマスが2ターン連続で対象になってしまう（v13で出発マス扱いを撤回）。
-// 周回達成ターン・本宮ぴったり停止（passAllLands）は「全ての自領」を対象にする（霊地の采配・社還りの符）。
+// 周回達成ターン・本宮ぴったり停止（passAllLands）は「全ての自領」を対象にする（霊地の采配・帰雁の笛）。
 function passActionTileIds(g, p) {
   if (p.passAllLands) return ownedLands(g, p.id).map(t => t.id);
   return (p.lastPath || []).slice(0, -1);
 }
 
-// 護法（spellproof）: 敵の対象指定の呪術（天火の符・大祓の符・神風の符）の対象にならない式神か
+// 護法（spellproof）: 敵の対象指定の呪術（落雷の符・大祓・風神の袋）の対象にならない式神か
 function isSpellProof(tile) {
   return !!(tile.creature && CARD_BY_ID[tile.creature.cardId].ab.includes("spellproof"));
 }
@@ -354,8 +354,8 @@ function walkAhead(g, startId, steps) {
   return g.tiles[cur];
 }
 
-// 賽を振る（言霊の符の指定目を優先。minDice は週替わりの神事「疾走の週」用）。
-// v20: 🎲呪い賽（p.diceCurse）＝出目1〜3。言霊の符指定も3に抑え込まれる
+// 賽を振る（辻占の指定目を優先。minDice は週替わりの神事「疾走の週」用）。
+// v20: 🎲呪い賽（p.diceCurse）＝出目1〜3。辻占指定も3に抑え込まれる
 function rollDice(p) {
   if (p.diceCurse) {
     p.diceCurse = false;
@@ -412,11 +412,11 @@ function newGame(stageIdx = 0, opts = {}) {
       gates: new Set(),   // 通過済み鳥居ID
       laps: 0,
       alive: true,
-      forcedDice: null,   // 言霊の符で指定した目
-      diceMult: null,     // 倍賽の符で次の出目を倍にする（2）
+      forcedDice: null,   // 辻占で指定した目
+      diceMult: null,     // 韋駄天の草鞋で次の出目を倍にする（2）
       lastPath: [],       // このターンの移動で通過したマスid（式神侵攻の出撃元判定用）
       cameFrom: null,     // 背後のマスid（v24: 進行方向の記憶。null=方向未確定＝どの方向へも出発できる）
-      passAllLands: false,// 周回達成ターンは全ての自領を②通過アクションの対象にする（本宮ぴったり到達・社還りの符）
+      passAllLands: false,// 周回達成ターンは全ての自領を②通過アクションの対象にする（本宮ぴったり到達・帰雁の笛）
       skipTurn: false,    // 次のターン休みか（捕縛/金縛り）
       skipReason: null,   // skipTurnの理由: "capture"=🕸️捕縛 / "freeze"=❄️金縛り（表示メッセージの出し分け用）
     };
@@ -464,7 +464,7 @@ function newGame(stageIdx = 0, opts = {}) {
     over: false,
     winner: null,
     weekly, // 適用中の週替わりの神事（OFF/稽古なら null）
-    fxList: [], // 全体エフェクト（第二巻呪術 v20: 市場開放/霊力嵐/停戦協定など）
+    fxList: [], // 全体エフェクト（弐の巻呪術 v20: 市場開放/霊力嵐/停戦協定など）
   };
   // 初期手札5枚
   g.players.forEach(p => { for (let i = 0; i < 5; i++) drawCard(g, p); });
@@ -503,7 +503,7 @@ function opponentsOf(g, p) { return g.players.filter(q => q.id !== p.id); }
 function opponentOf(g, p) {
   return opponentsOf(g, p).reduce((a, b) => assetsOf(g, b) > assetsOf(g, a) ? b : a);
 }
-// 霊力（所持金）が最も多い相手（奪霊の符/収奪の符の狙い先）
+// 霊力（所持金）が最も多い相手（賽銭浚い/収奪の符の狙い先）
 function richestOpponent(g, p) {
   return opponentsOf(g, p).reduce((a, b) => b.magic > a.magic ? b : a);
 }
@@ -566,14 +566,25 @@ function lapBonus(g, p) {
   return { gold, comeback, festival };
 }
 
-// 土地の防衛HPボーナス（属性一致時のみ）。
-// v20: 🏯城塞化（tile.fortified）と👼神域の加護（所有者の全体FX）でそれぞれ2倍
+// 土地の防衛HPボーナス。v30「五行改元」で二本立てに:
+//   属性一致（本領の土地）  = レベル×10 の「土地の加護」（城塞化・神域の加護で2倍）
+//   相生の親属性（育ての土地）= 一律+10 の「相生の恵み」（レベル・城塞化に依らない固定値）
+// どちらも破魔（pierce）で無効化される。無属性はどちらも受けない。
 function landHpBonus(tile, creatureCard) {
-  if (!creatureCard || creatureCard.element !== tile.element) return 0;
-  let bonus = tile.level * 10 * RULES.landHpMult;
-  if (tile.fortified) bonus *= 2;
-  if (typeof G !== "undefined" && G && activeFx(G, "goddess", tile.owner)) bonus *= 2;
-  return bonus;
+  if (!creatureCard || !tile.element) return 0;
+  if (creatureCard.element === tile.element) {
+    let bonus = tile.level * 10 * RULES.landHpMult;
+    if (tile.fortified) bonus *= 2;
+    if (typeof G !== "undefined" && G && activeFx(G, "goddess", tile.owner)) bonus *= 2;
+    return bonus;
+  }
+  if (isSouseiParent(tile.element, creatureCard.element)) return SOUSEI_HP;
+  return 0;
+}
+// 相生の恵みだけを判定したいとき用（ログ・表示の出し分け）
+function isSouseiBlessed(tile, creatureCard) {
+  return !!creatureCard && !!tile.element &&
+    creatureCard.element !== tile.element && isSouseiParent(tile.element, creatureCard.element);
 }
 
 // 支払い。足りなければ土地を売却。全て売っても足りなければ「再起」——

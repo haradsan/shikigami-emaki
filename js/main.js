@@ -269,7 +269,7 @@ async function showGameOver() {
   else titleScreen();
 }
 
-// 勝利報酬文箱の巻（第一巻/第二巻）を選ぶ（v19・原さん指定＝報酬は文箱を選択できる）
+// 勝利報酬文箱の巻（壱の巻/弐の巻）を選ぶ（v19・原さん指定＝報酬は文箱を選択できる）
 async function chooseRewardSet() {
   const col = loadCollection();
   const row = s => {
@@ -342,7 +342,7 @@ async function requestSurrender() {
 // ---------- 1ターン ----------
 async function playTurn(p) {
   if (!p.alive) return;
-  p.passAllLands = false; // 周回達成でこのターン全自領を②の対象にするフラグ（社還りの符＝呪術段階で立つのでここで初期化）
+  p.passAllLands = false; // 周回達成でこのターン全自領を②の対象にするフラグ（帰雁の笛＝呪術段階で立つのでここで初期化）
   // 捕縛/金縛りによる1回休み（理由でメッセージを出し分ける）
   if (p.skipTurn) {
     p.skipTurn = false;
@@ -359,7 +359,7 @@ async function playTurn(p) {
   // 2人対戦（ホットシート）: 手札を伏せた交代画面を挟んでから手番を始める
   if (G.hotseat && !p.isCPU) await hotseatHandoff(p);
   setMessage(`${p.name}のターン（ラウンド${G.round}）`);
-  turnStartTick(p); // 第二巻（v19）: 🌱成長・⛏採掘・🌿癒しの庭のターン開始処理
+  turnStartTick(p); // 弐の巻（v19）: 🌱成長・⛏採掘・🌿癒しの庭のターン開始処理
   renderAll(G);
   if (p.isCPU) {
     // ときどきキャラがつぶやく（存在感の演出・非ブロッキング）
@@ -379,7 +379,7 @@ async function playTurn(p) {
   if (p.isCPU) {
     const spellId = aiChooseSpell(G, p);
     if (spellId) { await castSpell(p, spellId); await sleep(CPU_WAIT); }
-    if (G.over) return; // 社還りの符勝ち等
+    if (G.over) return; // 帰雁の笛勝ち等
     dice = rollDice(p);
   } else {
     await humanSpellAndRoll(p);
@@ -387,10 +387,10 @@ async function playTurn(p) {
     dice = rollDice(p);
   }
   p.forcedDice = null;
-  // 倍賽の符: 次の出目を倍にする（言霊の符指定分も倍化）
+  // 韋駄天の草鞋: 次の出目を倍にする（辻占指定分も倍化）
   if (p.diceMult && p.diceMult > 1) {
     dice *= p.diceMult;
-    log(`🎲 ${p.name}の倍賽の符発動！ 出目が2倍の${dice}に！`, "warn");
+    log(`🎲 ${p.name}の韋駄天の草鞋発動！ 出目が2倍の${dice}に！`, "warn");
     p.diceMult = null;
   }
   // 🍃追い風（v20）: 次の出目+2（倍化のあとに加算）
@@ -421,7 +421,7 @@ async function playTurn(p) {
   // 5. ②通過アクション: 「①で到達アクションを実行しなかった」ターンに付与される（1ターン1アクション）。
   //    到達アクションが何もない（受け身マス・手札不足など）か、あえてパス（通行料払いを含む）した場合のみ、
   //    このターン通過した自領について侵攻/交代/レベルアップを1つ行える。
-  //    例外: 周回達成ターン（本宮ぴったり到達・社還りの符＝passAllLands）は①で行動していても付与し、全自領を対象にする。
+  //    例外: 周回達成ターン（本宮ぴったり到達・帰雁の笛＝passAllLands）は①で行動していても付与し、全自領を対象にする。
   //    🎺進軍号令（v20・freeMarch）も①の行動に関係なく②の権利を与える
   if (!acted || p.passAllLands || p.freeMarch) await passActionPhase(p);
   // 🕯️時の儀（v20）: このターン、もう一度賽を振って移動し①を行う（②は最初の1回のみ）
@@ -443,7 +443,7 @@ async function playTurn(p) {
   renderAll(G);
 }
 
-// ---------- ターン開始時の第二巻能力（v19） ----------
+// ---------- ターン開始時の弐の巻能力（v19） ----------
 // 🌱成長: ST/HP+5（上限+25）＝grownカウンタを進めてHPも増加分だけ回復
 // ⛏採掘: +15G（採掘櫓は+30G） ／ 🌿癒しの庭: 隣接自軍式神をHP+10回復
 function turnStartTick(p) {
@@ -680,22 +680,22 @@ async function castSpellEffect(p, cardId) {
   if (c.spell === "quake") {
     const target = p.isCPU ? aiPickQuakeTarget(G, p)
       : await humanPickLand(enemyLandsOf(G, p).filter(t => t.level > 1 && !landSpellShielded(G, t)),
-        "✨ 山崩しの符 — 対象を選択", "レベルを1下げる敵の土地を選んでください（🏜️蜃気楼中の相手の土地は対象外）",
-        "山崩しの符の対象となる土地（敵のLv2以上）がありません");
+        "✨ 地割れの符 — 対象を選択", "レベルを1下げる敵の土地を選んでください（🏜️蜃気楼中の相手の土地は対象外）",
+        "地割れの符の対象となる土地（敵のLv2以上）がありません");
     if (!target) return false;
     pay();
     target.level = Math.max(1, target.level - 1);
-    log(`✨ ${p.name}の山崩しの符！ ${tileName(target)}のレベルが${target.level}に下がった`);
+    log(`✨ ${p.name}の地割れの符！ ${tileName(target)}のレベルが${target.level}に下がった`);
 
   } else if (c.spell === "drain") {
     const target = p.isCPU ? richestOpponent(G, p)
-      : await humanPickOpponent(p, "✨ 奪霊の符 — 相手を選択", "最大200Gを奪う相手を選んでください");
+      : await humanPickOpponent(p, "✨ 賽銭浚い — 相手を選択", "最大200Gを奪う相手を選んでください");
     if (!target) return false;
     pay();
     const amount = Math.min(200, target.magic);
     target.magic -= amount;
     p.magic += amount;
-    log(`✨ ${p.name}の奪霊の符！ ${target.name}から${amount}Gを奪った`);
+    log(`✨ ${p.name}の賽銭浚い！ ${target.name}から${amount}Gを奪った`);
 
   } else if (c.spell === "plunder") {
     const target = p.isCPU ? richestOpponent(G, p)
@@ -711,12 +711,12 @@ async function castSpellEffect(p, cardId) {
   } else if (c.spell === "dicedouble") {
     pay();
     p.diceMult = 2;
-    log(`🎲 ${p.name}の倍賽の符！ 次の賽の出目が2倍になる`);
+    log(`🎲 ${p.name}の韋駄天の草鞋！ 次の賽の出目が2倍になる`);
 
   } else if (c.spell === "draw") {
     pay();
     const d1 = drawCard(G, p), d2 = drawCard(G, p);
-    log(`✨ ${p.name}の手繰りの符！ カードを${(d1 ? 1 : 0) + (d2 ? 1 : 0)}枚引いた`);
+    log(`✨ ${p.name}の写経！ カードを${(d1 ? 1 : 0) + (d2 ? 1 : 0)}枚引いた`);
     await enforceHandLimit(p);
 
   } else if (c.spell === "holyword") {
@@ -724,26 +724,26 @@ async function castSpellEffect(p, cardId) {
     p.aiHolyword = null;
     pay();
     p.forcedDice = n;
-    log(`✨ ${p.name}の言霊の符！ 次の賽は${n}`);
+    log(`✨ ${p.name}の辻占！ 次の賽は${n}`);
 
   } else if (c.spell === "growth") {
     const target = p.isCPU ? aiPickGrowthTarget(G, p)
       : await humanPickLand(ownedLands(G, p.id).filter(t => t.level <= 3),
-        "✨ 開墾の符 — 対象を選択", "レベルを1上げる自分の土地（Lv3以下）を選んでください",
-        "開墾の符の対象となる土地（自分のLv3以下）がありません");
+        "✨ 五穀豊穣 — 対象を選択", "レベルを1上げる自分の土地（Lv3以下）を選んでください",
+        "五穀豊穣の対象となる土地（自分のLv3以下）がありません");
     if (!target) return false;
     pay();
     target.level++;
-    log(`✨ ${p.name}の開墾の符！ ${tileName(target)}がLv${target.level}に成長した`);
+    log(`✨ ${p.name}の五穀豊穣！ ${tileName(target)}がLv${target.level}に成長した`);
 
   } else if (c.spell === "recall") {
     if (p.pos === 0) { if (!p.isCPU) log("すでに本宮にいます", "warn"); return false; }
     pay();
     p.pos = 0;
     p.cameFrom = null; // 本宮からの再出発＝方向リセット
-    log(`✨ ${p.name}の社還りの符！ 本宮へ帰還した`);
+    log(`✨ ${p.name}の帰雁の笛！ 本宮へ帰還した`);
     renderBoard(G);
-    // 社還りの符は本宮に「ぴったり着地」＝exact。霊地の采配（全自領で1アクション）は必ず得られ、
+    // 帰雁の笛は本宮に「ぴったり着地」＝exact。霊地の采配（全自領で1アクション）は必ず得られ、
     // 鳥居が揃っていればさらに周回ボーナス（霊力＋全回復）も得る。
     const arr = arriveCastle(G, p, true);
     if (arr === "win") return true;
@@ -766,12 +766,12 @@ async function castSpellEffect(p, cardId) {
       target = pick.tile; elem = pick.element;
     } else {
       target = await humanPickLand(ownedLands(G, p.id),
-        "✨ 霊脈替えの符 — 対象を選択", "属性を変える自分の土地を選んでください",
+        "✨ 五行転じ — 対象を選択", "属性を変える自分の土地を選んでください",
         "自分の土地がありません");
       if (!target) return false;
       const res = await showDialog({
         title: "✨ 変更後の属性を選択",
-        body: `${tileName(target)} をどの属性に変えますか？<br>式神と属性が一致すると土地の加護（防衛HP+）が働きます`,
+        body: `${tileName(target)} をどの属性に変えますか？<br>式神と属性が一致すると土地の加護（防衛HP+）、相生の親属性なら恵み（HP+${SOUSEI_HP}）が働きます`,
         peek: true,
         buttons: LAND_ELEMENTS.filter(e => e !== target.element)
           .map(e => ({ label: `${ELEMENTS[e].icon} ${ELEMENTS[e].name}属性`, value: e }))
@@ -783,21 +783,21 @@ async function castSpellEffect(p, cardId) {
     pay();
     const before = ELEMENTS[target.element].name;
     target.element = elem;
-    log(`✨ ${p.name}の霊脈替えの符！ ${tileName(target)}が${before}→${ELEMENTS[elem].name}属性に変化`);
+    log(`✨ ${p.name}の五行転じ！ ${tileName(target)}が${before}→${ELEMENTS[elem].name}属性に変化`);
 
   } else if (c.spell === "vanish") {
     const target = p.isCPU ? aiPickVanishTarget(G, p)
       : await humanPickLand(
         enemyLandsOf(G, p).filter(t => t.creature && !isSanctuaryProtected(G, t) && !isSpellProof(t)),
-        "✨ 大祓の符 — 対象を選択", "消滅させる敵式神の土地を選んでください（<b>HP不問＝どんな相手でも確実に破壊</b>）<br>土地は空き地に戻ります（レベルは残る）※<b>護法</b>持ちは対象外",
-        "大祓の符の対象となる敵式神がいません（結界・護法は対象外）");
+        "✨ 大祓 — 対象を選択", "消滅させる敵式神の土地を選んでください（<b>HP不問＝どんな相手でも確実に破壊</b>）<br>土地は空き地に戻ります（レベルは残る）※<b>護法</b>持ちは対象外",
+        "大祓の対象となる敵式神がいません（結界・護法は対象外）");
     if (!target) return false;
     pay();
     const victim = CARD_BY_ID[target.creature.cardId];
     G.players[target.owner].discard.push(target.creature.cardId);
     target.creature = null;
     target.owner = null;
-    log(`✨ ${p.name}の大祓の符！ ${victim.name}は消し飛び、${tileName(target)}は空き地に戻った`, "warn");
+    log(`✨ ${p.name}の大祓！ ${victim.name}は消し飛び、${tileName(target)}は空き地に戻った`, "warn");
 
   } else if (c.spell === "gust") {
     // 敵式神を隣接する空き地へ強制移動（連鎖崩し・防衛どかし）。不動・結界・護法は対象外
@@ -810,7 +810,7 @@ async function castSpellEffect(p, cardId) {
       src = pick.src; dst = pick.dst;
     } else {
       src = await humanPickLand(enemyLandsOf(G, p).filter(pushable),
-        "🌬️ 神風の符 — 押し出す敵式神を選択",
+        "🌬️ 風神の袋 — 押し出す敵式神を選択",
         "隣接する空き地へ吹き飛ばす敵式神を選んでください（<b>不動・結界・護法は対象外</b>）<br>元の土地は空き地に戻ります（レベルは残る）",
         "押し出せる敵式神（隣に空き地がある相手）がいません");
       if (!src) return false;
@@ -827,11 +827,11 @@ async function castSpellEffect(p, cardId) {
     dst.creature = src.creature; // 現在HPごと移動
     src.owner = null;
     src.creature = null;
-    log(`🌬️ ${p.name}の神風の符！ ${moved.name}は${tileName(src)}から${tileName(dst)}へ吹き飛ばされた`, "warn");
+    log(`🌬️ ${p.name}の風神の袋！ ${moved.name}は${tileName(src)}から${tileName(dst)}へ吹き飛ばされた`, "warn");
 
   } else if (c.spell === "teleport") {
     // 自分のコマを盤面の好きなマス（本宮以外）へ飛ばす。移動はその後の賽で通常どおり行う。
-    // 飛んだだけではマスの効果・鳥居通過は発生しない（本宮は社還りの符の役割なので対象外）
+    // 飛んだだけではマスの効果・鳥居通過は発生しない（本宮は帰雁の笛の役割なので対象外）
     let target;
     if (p.isCPU) {
       target = aiPickTeleportTarget(G, p);
@@ -839,7 +839,7 @@ async function castSpellEffect(p, cardId) {
     } else {
       const candidates = G.tiles.filter(t => t.id !== p.pos && t.type !== "CASTLE");
       target = await humanPickTileOnMap(candidates, {
-        title: "💫 雲隠れの符 — 飛び先を選択",
+        title: "💫 雲隠れ — 飛び先を選択",
         body: "自分のコマを盤面の好きなマス（<b>本宮以外</b>）へ飛ばします。<br>飛んだだけではマスの効果・鳥居通過は発生しません。そのあと通常どおり賽を振って移動します。",
         cancelable: true,
         labelFn: t => t.type === "LAND"
@@ -851,7 +851,7 @@ async function castSpellEffect(p, cardId) {
     pay();
     p.pos = target.id;
     p.cameFrom = null; // 飛び先では方向未確定＝どの方向へも出発できる
-    log(`💫 ${p.name}の雲隠れの符！ ${tileName(target)}へ飛んだ`);
+    log(`💫 ${p.name}の雲隠れ！ ${tileName(target)}へ飛んだ`);
     renderBoard(G);
 
   } else if (c.spell === "transport") {
@@ -896,7 +896,7 @@ async function castSpellEffect(p, cardId) {
       src = pick.src; dst = pick.dst;
     } else {
       src = await humanPickLand(movable,
-        "🐇 兎跳びの符 — 跳躍する式神を選択",
+        "🐇 飛び石 — 跳躍する式神を選択",
         "<b>2マス先の空き地</b>へ跳躍させる自分の式神を選んでください（<b>不動は対象外</b>）<br>元の土地は空き地に戻ります（レベルは残る）",
         "跳躍できる式神がいません（2マス先に空き地が必要・不動は対象外）");
       if (!src) return false;
@@ -912,20 +912,20 @@ async function castSpellEffect(p, cardId) {
     dst.creature = src.creature; // 現在HPごと移動
     src.owner = null;
     src.creature = null;
-    log(`🐇 ${p.name}の兎跳びの符！ ${moved.name}が${tileName(dst)}へ跳躍した（元の土地は空き地に）`);
+    log(`🐇 ${p.name}の飛び石！ ${moved.name}が${tileName(dst)}へ跳躍した（元の土地は空き地に）`);
 
   } else if (c.spell === "regen") {
     const target = p.isCPU ? aiPickRegenTarget(G, p)
       : await humanPickLand(
         ownedLands(G, p.id).filter(t => t.creature && isWounded(t.creature)),
-        "💚 快癒の符 — 対象を選択", "HPを全回復する自分の<b>負傷式神</b>を選んでください<br>（周回を待たずに、傷ついた防衛式神を立て直せます）",
+        "💚 湯治 — 対象を選択", "HPを全回復する自分の<b>負傷式神</b>を選んでください<br>（周回を待たずに、傷ついた防衛式神を立て直せます）",
         "負傷している自分の式神がいません");
     if (!target) return false;
     pay();
     const healed = CARD_BY_ID[target.creature.cardId];
     const before = currentHp(target.creature);
     target.creature.hp = maxHpOf(target.creature); // 成長分（v19）も含めた実最大HPまで回復
-    log(`💚 ${p.name}の快癒の符！ ${tileName(target)}の${healed.name}のHPが${before}→${target.creature.hp}に全回復した`);
+    log(`💚 ${p.name}の湯治！ ${tileName(target)}の${healed.name}のHPが${before}→${target.creature.hp}に全回復した`);
 
   } else if (c.spell === "renew") {
     pay(); // 先に引き直しカード自身を捨て札へ
@@ -934,13 +934,13 @@ async function castSpellEffect(p, cardId) {
     p.hand = [];
     let n = 0;
     for (let i = 0; i < HAND_LIMIT; i++) { if (drawCard(G, p)) n++; }
-    log(`✨ ${p.name}の引き直し！ 手札をすべて捨て、${n}枚を引き直した`);
+    log(`✨ ${p.name}の出直しの祓！ 手札をすべて捨て、${n}枚を引き直した`);
 
   } else if (c.spell === "meteor") {
     const target = p.isCPU ? aiPickMeteorTarget(G, p)
       : await humanPickLand(
         enemyLandsOf(G, p).filter(t => t.creature && !isSanctuaryProtected(G, t) && !isSpellProof(t)),
-        "☄️ 天火の符 — 対象を選択", "40ダメージを与える敵式神の土地を選んでください<br>現在HPが0以下になれば破壊され、土地は空き地に戻ります（レベルは残る）※<b>護法</b>持ちは対象外",
+        "☄️ 落雷の符 — 対象を選択", "40ダメージを与える敵式神の土地を選んでください<br>現在HPが0以下になれば破壊され、土地は空き地に戻ります（レベルは残る）※<b>護法</b>持ちは対象外",
         "対象にできる敵式神がいません（結界・護法は対象外）");
     if (!target) return false;
     pay();
@@ -950,21 +950,21 @@ async function castSpellEffect(p, cardId) {
       G.players[target.owner].discard.push(target.creature.cardId);
       const nm = tileName(target);
       target.creature = null; target.owner = null;
-      log(`☄️ ${p.name}の天火の符！ ${victim.name}に40ダメージ — 倒れて${nm}は空き地に戻った`, "warn");
+      log(`☄️ ${p.name}の落雷の符！ ${victim.name}に40ダメージ — 倒れて${nm}は空き地に戻った`, "warn");
     } else {
       target.creature.hp = newHp;
-      log(`☄️ ${p.name}の天火の符！ ${victim.name}に40ダメージ（残りHP${newHp}）`, "warn");
+      log(`☄️ ${p.name}の落雷の符！ ${victim.name}に40ダメージ（残りHP${newHp}）`, "warn");
     }
 
   } else if (c.spell === "freeze") {
     const target = p.isCPU ? aiPickFreezeTarget(G, p)
-      : await humanPickOpponent(p, "❄️ 金縛り — 相手を選択", "次のターン動けなくする相手を選んでください",
+      : await humanPickOpponent(p, "❄️ 金縛りの呪 — 相手を選択", "次のターン動けなくする相手を選んでください",
         q => !q.skipTurn);
     if (!target) { if (!p.isCPU) log("金縛りできる相手がいません（すでに足止め中）", "warn"); return false; }
     pay();
     target.skipTurn = true;
     target.skipReason = "freeze";
-    log(`❄️ ${p.name}の金縛り！ ${target.name}は次のターン動けない`, "warn");
+    log(`❄️ ${p.name}の金縛りの呪！ ${target.name}は次のターン動けない`, "warn");
 
   } else if (c.spell === "treasure") {
     const n = ownedLands(G, p.id).length;
@@ -973,18 +973,18 @@ async function castSpellEffect(p, cardId) {
     const gain = n * 40;
     p.magic += gain;
     SFX.coin();
-    log(`💰 ${p.name}の検地の符！ 所有地${n}マスから+${gain}G`);
+    log(`💰 ${p.name}の検見の帳！ 所有地${n}マスから+${gain}G`);
 
   } else if (c.spell === "steal") {
     const target = p.isCPU ? aiPickStealTarget(G, p)
-      : await humanPickOpponent(p, "🎭 盗人の符 — 相手を選択", "手札から1枚をランダムに奪う相手を選んでください",
+      : await humanPickOpponent(p, "🎭 隙間風 — 相手を選択", "手札から1枚をランダムに奪う相手を選んでください",
         q => q.hand.length > 0);
     if (!target) { if (!p.isCPU) log("手札を持っている相手がいません", "warn"); return false; }
     pay();
     const idx = Math.floor(Math.random() * target.hand.length);
     const stolen = target.hand.splice(idx, 1)[0];
     p.hand.push(stolen);
-    log(`🎭 ${p.name}の盗人の符！ ${target.name}の手札から${p.isCPU ? "カード1枚" : CARD_BY_ID[stolen].name}を奪った`, "warn");
+    log(`🎭 ${p.name}の隙間風！ ${target.name}の手札から${p.isCPU ? "カード1枚" : CARD_BY_ID[stolen].name}を奪った`, "warn");
     await enforceHandLimit(p);
 
   } else if (c.spell === "salvage") {
@@ -1018,12 +1018,12 @@ async function castSpellEffect(p, cardId) {
     if (p.isCPU) {
       target = aiPickAlchemy(G, p, cardId);
     } else {
-      // このカード自身は候補から外す（同名換銭の符が複数ある場合は1枚分だけ除外）
+      // このカード自身は候補から外す（同名質草流しが複数ある場合は1枚分だけ除外）
       const idx = p.hand.indexOf(cardId);
       const pool = p.hand.slice(0, idx).concat(p.hand.slice(idx + 1));
       if (pool.length === 0) { log("金に変える手札がありません", "warn"); return false; }
       const res = await showDialog({
-        title: "⚗️ 換銭の符 — 金に変えるカードを選択",
+        title: "⚗️ 質草流し — 金に変えるカードを選択",
         body: `手札から1枚を選んで捨て、<b>${ALCHEMY_GAIN}G</b> に変えます`,
         cards: pool.map(id => ({ card: CARD_BY_ID[id] })),
         peek: true,
@@ -1036,31 +1036,31 @@ async function castSpellEffect(p, cardId) {
     discardFromHand(p, target);
     p.magic += ALCHEMY_GAIN;
     SFX.coin();
-    log(`⚗️ ${p.name}の換銭の符！ ${CARD_BY_ID[target].name}を${ALCHEMY_GAIN}Gに変えた`);
+    log(`⚗️ ${p.name}の質草流し！ ${CARD_BY_ID[target].name}を${ALCHEMY_GAIN}Gに変えた`);
 
   } else if (c.spell === "sanctuary") {
     const target = p.isCPU ? aiPickSanctuaryTarget(G, p)
       : await humanPickLand(
         ownedLands(G, p.id).filter(t => !overlayOf(G, t)),
-        "🛡️ 神域 — 対象を選択",
-        `${OVERLAY_DURATION}ラウンドの間、結界で守る自分の土地を選んでください<br>侵略・式神侵攻・敵呪術（山崩しの符/大祓の符等）の対象になりません`,
+        "🛡️ 注連縄張り — 対象を選択",
+        `${OVERLAY_DURATION}ラウンドの間、結界で守る自分の土地を選んでください<br>侵略・式神侵攻・敵呪術（地割れの符/大祓等）の対象になりません`,
         "対象にできる自分の土地がありません");
     if (!target) return false;
     pay();
     setOverlay(G, target, "sanctuary", p.id);
-    log(`🛡️ ${p.name}の神域！ ${tileName(target)}が結界に守られた（${OVERLAY_DURATION}ラウンド）`);
+    log(`🛡️ ${p.name}の注連縄張り！ ${tileName(target)}が結界に守られた（${OVERLAY_DURATION}ラウンド）`);
 
   } else if (c.spell === "ensnare") {
     const target = p.isCPU ? aiPickEnsnareTarget(G, p)
       : await humanPickLand(
         G.tiles.filter(t => t.type === "LAND" && !overlayOf(G, t)),
-        "🕸️ 蜘蛛の巣張り — 対象を選択",
+        "🕸️ 鳥黐の罠 — 対象を選択",
         `${OVERLAY_DURATION}ラウンドの間、罠を仕掛ける土地を選んでください<br>相手が<b>通過・停止</b>すると、その場で<b>足止め</b>され移動が止まります`,
         "対象にできる土地がありません");
     if (!target) return false;
     pay();
     setOverlay(G, target, "snare", p.id);
-    log(`🕸️ ${p.name}の蜘蛛の巣張り！ ${tileName(target)}に罠が仕掛けられた（${OVERLAY_DURATION}ラウンド）`, "warn");
+    log(`🕸️ ${p.name}の鳥黐の罠！ ${tileName(target)}に罠が仕掛けられた（${OVERLAY_DURATION}ラウンド）`, "warn");
 
   // 🚧関所札（v23）: 対象の土地マスを2R通行止めにする（moveOptions が進入候補から除外する。
   // 全方向を塞がれたコマは例外的に通れる＝moveOptions の保険。noCpu なのでCPUは使わない）
@@ -1077,7 +1077,7 @@ async function castSpellEffect(p, cardId) {
     log(`🚧 ${p.name}の関所札！ ${tileName(target)}が通行止めになった（${OVERLAY_DURATION}ラウンド）`, "warn");
 
   // ============================================================
-  // 第二巻呪術（v20）
+  // 弐の巻呪術（v20）
   // ============================================================
   // --- 経済 ---
   } else if (c.spell === "elembless") {
@@ -1094,7 +1094,7 @@ async function castSpellEffect(p, cardId) {
     const gain = Math.min(250, Math.floor(p.magic * 0.2));
     p.magic += gain;
     SFX.coin();
-    log(`💰 ${p.name}の千両景気！ 所持霊力の20%＝+${gain}G`);
+    log(`💰 ${p.name}の千両万両！ 所持霊力の20%＝+${gain}G`);
 
   } else if (c.spell === "tollpass") {
     pay();
@@ -1189,14 +1189,14 @@ async function castSpellEffect(p, cardId) {
     if (d && !p.isCPU) await animateDraw(CARD_BY_ID[d]);
     p.magic += 50;
     SFX.coin();
-    log(`💡 ${p.name}の天啓！ カードを${d ? 1 : 0}枚引き、+50G`);
+    log(`💡 ${p.name}の夢告！ カードを${d ? 1 : 0}枚引き、+50G`);
     await enforceHandLimit(p);
 
   } else if (c.spell === "inspiration") {
     pay();
     let got = 0;
     for (let i = 0; i < 3; i++) { if (drawCard(G, p)) got++; }
-    log(`✨ ${p.name}の文殊の知恵！ カードを${got}枚引いた——1枚捨てる`);
+    log(`✨ ${p.name}の頓知の閃き！ カードを${got}枚引いた——1枚捨てる`);
     // 1枚捨てる（手札上限とは別の強制ディスカード）
     if (p.hand.length > 0) {
       let discardId;
@@ -1204,7 +1204,7 @@ async function castSpellEffect(p, cardId) {
       else {
         renderHand(G);
         const res = await showDialog({
-          title: "✨ 文殊の知恵 — 捨てるカードを選択",
+          title: "💡 頓知の閃き — 捨てるカードを選択",
           body: "手札から1枚を捨ててください",
           cards: p.hand.map(id => ({ card: CARD_BY_ID[id] })),
           peek: true, buttons: [],
@@ -1463,13 +1463,13 @@ async function castSpellEffect(p, cardId) {
       if (!targets) return false;
     } else {
       const pool = enemyLandsOf(G, p).filter(t => t.level > 1 && !landSpellShielded(G, t));
-      const t1 = await humanPickLand(pool, "🌋 大山崩しの符 — 1つ目を選択", "敵の土地を<b>2つまで</b>選び、それぞれLv-1します", "対象となる敵の土地（Lv2以上）がありません");
+      const t1 = await humanPickLand(pool, "🌋 大地割れの符 — 1つ目を選択", "敵の土地を<b>2つまで</b>選び、それぞれLv-1します", "対象となる敵の土地（Lv2以上）がありません");
       if (!t1) return false;
       const rest = pool.filter(t => t.id !== t1.id);
       let t2 = null;
       if (rest.length > 0) {
         t2 = await humanPickTileOnMap(rest, {
-          title: "🌋 大山崩しの符 — 2つ目を選択",
+          title: "🌋 大地割れの符 — 2つ目を選択",
           body: "2つ目の対象を選んでください（キャンセル＝1つだけで実行）",
           cancelable: true, cancelLabel: "1つだけで実行",
           labelFn: t => `${ELEMENTS[t.element].icon} ${tileName(t)}（Lv${t.level}）`,
@@ -1479,7 +1479,7 @@ async function castSpellEffect(p, cardId) {
     }
     pay();
     targets.forEach(t => { t.level = Math.max(1, t.level - 1); });
-    log(`🌋 ${p.name}の大山崩しの符！ ${targets.map(t => `${tileName(t)}→Lv${t.level}`).join("・")}`, "warn");
+    log(`🌋 ${p.name}の大地割れの符！ ${targets.map(t => `${tileName(t)}→Lv${t.level}`).join("・")}`, "warn");
 
   } else if (c.spell === "levelshift") {
     const src = await humanPickLand(ownedLands(G, p.id).filter(t => t.level >= 2),
@@ -1589,9 +1589,9 @@ async function castSpellEffect(p, cardId) {
     discardFromHand(p, sac);
     p.magic += 350;
     SFX.coin();
-    log(`🕯️ ${p.name}の豊穣の儀！ ${CARD_BY_ID[sac].name}を捧げ、+350G`);
+    log(`🕯️ ${p.name}の神饌の儀！ ${CARD_BY_ID[sac].name}を捧げ、+350G`);
 
-  // v25: 潤沢の儀＝豊穣の儀の派生。1〜3枚を好きなだけ捧げ、1枚につき+300G（1枚あたりは豊穣の儀より割安）
+  // v25: 潤沢の儀＝神饌の儀の派生。1〜3枚を好きなだけ捧げ、1枚につき+300G（1枚あたりは神饌の儀より割安）
   } else if (c.spell === "r_plenty") {
     const PLENTY_PER_CARD = 300, PLENTY_MAX = 3;
     const sacs = [];
@@ -1639,7 +1639,7 @@ async function castSpellEffect(p, cardId) {
     const target = p.isCPU ? aiPickBlazeTarget(G, p)
       : await humanPickLand(
         enemyLandsOf(G, p).filter(t => t.creature && !isSanctuaryProtected(G, t) && !isSpellProof(t)),
-        "🕯️ 猛火の儀 — 対象を選択", "敵式神1体に<b>70ダメージ</b>（護法・結界は対象外）",
+        "🕯️ 送り火の儀 — 対象を選択", "敵式神1体に<b>70ダメージ</b>（護法・結界は対象外）",
         "対象にできる敵式神がいません");
     if (!target) return false;
     const sac = await ritualSacrifice(p, cardId, c.name);
@@ -1652,10 +1652,10 @@ async function castSpellEffect(p, cardId) {
       G.players[target.owner].discard.push(target.creature.cardId);
       const nm = tileName(target);
       target.creature = null; target.owner = null;
-      log(`🕯️ ${p.name}の猛火の儀！ ${CARD_BY_ID[sac].name}を捧げた業火が${victim.name}を焼き尽くした——${nm}は空き地に`, "warn");
+      log(`🕯️ ${p.name}の送り火の儀！ ${CARD_BY_ID[sac].name}を捧げた業火が${victim.name}を焼き尽くした——${nm}は空き地に`, "warn");
     } else {
       target.creature.hp = newHp;
-      log(`🕯️ ${p.name}の猛火の儀！ ${victim.name}に70ダメージ（残りHP${newHp}）`, "warn");
+      log(`🕯️ ${p.name}の送り火の儀！ ${victim.name}に70ダメージ（残りHP${newHp}）`, "warn");
     }
 
   } else if (c.spell === "r_revive") {
@@ -1672,7 +1672,7 @@ async function castSpellEffect(p, cardId) {
       reviveId = pick.cardId; dst = pick.tile;
     } else {
       const res = await showDialog({
-        title: "🕯️ 蘇生の儀 — 蘇らせる式神を選択",
+        title: "🕯️ 口寄せの儀 — 蘇らせる式神を選択",
         body: "自分の捨て札の式神1体を、好きな<b>空き地</b>へ<b>コスト不要</b>で召喚します",
         cards: creatures.map(id => ({ card: CARD_BY_ID[id] })),
         peek: true,
@@ -1692,12 +1692,12 @@ async function castSpellEffect(p, cardId) {
     dst.owner = p.id;
     dst.creature = { cardId: reviveId, hp: CARD_BY_ID[reviveId].hp };
     SFX.summon();
-    log(`🕯️ ${p.name}の蘇生の儀！ ${CARD_BY_ID[sac].name}を捧げ、${CARD_BY_ID[reviveId].name}が${tileName(dst)}に蘇った`);
+    log(`🕯️ ${p.name}の口寄せの儀！ ${CARD_BY_ID[sac].name}を捧げ、${CARD_BY_ID[reviveId].name}が${tileName(dst)}に蘇った`);
 
   } else if (c.spell === "r_ages") {
     const target = p.isCPU ? aiPickAgesTarget(G, p)
       : await humanPickLand(ownedLands(G, p.id).filter(t => t.level <= 3),
-        "🕯️ 星霜の儀 — 対象を選択", "自分の土地1つを<b>Lv+2</b>します（Lv4まで）",
+        "🕯️ 神楽の儀 — 対象を選択", "自分の土地1つを<b>Lv+2</b>します（Lv4まで）",
         "対象となる土地（自分のLv3以下）がありません");
     if (!target) return false;
     const sac = await ritualSacrifice(p, cardId, c.name);
@@ -1705,7 +1705,7 @@ async function castSpellEffect(p, cardId) {
     pay();
     discardFromHand(p, sac);
     target.level = Math.min(4, target.level + 2);
-    log(`🕯️ ${p.name}の星霜の儀！ ${CARD_BY_ID[sac].name}を捧げ、${tileName(target)}が一気にLv${target.level}へ成長した`);
+    log(`🕯️ ${p.name}の神楽の儀！ ${CARD_BY_ID[sac].name}を捧げ、${tileName(target)}が一気にLv${target.level}へ成長した`);
 
   } else if (c.spell === "r_storm") {
     const victims = enemyLandsOf(G, p).filter(t => t.creature && !isSanctuaryProtected(G, t) && !isSpellProof(t));
@@ -1832,7 +1832,7 @@ async function humanPickLand(candidates, title, body, emptyMsg) {
 // v24（方向つき移動）: 各歩で moveOptions（背後を除いた隣接・➡一方通行/🚧封鎖を考慮）から進む先を選ぶ。
 // 背後＝移動中は直前のマス、移動開始時は p.cameFrom（前のターンに来た方向）＝通常は逆走できない。
 // 分岐・交差で候補が複数なら人間は選択ダイアログ・CPUは先読み評価。ゲーム開始直後や
-// 雲隠れの符等の直後は cameFrom=null＝🧭どの方向へも出発できる
+// 雲隠れ等の直後は cameFrom=null＝🧭どの方向へも出発できる
 async function movePlayer(p, steps) {
   let prevId = p.cameFrom ?? null; // 背後のマス（逆走禁止用。旧セーブ互換で undefined も null に）
   for (let i = 0; i < steps; i++) {
@@ -1882,11 +1882,11 @@ async function movePlayer(p, steps) {
   }
 }
 
-// 本宮に到達したときの共通処理（歩いての本宮帰還・🌀神隠しでの本宮帰還・✨社還りの符の全てで使う）。
+// 本宮に到達したときの共通処理（歩いての本宮帰還・🌀神隠しでの本宮帰還・✨帰雁の笛の全てで使う）。
 // ① 勝利判定（総資産が目標以上）
 // ② 周回ボーナス（鳥居を規定数すべて通過済み）＝霊力ボーナス＋自軍式神全回復。
 //    通過でも、ぴったり停止でも発動する（req: 周回の報酬は本宮を「通れば」得られる）。
-// ③ 霊地の采配（exact＝本宮のマスにぴったり停止／社還りの符で着地）＝全自領で1アクション。
+// ③ 霊地の采配（exact＝本宮のマスにぴったり停止／帰雁の笛で着地）＝全自領で1アクション。
 //    周回の有無に関係なく、拠点の本宮に「留まった」こと自体の報酬（req: 周回ボーナスに限らない）。
 // 戻り値: "win"（勝利で終局）／ "lap"（周回達成）／ "stay"（周回なしのぴったり停止）／ null（素通り）
 function arriveCastle(g, p, exact = true) {
@@ -2323,17 +2323,17 @@ async function enemyLandFlow(p, tile) {
       const c = CARD_BY_ID[id];
       return c.type === "creature" && !c.ab.includes("immobile");
     });
-    // 属性4すくみの相性ヒント（v22）: 防衛式神に対して有利/不利になる属性を明示
-    const strongVs = LAND_ELEMENTS.find(e => ELEM_ADVANTAGE[e] === defCard.element); // 防衛に有利を取れる属性
-    const weakVs = ELEM_ADVANTAGE[defCard.element]; // 防衛が有利を取る＝送り込むと不利な属性
+    // 五行相剋の相性ヒント（v22・v30五行対応）: 防衛式神を剋す/剋される属性を明示
+    const strongVs = LAND_ELEMENTS.find(e => ELEM_ADVANTAGE[e] === defCard.element); // 防衛を剋す属性
+    const weakVs = ELEM_ADVANTAGE[defCard.element]; // 防衛が剋す＝送り込むと不利な属性
     const elemHint = defCard.element === "neutral"
-      ? `<br>⚪ 相手は<b>無属性</b>＝相性の輪の外（どの属性でも有利・不利なし）`
-      : `<br>⚖ 相性: ${ELEMENTS[strongVs].icon}<b>${ELEMENTS[strongVs].name}属性なら有利（ST+${ELEM_ADV_ST}）</b>／${ELEMENTS[weakVs].icon}${ELEMENTS[weakVs].name}属性は<b>不利</b>（相手にST+${ELEM_ADV_ST}）`;
+      ? `<br>⚪ 相手は<b>無属性</b>＝五行の輪の外（どの属性でも有利・不利なし）`
+      : `<br>⚖ 相剋: ${ELEMENTS[strongVs].icon}<b>${ELEMENTS[strongVs].name}属性なら剋す（ST+${ELEM_ADV_ST}）</b>／${ELEMENTS[weakVs].icon}${ELEMENTS[weakVs].name}属性は<b>剋される</b>（相手にST+${ELEM_ADV_ST}）`;
     const res = await showDialog({
       title: `⚔ 敵の土地（${ELEMENTS[tile.element].name}属性 Lv${tile.level}）`,
       body: (protectedTile ? `<b>${truceActive(G) ? "🏳️ 停戦協定により侵略できません" : "🛡️ 結界に守られていて侵略できません"}</b><br>` : "") +
         `通行料 <b>${toll}G</b> を支払うか、式神で侵略します<br>` +
-        `防衛: ${ELEMENTS[defCard.element].icon}${esc(defCard.name)}（${ELEMENTS[defCard.element].name}属性・ST${defCard.st}${support ? `+${support}(援護)` : ""}/HP${curHp < defMaxHp ? `${curHp}/${defMaxHp}` : defMaxHp}${landHpBonus(tile, defCard) ? `+${landHpBonus(tile, defCard)}(土地の加護)` : ""}）` +
+        `防衛: ${ELEMENTS[defCard.element].icon}${esc(defCard.name)}（${ELEMENTS[defCard.element].name}属性・ST${defCard.st}${support ? `+${support}(援護)` : ""}/HP${curHp < defMaxHp ? `${curHp}/${defMaxHp}` : defMaxHp}${landHpBonus(tile, defCard) ? `+${landHpBonus(tile, defCard)}(${isSouseiBlessed(tile, defCard) ? "相生の恵み" : "土地の加護"})` : ""}）` +
         elemHint +
         (defCard.ab.length ? `<br>🔖 防衛能力: ${defCard.ab.map(a => ABILITY_INFO[a].name).join("・")}` : "") +
         (defCard.ab.includes("armor") ? `<br><b>⚠ 硬殻持ち</b>：受けるダメージが常に<b>-10</b>されます` : "") +
@@ -2805,7 +2805,7 @@ function showTileInfo(tile) {
       const grown = c.ab.includes("grow") ? Math.min(5, tile.creature.grown || 0) : 0;
       parts.push(`駐留: ${ELEMENTS[c.element].icon}${esc(c.name)}${elemNote(c, tile)}${grown ? `　🌱成長+${grown * 5}` : ""}<br>` +
         `実効防衛値: ST ${c.st + grown * 5}${sup ? `+${sup}(援護)` : ""} ／ HP ${cur < mx ? `${cur}/${mx}` : mx}` +
-        `${bonus ? `+${bonus}(土地の加護)` : ""}${c.ab.includes("guard") ? "+20(守護)" : ""}`);
+        `${bonus ? `+${bonus}(${isSouseiBlessed(tile, c) ? "相生の恵み" : "土地の加護"})` : ""}${c.ab.includes("guard") ? "+20(守護)" : ""}`);
       if (c.ab.length) {
         parts.push(c.ab.map(a => `🔖 <b>${ABILITY_INFO[a].name}</b>：${ABILITY_INFO[a].desc}`).join("<br>"));
       }
@@ -2840,13 +2840,13 @@ function showTileInfo(tile) {
 }
 
 // ---------- 🎁 封符戦の開始フロー（v21） ----------
-// ステージ決定後: 確認 → 第一巻5＋第二巻5文箱をその場で開封 → プールから30枚を構築 → 開戦。
+// ステージ決定後: 確認 → 壱の巻5＋弐の巻5文箱をその場で開封 → プールから30枚を構築 → 開戦。
 // 開封プールはコレクションに加算しない（使い捨て）。構築を「やめる」とプールごと破棄して false を返す
 async function startSealed(stageIdx) {
   const stage = STAGES[stageIdx];
   const ok = await showDialog({
     title: `🎁 封符戦 — ${stage.icon} ${esc(stage.name)}`,
-    body: `その場で<b>第一巻の文箱${SEALED_PACKS_PER_SET}箱＋第二巻の文箱${SEALED_PACKS_PER_SET}箱（計${SEALED_PACKS_PER_SET * SEALED_PACK_SIZE * 2}枚）</b>を開封し、
+    body: `その場で<b>壱の巻の文箱${SEALED_PACKS_PER_SET}箱＋弐の巻の文箱${SEALED_PACKS_PER_SET}箱（計${SEALED_PACKS_PER_SET * SEALED_PACK_SIZE * 2}枚）</b>を開封し、
       出たカードだけで<b>${DECK_SIZE}枚デッキ</b>を組んで <b>${esc(stage.cpuName)}</b> に挑みます。<br><br>
       ⚠ 開封したカードは<b>この1戦だけの使い捨て</b>です（コレクションには入りません）。<br>
       🏆 勝てば通常どおり<b>勝利報酬文箱（${REWARD_WIN}枚）</b>を獲得できます（こちらはコレクションに入ります）。`,
@@ -2857,10 +2857,10 @@ async function startSealed(stageIdx) {
   });
   if (ok.action !== "open") return false;
   const pool = drawSealedPool();
-  await showPackReveal(pool.set1, `🎁 封符戦 — ✦第一巻文箱×${SEALED_PACKS_PER_SET}`,
-    `第一巻のカード${pool.set1.length}枚を開封！（プールは使い捨て・コレクションには入りません）`, { noNew: true });
-  await showPackReveal(pool.set2, `🎁 封符戦 — ⏳第二巻文箱×${SEALED_PACKS_PER_SET}`,
-    `第二巻のカード${pool.set2.length}枚を開封！ ここから${DECK_SIZE}枚のデッキを組もう`, { noNew: true });
+  await showPackReveal(pool.set1, `🎁 封符戦 — ✦壱の巻文箱×${SEALED_PACKS_PER_SET}`,
+    `壱の巻のカード${pool.set1.length}枚を開封！（プールは使い捨て・コレクションには入りません）`, { noNew: true });
+  await showPackReveal(pool.set2, `🎁 封符戦 — ⏳弐の巻文箱×${SEALED_PACKS_PER_SET}`,
+    `弐の巻のカード${pool.set2.length}枚を開封！ ここから${DECK_SIZE}枚のデッキを組もう`, { noNew: true });
   const deck = await showSealedBuilder(pool.pool);
   if (!deck) return false;
   startGame(stageIdx, { sealed: true, sealedDeck: deck });
@@ -2942,12 +2942,12 @@ function showHelp() {
       <b>💸 霊力が尽きても敗北にはならない</b>: 支払いきれないときは土地を売却し、それでも足りなければ
       持てる霊力を全て渡して<b>🏯本宮へ帰還し、初期霊力で再スタート</b>する（相手を身ぐるみ剥いでも決着はつかない——勝つには自分が凱旋するしかない）。<br>
       <b>⏱ 決着モード</b>: タイトルの「⏱ 決着」で<b>短期戦／標準／長期戦／大戦</b>を選べる。目標資産とラウンド上限が変わり、対戦の長さを好みに調整できる。<br>
-      <b>🎁 封符戦</b>: その場で開封した<b>第一巻・第二巻の文箱5つずつ（計50枚）</b>だけで30枚デッキを組んで1戦する特別モード。
+      <b>🎁 封符戦</b>: その場で開封した<b>壱の巻・弐の巻の文箱5つずつ（計50枚）</b>だけで30枚デッキを組んで1戦する特別モード。
       開封プールは<b>使い捨て</b>（コレクションには入らない）なので、コレクションの厚さに関係なく誰でも対等に遊べる。勝てば通常の勝利報酬あり（進行度は変化しない）。<br><br>
       <b>ターンの流れ</b>: カードを1枚引く → （任意で手札の呪術をクリックして使用・1回まで）→ 🎲賽で移動<br>
       <b>🧭 移動は進行方向へ（v24）</b>: コマは<b>今の進行方向を保って</b>進む＝<b>逆走はできない</b>。
       分かれ道・交差点では背後以外の<b>行く手を選べる</b>（ルートプレビュー付きダイアログ）。
-      ゲーム開始直後・💫雲隠れの符・🌀神隠し・本宮への帰還などの直後は方向が未確定＝どの方向へも出発できる。<br>
+      ゲーム開始直後・💫雲隠れ・🌀神隠し・本宮への帰還などの直後は方向が未確定＝どの方向へも出発できる。<br>
       <b>🔄 逆方向へ進むには</b>: <b>時流逆転</b>（呪術。自分に使えば来た道を戻れる／相手に使えば高額地帯へ押し返せる）か、
       🎋おみくじマスの<b>時空の渦</b>（イベント）で進行方向が反転したときだけ。相手から強制的に反転させられることもある。<br>
       <b>➡ 一方通行マス</b>: 大きな矢印が明滅しているマスは<b>矢印の方向へしか進めない特別マス</b>（出口側から入ることもできない）。
@@ -2974,12 +2974,12 @@ function showHelp() {
       <b>🏯 土地の援護</b>: 防衛式神は、隣接する自分の土地1つにつき<b>ST+10</b>（最大+40）。
       十字や固まった霊地ほど守りが固くなる。<br>
       <b>🩹 戦闘後のHP</b>: バトル後の式神は<b>残りHPのまま</b>駐留し、傷を引き継ぐ。
-      <b>周回達成（鳥居を揃えて本宮を通過・停止）で自軍式神のHPが全回復</b>（負傷は💚快癒の符でも回復可）。<br><br>
+      <b>周回達成（鳥居を揃えて本宮を通過・停止）で自軍式神のHPが全回復</b>（負傷は💚湯治でも回復可）。<br><br>
       <b>盤面エフェクト</b>（呪術枠で発動・2ラウンドで消える）<br>
       ・🛡️ 神域 … 自分の土地に結界。侵略・侵攻・敵呪術の対象にならない<br>
-      ・🕸️ 蜘蛛の巣張り … 土地に罠。相手が通過・停止するとその場で足止め（移動終了）<br>
+      ・🕸️ 鳥黐の罠 … 土地に罠。相手が通過・停止するとその場で足止め（移動終了）<br>
       ・🚧 関所札 … 土地1つを通行止めに。全プレイヤー（自分も含む）が進入できず<b>迂回を強いられる</b>（全方向を塞がれたコマは例外的に通れる）<br>
-      ・💚 快癒の符 … 負傷した自分の式神1体のHPを全回復（周回を待たず立て直せる）<br>
+      ・💚 湯治 … 負傷した自分の式神1体のHPを全回復（周回を待たず立て直せる）<br>
       ・✨ 引き直し … 手札をすべて捨てて新たに6枚引く（手札事故のリセット）<br><br>
       <b>マスの種類</b><br>
       ・空き地 … 式神を召喚して土地を確保（コスト支払い）<br>
@@ -2992,49 +2992,51 @@ function showHelp() {
       <b>連鎖</b>: 同じ属性の土地を複数持つと通行料が倍増（2つ→×1.5、3つ→×2.0、4つ以上→×2.5）<br>
       <b>周回</b>: 鳥居を規定数そろえて本宮を<b>通過または停止</b>すると<b>周回ボーナス＝霊力（基本${DEFAULT_RULES.lapBase}G＋所有土地×40G）＋自軍式神HP全回復</b>。大きく劣勢のときは霊力<b>1.5倍</b>！<br>
       <b>🏯 霊地の采配</b>: 本宮にコマが<b>ぴったり停止（通過ではなく丁度）</b>すると、周回に関係なく<b>支配する全霊地を対象に1回だけ行動</b>できる（侵攻／交代／レベルアップ）。
-      賽でぴったり止まれない時は<b>✨社還りの符</b>で本宮へ帰ればこの権利が得られる（＝社還りの符の使いどころ）。<br><br>
-      <b>属性相性</b>: 🔥火 → 🌳木 → ⛰️地 → 💧水 → 🔥火（左が右に強い・<b>4すくみ</b>／＝水＞火＞木＞地＞水）。バトルで有利属性はST+${ELEM_ADV_ST}。
-      <b>バトル開始時のカットインに⚡有利/⚠不利のバッジと相性の輪が表示</b>され、侵略時の式神選択でも各カードに⚡/⚠リボンが付く<br>
-      <b>⚪ 無属性式神</b>: 相性の輪の<b>外</b>＝有利も不利も取らず、<b>土地の加護（属性一致HP+）も受けない</b>。
+      賽でぴったり止まれない時は<b>✨帰雁の笛</b>で本宮へ帰ればこの権利が得られる（＝帰雁の笛の使いどころ）。<br><br>
+      <b>☯️ 五行（ごぎょう）</b>: 属性は<b>木・火・土・金・水</b>の5つ。ふたつの輪が働く——<br>
+      ・<b>相剋（そうこく）＝戦いの輪</b>: 🌳木は⛰️土を剋し、土は💧水を、水は🔥火を、火は🪙金を、金は木を剋す。
+      バトルで剋す側は<b>ST+${ELEM_ADV_ST}</b>。<br>
+      ・<b>相生（そうしょう）＝育ちの輪</b>: 🌳木は🔥火を生み、火は⛰️土を、土は🪙金を、金は💧水を、水は木を生む。
+      式神は<b>自分を生む親属性の土地</b>に立つと、養われて防衛時<b>HP+${SOUSEI_HP}（相生の恵み）</b>。<br>
+      ＝どの式神にも「本領の土地」（同属性＝加護Lv×10）と「育ての土地」（親属性＝恵み+${SOUSEI_HP}）の<b>2種類の居場所</b>がある。
+      <b>バトル開始時のカットインに⚡剋す/⚠剋されるのバッジと相剋の輪が表示</b>され、侵略時の式神選択でも各カードに⚡/⚠リボンが付く<br>
+      <b>⚪ 無属性式神</b>: 五行の輪の<b>外</b>＝相剋・相生のどちらにも関わらず、<b>土地の加護・恵みも受けない</b>。
       そのぶんコスト効率が高く、全員稀以上でユニークな能力を持つ（どの土地に置いても同じ強さ）。<br>
-      <b>バトル</b>: 侵略側が先攻（防衛側が<b>居合</b>持ちなら防衛が先攻）。土地と同属性の防衛側はHP+（土地Lv×10）。
+      <b>五行の性格</b>: 🌳木＝芽吹きと再生（成長・転生・捕縛）／🔥火＝勢いと燃え尽き（高STだが打たれ弱い）／
+      ⛰️土＝不動と実り（高HPの受け・築城）／🪙金＝刃と富（破魔・居合と、銭を生む採掘・商魂）／
+      💧水＝流転と搦め手（捕縛・遁走・吸収・呪力）<br>
+      <b>バトル</b>: 侵略側が先攻（防衛側が<b>居合</b>持ちなら防衛が先攻）。土地と同属性の防衛側はHP+（土地Lv×10）、親属性ならHP+${SOUSEI_HP}。
       各攻撃は低確率で<b>💫会心の一撃</b>（ダメージ1.5倍）！ バトルログには<b>📊【式】</b>で実効ST/HPの内訳と必要手数が残るので、勝敗の計算を確認できる。<br>
       <span class="ab">居合</span>防衛でも先に攻撃 ／ <span class="ab">破魔</span>土地HPボーナス無視 ／
       <span class="ab">強襲</span>侵略時ST+20 ／ <span class="ab">守護</span>防衛時HP+20 ／
       <span class="ab">豪運</span>会心率アップ ／ <span class="ab">捕縛</span>撃退した侵略者を1ターン拘束 ／
       <span class="ab">不動</span>侵略・侵攻に出せない防御専用 ／
-      <span class="ab">護法</span>敵の対象指定の呪術（天火の符・大祓の符・神風の符）の対象にならない ／
+      <span class="ab">護法</span>敵の対象指定の呪術（落雷の符・大祓・風神の袋）の対象にならない ／
       <span class="ab">連撃</span>バトルで続けて2回攻撃する ／
       <span class="ab">物理無効</span>物理攻撃（呪力以外）が効かない ／
       <span class="ab">物理反射</span>物理攻撃をそっくり攻撃側へ跳ね返す ／
       <span class="ab">呪力攻撃</span>攻撃が呪力＝物理無効・物理反射を貫く ／
-      <span class="ab">模倣</span>バトル時、相手の基本ST・HP・能力をそっくり写し取って戦う（化け狸）<br>
-      ※無属性の<b>幽鬼（物理無効）・逃げ水（物理反射）</b>には通常の攻撃が通らない。対策は
-      <b>✨呪力攻撃</b>（呪力攻撃持ち式神 or 御幣等の装備）か、除去の呪術（☄️天火の符等）。そのぶん両者ともHPは低い。<br>
-      <b>🏞 霊地に働きかける希少特性</b>（第二巻の稀な特性。バトルが土地そのものを変える）<br>
-      ・<span class="ab">築城</span> <b>防衛のバトルに勝つたび、その霊地がLv+1</b>（最大Lv5・費用なし）。攻められるほど土地が育つ＝守り切れる場所に置くほど強い（石垣入道）<br>
-      ・<span class="ab">焦土</span> 防衛時<b>HP+30</b>で守りは固いが、<b>この土地でバトルが起きるたびLv-1</b>（最低1）。攻め落とされても土地は痩せたまま渡る＝焦土戦術（焦土蟲）<br>
-      ・<span class="ab">破城</span> <b>侵攻で攻め込むとき、バトルの前に相手の霊地をLv-1</b>（最低1）。土地の加護ごと城壁を砕いてから殴れる（城崩しの羊）<br>
-      ・<span class="ab">遁走</span> <b>バトルに敗れても消滅せず、空いている霊地へHP全快で逃げ延びて自領にする</b>（空き地が無ければ捨て札）。そのぶん素のST/HPは低い（霧隠れ）<br>
-      ・<span class="ab">加勢</span> <b>隣接する自領の式神に、武具を貸すように ST+15 / HP+15</b>（2体まで重複）。自分は戦わずに周りを底上げする（幟持ち天狗）<br>
-      ・<span class="ab">霊力強奪</span> <b>バトルで与えたダメージと同量の霊力を相手から奪う</b>（💰餓鬼の牙と重ねると×3に／霊喰いの鬼）<br>
-      ・<span class="ab">二形</span> <b>式神として召喚できるほか、バトル時に武具としても装備できる</b>（装備すると使い切り）。式神としては最弱クラスだが手札で腐らない（妖刀＝ST+40／盾の付喪神＝HP+40）<br><br>
-      <b>宝具</b>: バトル時に⚔️武器（ST+）や🛡️防具（HP+）を装備できる（使い切り）。防衛側も応戦可能。
-      <b>二形</b>の式神も装備の候補に並ぶ（ただし侵略に出したそのカード自身は選べない）。<br>
-      ・🚫 <b>解呪の御札</b> … 相手の宝具効果を打ち消す ／ 🪞 <b>神鏡</b> … 受けた攻撃の一部を反射<br>
-      ・✨ <b>御幣／錫杖</b> … 武器よりST補正は控えめだが<b>攻撃が呪力になる</b>＝物理無効・物理反射を貫く（防衛時の反撃にも有効）<br>
-      ・💰 <b>餓鬼の牙</b> … ST+25の吸奪武器。<b>与えたダメージ×2倍の霊力を相手から強奪</b>する（攻撃が通らなければ強奪もなし）<br>
-      <b>逆転の呪術</b>: 意趣返しの符（劣勢時に資産を奪う）、社還りの符（本宮へ帰還。達成で勝利、霊地の采配発動、鳥居が揃えば周回ボーナスも）、
-      💰 <b>収奪の符</b>（相手の所持金の半分を奪う）、🎲 <b>倍賽の符</b>（次の出目を2倍）など<br>
-      <b>除去・妨害呪術</b>: ☄️ <b>天火の符</b>（安価・敵1体に40ダメージ＝削り／削り切れば破壊）、
-      ✨ <b>大祓の符</b>（高価・極札／敵1体を<b>HP不問で確実に消滅</b>）、
-      🌬️ <b>神風の符</b>（敵式神を隣の空き地へ<b>強制移動</b>＝連鎖崩し・防衛どかし）<br>
-      <b>資金呪術</b>: ⚗️ <b>換銭の符</b>（手札1枚を捨てて150Gに変える＝使わないカードを資金化）、
-      🕯️ <b>豊穣の儀</b>（手札1枚を捧げて+350G）、🕯️ <b>潤沢の儀</b>（手札を<b>1〜3枚まで好きなだけ</b>捧げ、1枚につき+300G＝1枚あたりは割安だが枚数でまとめて稼げる）、
-      💱 <b>高値売却</b>（自分の土地1つを<b>価値の130%</b>で現金化。強制売却の70%より遥かに得で、駐留式神は手札に戻る）<br>
-      <b>移動呪術</b>: 💫 <b>雲隠れの符</b>（自分のコマを好きなマスへ飛ばす。本宮以外・マスの効果や鳥居通過は発生せず、その後賽で移動）、
-      🚪 <b>遷座の符</b>（自分の式神を好きな<b>空き地</b>へ転送＝連鎖の組み替え・遠征）、
-      🐇 <b>兎跳びの符</b>（自分の式神を<b>2マス先</b>の空き地へ跳躍）。どちらも元の土地は空き地に戻る（レベルは残る・不動は対象外）<br>
+      <span class="ab">模倣</span>バトル時、相手の基本ST・HP・能力をそっくり写し取って戦う（白面の写し身）<br>
+      ※無属性の<b>夢喰いの獏（物理無効）</b>には通常の攻撃が通らない。対策は
+      <b>✨呪力攻撃</b>（龍宮の使い・不知火・闇龗など）か、除去の呪術（⚡落雷の符等）。<br>
+      <b>🏞 霊地に働きかける希少特性</b>（バトルが土地そのものを変える）<br>
+      ・<span class="ab">築城</span> <b>防衛のバトルに勝つたび、その霊地がLv+1</b>（最大Lv5・費用なし）。攻められるほど土地が育つ＝守り切れる場所に置くほど強い（棚田の守り神・産土の大神）<br>
+      ・<span class="ab">遁走</span> <b>バトルに敗れても消滅せず、空いている霊地へHP全快で逃げ延びて自領にする</b>（空き地が無ければ捨て札）。そのぶん素のST/HPは低い（泡沫の精・海霧の女房）<br>
+      ・<span class="ab">加勢</span> <b>隣接する自領の式神に、武具を貸すように ST+15 / HP+15</b>（2体まで重複）。自分は戦わずに周りを底上げする（葛の絡み手・陣貝の吹き手）<br>
+      ・<span class="ab">霊力強奪</span> <b>バトルで与えたダメージと同量の霊力を相手から奪う</b>（💰餓鬼縄と重ねると×3に／鍛冶の隠り神・管狐）<br><br>
+      <b>宝具</b>: バトル時に⚔️武器（ST+）や🛡️防具（HP+）を装備できる（使い切り）。防衛側も応戦可能。<br>
+      ・🚫 <b>清めの塩</b> … 相手の宝具効果を打ち消す ／ 🪞 <b>御神鏡</b> … 受けた攻撃の50%を反射<br>
+      ・🦊 <b>幻惑の狐面</b> … 相手のST-15 ／ 📿 <b>平静の数珠</b> … 相手の会心を封じる<br>
+      ・💰 <b>餓鬼縄</b> … ST+25の吸奪縄。<b>与えたダメージ×2倍の霊力を相手から強奪</b>する（攻撃が通らなければ強奪もなし）<br>
+      <b>逆転の呪術</b>: 帰雁の笛（本宮へ帰還。達成で勝利、霊地の采配発動、鳥居が揃えば周回ボーナスも）、
+      💸 <b>賽銭浚い</b>（相手から200Gを奪う）、🎲 <b>韋駄天の草鞋</b>（次の出目を2倍）など<br>
+      <b>除去・妨害呪術</b>: ⚡ <b>落雷の符</b>（安価・敵1体に40ダメージ＝削り／削り切れば破壊）、
+      🧹 <b>大祓</b>（高価・極札／敵1体を<b>HP不問で確実に消滅</b>）、
+      🌬️ <b>風神の袋</b>（敵式神を隣の空き地へ<b>強制移動</b>＝連鎖崩し・防衛どかし）、🪢 <b>金縛りの呪</b>（相手を1回休みに）<br>
+      <b>資金呪術</b>: 💱 <b>質草流し</b>（手札1枚を捨てて150Gに変える）、🕯️ <b>神饌の儀</b>（手札1枚を捧げて+350G）、
+      💰 <b>千両万両</b>（所持霊力の20%を利殖）、🧾 <b>年貢の取り立て</b>（敵の土地1つにつき30G徴収）<br>
+      <b>移動呪術</b>: 💫 <b>雲隠れ</b>(自分のコマを好きなマスへ飛ばす。本宮以外・マスの効果や鳥居通過は発生せず、その後賽で移動）、
+      🪨 <b>飛び石</b>（自分の式神を<b>2マス先</b>の空き地へ跳躍。元の土地は空き地に戻りレベルは残る・不動は対象外）<br>
       <b>🗑 捨札の確認</b>: ヘッダーの<b>🗑 捨札</b>で全員の捨てカードを<b>プレイヤーのタブ切替</b>で確認できる。<b>山札が尽きると捨札を切り直して山札に戻り</b>、ログ（📜）で「🔀」と合図する。<br>
       <b>⚙ 難易度</b>: タイトル画面で<b>イージー／ノーマル／ハード</b>を選べる。相手ごとの強さの違いはそのままに、CPUの積極性・デッキ・資金力が変わる。<br>
       <b>👤 プレイヤー</b>: タイトル画面の「👤」で<b>5人まで</b>切り替えられる。プレイヤーごとに<b>コレクション・デッキ（5つまで保存）・ステージ進行度</b>が別々に記録される（名前は「✎」で変更）。<br>
@@ -3042,28 +3044,23 @@ function showHelp() {
       <b>🔍 カード詳細</b>: 📚アルバムの所持カードをクリック、🛠デッキ構築・🎁封符戦の<b>🔍</b>、🗑捨札の行をクリックすると、
       <b>カードの詳細ポップアップ</b>＝フルサイズのカード表示＋ステータス＋<b>特性（能力）の説明文</b>＋属性相性を確認できる。<br><br>
       <b>⚔ 三つ巴</b>: あなた＋ステージの主＋<b>ランダムな乱入キャラ</b>の3人で戦うモード。<b>全ステージ</b>から選べ、勝てばカードを<b>${REWARD_WIN + REWARD_ROYALE_BONUS}枚</b>獲得＝1対1より+${REWARD_ROYALE_BONUS}枚（進行度は変化しない）。🎪週替りONならさらに+${WEEKLY_BONUS_CARDS}枚。
-      対象を選ぶ呪術（奪霊の符・金縛り等）は<b>相手を選択</b>して撃つ。3人だと相手を金欠にしても止まらないので、<b>自分の凱旋</b>を最短で狙うのが鍵。<br>
+      対象を選ぶ呪術（賽銭浚い・金縛り等）は<b>相手を選択</b>して撃つ。3人だと相手を金欠にしても止まらないので、<b>自分の凱旋</b>を最短で狙うのが鍵。<br>
       <b>🎮 2人対戦（ホットシート）</b>: 同じ端末を交互に操作する<b>人間同士の対戦</b>。プレイヤーを2人選び、<b>全ステージ</b>から盤面を選べる。
       各自の<b>使用中デッキ</b>（未構築ならおまかせ）で戦い、手番の交代時は手札が伏せられる（報酬・進行度は変化しない）。<br>
       <b>♻️ ポイント交換所</b>: 同名<b>4枚目以降の余剰カード</b>を<b>🎟文箱ポイント</b>にスクラップ（★+1〜★★★★+8）し、
-      貯めて<b>文箱（5枚入り・25🎟）</b>を購入できる。第一巻／第二巻のどちらの文箱も買える。
+      貯めて<b>文箱（5枚入り・25🎟）</b>を購入できる。壱の巻／弐の巻のどちらの文箱も買える。
       文箱購入<b>10回ごとに🌟救いの回</b>＝1枚が<b>未所持カード確定</b>（アルバムのコンプリートの出口）。<br>
-      <b>⏳ 第二巻「時流の帖」</b>: 文箱・交換所・報酬（巻を選択）で集める拡張カード群。新能力——
+      <b>🏮 弐の巻「八百万の帖」</b>: 文箱・交換所・報酬（巻を選択）で集める拡張カード群。稼ぎと連携の能力——
       <span class="ab">成長</span>ターン開始ごとにST/HP+5（上限+25） ／ <span class="ab">百鬼</span>自軍の同属性1体につきST+5 ／
       <span class="ab">遠隔</span>侵略・侵攻で反撃を受けない ／ <span class="ab">吸収</span>与えたダメージの半分HP回復 ／
       <span class="ab">硬殻</span>受けるダメージ-10 ／ <span class="ab">背水</span>HP半分以下でST+25 ／
-      <span class="ab">採掘</span>ターン開始時+15G ／ <span class="ab">転生</span>倒されても手札に戻る ／
-      <span class="ab">天翔</span>侵攻で2マス先まで ／ <span class="ab">看破</span>相手の宝具を打ち消す。<br>
-      🏛<b>建造物</b>（ST0・不動・反撃しない施設）は通行料アップ・採掘・回復などの恒常効果で霊地を支える。
-      📜<b>巻物</b>は攻撃を「記載ST固定の呪力攻撃」に変える（低STの壁が呪術砲台に）。
-      👑<b>五帝</b>（300G）は各属性の頂点に立つ別格の極札。<br>
-      ✨<b>第二巻呪術（55種）</b>: 🕯️<b>儀式</b>は追加コストに<b>手札1枚を捧げる</b>大型呪術（豊穣・猛火・蘇生・星霜・時の儀など）。
-      <b>盤面エフェクト</b>（市場開放・霊力嵐・戦火の世・静寂のとばり・神域の加護・停戦協定・蜃気楼）は2Rの間、盤面全体のルールを変える。
-      ほかに永続強化（🕊️言祝ぎ・💎鉱脈発見・🏯城塞化）、移動妨害（🎲呪い賽・🟤泥沼・🏯強制送還）、
-      🌫️無力化の霧（敵の能力を消す）・🤫沈黙の霧（呪術封じ）など。<br>
-      ⏳<b>第二巻ステージ（S13〜S16）</b>: 大型の「馬借の大原」「からくりの都」を越えた先に、
-      👑五帝を従えるボス——「五帝の宮」の巫女ちはやと、最終決戦「常世の玉座」の百鬼夜行の主・久遠が待つ
-      （ボスは五帝を<b>確定でデッキに投入</b>してくる）。<br>
+      <span class="ab">採掘</span>ターン開始時+15G ／ <span class="ab">商魂</span>駐留地の通行料1.3倍 ／
+      <span class="ab">転生</span>倒されても手札に戻る ／ <span class="ab">天翔</span>侵攻で2マス先まで。<br>
+      👑<b>五帝</b>（300G）＝五行の頂点に立つ聖獣の極札: 🌳<b>青龍</b>・🔥<b>朱雀</b>・⛰️<b>黄龍</b>・🪙<b>白虎</b>・💧<b>玄武</b>。<br>
+      🕯️<b>儀式</b>は追加コストに<b>手札1枚を捧げる</b>大型呪術（神饌・送り火・口寄せ・神楽の儀）。
+      <b>盤面呪術</b>（⛩️注連縄張り・🪤鳥黐の罠）は2Rの間、マスそのものを変える。<br>
+      🏯<b>ボス（S15〜S16）</b>: 「五帝の宮」の巫女ちはやは👑四神を、最終決戦「常世の玉座」の百鬼夜行の主・久遠は👑黄龍と写し身を
+      <b>確定でデッキに投入</b>してくる。<br>
       <b>🎪 週替わりの神事</b>: 毎週月曜に切り替わる特殊ルール（通行料2倍・初期手札に極札を保証など）。タイトルの「🎪 週替り」でON/OFF。
       ONで正規対戦に勝つと<b>ボーナスカード+${typeof WEEKLY_BONUS_CARDS !== "undefined" ? WEEKLY_BONUS_CARDS : 2}枚</b>（稽古には適用されない）。<br>
       <b>👥 情報窓（画面上部・3名分）</b>: 各プレイヤーの<b>順位・霊力・総資産（バー）・連鎖・鳥居・周回・山札</b>を

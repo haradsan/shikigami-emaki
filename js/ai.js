@@ -77,7 +77,7 @@ function aiChooseSpell(g, p) {
     const c = CARD_BY_ID[id];
     if (c.type !== "spell" || c.cost > p.magic - aiProf(p).reserve) continue;
     if (c.spell === "recall" && p.pos !== 0 && assetsOf(g, p) - c.cost >= RULES.target) return id;
-    // 大きく劣勢で鳥居が規定数揃っているなら、社還りの符で即周回（劣勢1.5倍ボーナス＋全回復）して立て直す
+    // 大きく劣勢で鳥居が規定数揃っているなら、帰雁の笛で即周回（劣勢1.5倍ボーナス＋全回復）して立て直す
     if (c.spell === "recall" && p.pos !== 0 && p.gates.size >= gatesNeededOf(g) &&
         assetsOf(g, p) < assetsOf(g, opp) * COMEBACK_RATIO) return id;
     if (c.spell === "revenge" && assetsOf(g, opp) - assetsOf(g, p) >= 600 && opp.magic >= 150) return id;
@@ -220,7 +220,7 @@ function aiPickSlowTarget(g, p) {
   cands.sort((a, b) => assetsOf(g, b) - assetsOf(g, a));
   return cands[0];
 }
-// 沈黙の霧: 勝ちに近い相手の呪術（社還りの符等）を封じる
+// 沈黙の霧: 勝ちに近い相手の呪術（帰雁の笛等）を封じる
 function aiPickSilenceTarget(g, p) {
   const cands = opponentsOf(g, p).filter(q => assetsOf(g, q) >= RULES.target * 0.85);
   if (cands.length === 0) return null;
@@ -266,14 +266,14 @@ function aiPickBlessingTarget(g, p) {
   cands.sort((a, b) => landValue(b) - landValue(a));
   return cands[0];
 }
-// 大山崩しの符: Lv3以上の敵地が2つあるときだけ撃つ（高いほうから2つ）
+// 大地割れの符: Lv3以上の敵地が2つあるときだけ撃つ（高いほうから2つ）
 function aiPickGrandquakeTargets(g, p) {
   const cands = enemyLandsOf(g, p).filter(t => t.level >= 3 && !landSpellShielded(g, t));
   if (cands.length < 2) return null;
   cands.sort((a, b) => b.level - a.level || landValue(b) - landValue(a));
   return cands.slice(0, 2);
 }
-// 猛火の儀: 70ダメージで倒せる高額地の敵を焼く
+// 送り火の儀: 70ダメージで倒せる高額地の敵を焼く
 function aiPickBlazeTarget(g, p) {
   const cands = enemyLandsOf(g, p).filter(t => t.creature && !isSanctuaryProtected(g, t) &&
     !isSpellProof(t) && currentHp(t.creature) <= 70 && landValue(t) >= 480);
@@ -281,7 +281,7 @@ function aiPickBlazeTarget(g, p) {
   cands.sort((a, b) => landValue(b) - landValue(a));
   return cands[0];
 }
-// 蘇生の儀: 捨て札の強式神を連鎖の伸びる空き地へ
+// 口寄せの儀: 捨て札の強式神を連鎖の伸びる空き地へ
 function aiPickReviveTarget(g, p) {
   const creatures = [...new Set(p.discard)].map(id => CARD_BY_ID[id])
     .filter(c => c.type === "creature" && c.st + c.hp >= 100);
@@ -294,7 +294,7 @@ function aiPickReviveTarget(g, p) {
     (landValue(a) + chainCount(g, p.id, a.element) * 40));
   return { cardId: creatures[0].id, tile: empties[0] };
 }
-// 星霜の儀: 連鎖2以上の低Lv地を一気に育てる
+// 神楽の儀: 連鎖2以上の低Lv地を一気に育てる
 function aiPickAgesTarget(g, p) {
   const cands = ownedLands(g, p.id).filter(t => t.level <= 2 && chainCount(g, p.id, t.element) >= 2);
   if (cands.length === 0) return null;
@@ -302,7 +302,7 @@ function aiPickAgesTarget(g, p) {
   return cands[0];
 }
 
-// 言霊の符で狙う価値のある目（1〜6）を探す。なければ null
+// 辻占で狙う価値のある目（1〜6）を探す。なければ null
 // 「連鎖が伸びる空き地」に一致属性式神を置ける場合のみ使う
 function aiPickHolywordDice(g, p, spellCost) {
   const budget = p.magic - spellCost - aiProf(p).reserve;
@@ -522,7 +522,7 @@ function aiPickQuakeTarget(g, p) {
   return lands[0];
 }
 
-// 大祓の符: 敵の最も価値の高い（＝主力の）土地の式神を無条件で消滅させる（HP不問）。
+// 大祓: 敵の最も価値の高い（＝主力の）土地の式神を無条件で消滅させる（HP不問）。
 // レジェンド級の確定除去なので、相手の要となる高額地・連鎖地に温存して撃つ。
 function aiPickVanishTarget(g, p) {
   const lands = enemyLandsOf(g, p).filter(t =>
@@ -534,7 +534,7 @@ function aiPickVanishTarget(g, p) {
   return lands[0];
 }
 
-// 神風の符（強制移動）: 敵の連鎖地・高額地の式神を、隣接する最も安い空き地へ押し出して連鎖・防衛を崩す
+// 風神の袋（強制移動）: 敵の連鎖地・高額地の式神を、隣接する最も安い空き地へ押し出して連鎖・防衛を崩す
 // 返り値: { src, dst } または null
 function aiPickGustTarget(g, p) {
   let best = null, bestScore = 60; // 最低限のうまみが無ければ撃たない
@@ -552,7 +552,7 @@ function aiPickGustTarget(g, p) {
   return best;
 }
 
-// 雲隠れの符（v17）: 進路上（1〜6マス先）に高額な敵地が待ち構えているとき、
+// 雲隠れ（v17）: 進路上（1〜6マス先）に高額な敵地が待ち構えているとき、
 // 実りの多い位置（着地評価の平均が高く・未通過の鳥居に近い）へ跳んで危険を回避する
 function aiPickTeleportTarget(g, p) {
   let danger = 0;
@@ -594,7 +594,7 @@ function aiPickTransportTarget(g, p) {
   return best;
 }
 
-// 兎跳びの符（v17）: 2マス先の空き地への跳躍。遷座の符と同じ採点を跳躍範囲に適用（安いぶん閾値は低め）
+// 飛び石（v17）: 2マス先の空き地への跳躍。遷座の符と同じ採点を跳躍範囲に適用（安いぶん閾値は低め）
 // 返り値: { src, dst } または null
 function aiPickLeapTarget(g, p) {
   let best = null, bestScore = 60;
@@ -611,7 +611,7 @@ function aiPickLeapTarget(g, p) {
   return best;
 }
 
-// 快癒の符: 相手がすぐ踏みそうな高額地の負傷式神を立て直す（周回全回復を待てない時）
+// 湯治: 相手がすぐ踏みそうな高額地の負傷式神を立て直す（周回全回復を待てない時）
 function aiPickRegenTarget(g, p) {
   const wounded = ownedLands(g, p.id).filter(t => t.creature && isWounded(t.creature));
   if (wounded.length === 0) return null;
@@ -624,7 +624,7 @@ function aiPickRegenTarget(g, p) {
   return wounded[0];
 }
 
-// 天火の符: 40ダメージで倒せる敵式神（現在HP<=40）を優先、無ければ高額地を削る
+// 落雷の符: 40ダメージで倒せる敵式神（現在HP<=40）を優先、無ければ高額地を削る
 function aiPickMeteorTarget(g, p) {
   const lands = enemyLandsOf(g, p).filter(t => t.creature && !isSanctuaryProtected(g, t) && !isSpellProof(t));
   if (lands.length === 0) return null;
@@ -635,7 +635,7 @@ function aiPickMeteorTarget(g, p) {
   return pool[0];
 }
 
-// 倍賽の符: 総資産を達成済みで本宮が近すぎない（倍化で一気に本宮帰還を狙える）時に使う
+// 韋駄天の草鞋: 総資産を達成済みで本宮が近すぎない（倍化で一気に本宮帰還を狙える）時に使う
 function aiWantDiceDouble(g, p) {
   if (assetsOf(g, p) < RULES.target) return false; // 勝ち条件を満たしていない間は温存
   if (p.pos === 0) return false;                    // 既に本宮なら不要
@@ -651,7 +651,7 @@ function aiPickFreezeTarget(g, p) {
   return cands[0];
 }
 
-// 盗人の符: 手札の潤沢な相手から奪う。対象プレイヤーを返す（いなければ null）
+// 隙間風: 手札の潤沢な相手から奪う。対象プレイヤーを返す（いなければ null）
 function aiPickStealTarget(g, p) {
   const cands = opponentsOf(g, p).filter(q => q.hand.length >= 5);
   if (cands.length === 0) return null;
@@ -659,8 +659,8 @@ function aiPickStealTarget(g, p) {
   return cands[0];
 }
 
-// 換銭の符: 霊力が乏しく手札が渋滞しているとき、使い道の薄い1枚を120Gに変える。
-// 返り値: 捨てるカードid（使わないなら null）。selfId＝換銭の符自身（候補から除外）
+// 質草流し: 霊力が乏しく手札が渋滞しているとき、使い道の薄い1枚を120Gに変える。
+// 返り値: 捨てるカードid（使わないなら null）。selfId＝質草流し自身（候補から除外）
 function aiPickAlchemy(g, p, selfId) {
   if (p.magic >= 300) return null; // 資金に余裕があるうちは温存
   const idx = p.hand.indexOf(selfId);
@@ -684,7 +684,7 @@ function aiPickSalvage(g, p) {
   return cands[0].id;
 }
 
-// 快癒の符を使う価値があるか: 相手が近づいている高額地に、深く傷ついた防衛式神がいる
+// 湯治を使う価値があるか: 相手が近づいている高額地に、深く傷ついた防衛式神がいる
 function aiWantRegen(g, p) {
   if (p.magic < CARD_BY_ID.regen.cost + aiProf(p).reserve) return false;
   const near = aiNearTilesOfOpponents(g, p);
@@ -696,7 +696,7 @@ function aiWantRegen(g, p) {
   });
 }
 
-// 開墾の符: 連鎖2以上の土地でLv3以下のものを育てる
+// 五穀豊穣: 連鎖2以上の土地でLv3以下のものを育てる
 function aiPickGrowthTarget(g, p) {
   const lands = ownedLands(g, p.id).filter(t =>
     t.level <= 3 && chainCount(g, p.id, t.element) >= 2);
@@ -712,7 +712,7 @@ function aiNearTiles(g, player) {
   return near;
 }
 
-// 蜘蛛の巣張り: 相手がすぐ踏みそうな自分の高額地に罠を仕掛け、足止めしつつ通行料を取る
+// 鳥黐の罠: 相手がすぐ踏みそうな自分の高額地に罠を仕掛け、足止めしつつ通行料を取る
 function aiPickEnsnareTarget(g, p) {
   const near = aiNearTilesOfOpponents(g, p);
   const cands = g.tiles.filter(t =>
@@ -803,7 +803,7 @@ function aiChooseMarch(g, p) {
   return best;
 }
 
-// 霊脈替えの符: 連鎖1の孤立土地を、既に連鎖2以上ある属性へ変える
+// 五行転じ: 連鎖1の孤立土地を、既に連鎖2以上ある属性へ変える
 function aiPickShiftTarget(g, p) {
   const mine = ownedLands(g, p.id);
   let bestElem = null, bestN = 1;

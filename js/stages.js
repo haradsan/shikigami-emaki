@@ -87,7 +87,9 @@ function buildBoard(stage) {
   //   非LANDマス（鳥居/札等）で列が分断されても、隣接する土地同士は同属性になりやすい。
   //   elementAt の個別指定は循環を消費しない（ci を進めない）ので、指定タイルは連鎖の起点として別枠に置ける。
   let ci = 0;
-  const RUN = stage.elemRun || 3;
+  // v30: 五行（5属性）化に伴い既定ブロック長を3→2に。RUN=3のままだと小盤面（土地11前後）で
+  // 5番目の属性が一周に収まらず欠落する（雛形20マスで水が出ない事故があった）。
+  const RUN = stage.elemRun || 2;
   tiles.forEach(t => {
     const k = t.x + "," + t.y;
     t.type = t.id === 0 ? "CASTLE" : (stage.types[k] || "LAND");
@@ -110,7 +112,7 @@ const STAGES = [
   {
     id: "s1", name: "はじまりの野辺", icon: "🌿",
     cpuName: "見習い陰陽師・ひなた", ai: "novice",
-    desc: "ひとまわり20マスの小さな野辺。テンポよく周回ボーナスを稼ごう。火・木・地・水の4属性バランス型。",
+    desc: "ひとまわり20マスの小さな野辺。テンポよく周回ボーナスを稼ごう。五行（木・火・土・金・水）のバランス型。",
     board: { rings: [{ w: 6, h: 6 }] },
     types: {
       "0,2": "GATE", "3,0": "GATE", "5,3": "GATE",
@@ -118,7 +120,7 @@ const STAGES = [
       "1,0": "MAGIC", "4,5": "MAGIC",
       "1,5": "FORTUNE",
     },
-    elements: ["fire", "wood", "earth", "water"],
+    elements: ["wood", "fire", "earth", "metal", "water"],
     theme: { glow: "#24402a", bg: "#121c13", path: "#1d2b20", dot: "#6f9a6f" },
     rules: { target: 3000, maxRounds: 32 },
   },
@@ -134,7 +136,7 @@ const STAGES = [
       "0,0": "MAGMA", "6,1": "MAGMA",
       "6,5": "FORTUNE",
     },
-    elements: ["fire", "water", "wood", "earth", "fire"],
+    elements: ["fire", "water", "wood", "metal", "earth", "fire"],
     theme: { glow: "#40231a", bg: "#1c1210", path: "#2e1c16", dot: "#a06a4a" },
     rules: { target: 3200, maxRounds: 34 },
   },
@@ -153,7 +155,7 @@ const STAGES = [
       "0,0": "FORTUNE", "6,6": "SPRING",
     },
     elementAt: { "1,3": "water", "2,3": "water", "4,3": "water", "5,3": "water" },
-    elements: ["water", "fire", "wood", "earth", "water"],
+    elements: ["water", "fire", "wood", "metal", "earth", "water"],
     theme: { glow: "#1c2c4a", bg: "#0f1624", path: "#1a2338", dot: "#4a6a9a" },
     hud: { left: "50%", top: "72%", width: "46%" },
     rules: { target: 3500, maxRounds: 38 },
@@ -170,7 +172,7 @@ const STAGES = [
       "3,0": "BOOST", "6,3": "BOOST",
       "9,0": "FORTUNE", "0,3": "SPRING",
     },
-    elements: ["wood", "fire", "water", "earth", "wood"],
+    elements: ["wood", "fire", "metal", "water", "earth", "wood"],
     theme: { glow: "#263c1e", bg: "#131a10", path: "#1e2a18", dot: "#7a9a5a" },
     hud: { left: "50%", top: "50%", width: "62%" },
     rules: { target: 3200, maxRounds: 36 },
@@ -190,7 +192,7 @@ const STAGES = [
       "5,7": "FORTUNE", "5,0": "SPRING",
     },
     elementAt: { "1,4": "earth", "3,4": "earth", "4,4": "earth" },
-    elements: ["earth", "fire", "wood", "water", "earth"],
+    elements: ["earth", "metal", "fire", "wood", "water", "earth"],
     theme: { glow: "#3a2e1e", bg: "#191410", path: "#291f15", dot: "#8a7a5a" },
     hud: { left: "50%", top: "29%", width: "50%" },
     rules: { target: 3400, maxRounds: 38, magicTileG: 300 },
@@ -214,14 +216,14 @@ const STAGES = [
       "0,4": "FORTUNE", "8,4": "SPRING",
     },
     gatesNeeded: 3,
-    elements: ["fire", "wood", "earth", "water"],
+    elements: ["wood", "fire", "earth", "metal", "water"],
     theme: { glow: "#33204a", bg: "#140f20", path: "#251a38", dot: "#8a6ab8" },
     hud: { left: "24%", top: "76%", width: "42%" },
     rules: { target: 3000, maxRounds: 40 },
   },
   {
     id: "s7", name: "千両門前市", icon: "💰",
-    cpuName: "豪商狸・ぽん兵衛", ai: "hard", cpuBias: "water",
+    cpuName: "豪商狸・ぽん兵衛", ai: "hard", cpuBias: "metal",
     desc: "28マスの大きな門前市をぐるりと回る。通行料は割高、💎霊力+250・⛩️鳥居+150の高額経済戦。",
     board: { rings: [{ w: 8, h: 8 }] },
     types: {
@@ -230,7 +232,7 @@ const STAGES = [
       "0,0": "MAGIC", "7,0": "MAGIC",
       "0,7": "FORTUNE", "7,7": "FORTUNE",
     },
-    elements: ["water", "fire", "wood", "earth", "water"],
+    elements: ["metal", "water", "fire", "wood", "earth", "metal"],
     theme: { glow: "#403618", bg: "#19150c", path: "#2c2512", dot: "#b89a4a" },
     rules: { target: 4200, maxRounds: 40, tollRate: 0.85, magicTileG: 250, gateBonus: 150 },
   },
@@ -245,7 +247,7 @@ const STAGES = [
       "0,0": "MAGIC", "4,4": "MAGIC",
     },
     gatesNeeded: 2,
-    elements: ["earth", "fire", "water", "wood", "earth"],
+    elements: ["earth", "fire", "metal", "water", "wood", "earth"],
     theme: { glow: "#40202a", bg: "#180f12", path: "#2c181e", dot: "#a05a6a" },
     rules: { target: 4000, maxRounds: 40, invaderSt: 10, landHpMult: 2 },
   },
@@ -268,7 +270,7 @@ const STAGES = [
       "4,3": "MAGMA", "3,2": "MAGMA",
       "0,6": "FORTUNE", "6,6": "SPRING",
     },
-    elements: ["water", "fire", "earth", "wood", "water"],
+    elements: ["water", "metal", "fire", "earth", "wood", "water"],
     theme: { glow: "#2c3140", bg: "#0f131c", path: "#1e2330", dot: "#7a86b0" },
     hud: { left: "27%", top: "30%", width: "38%" },
     rules: { target: 3200, maxRounds: 42 },
@@ -276,7 +278,7 @@ const STAGES = [
   {
     id: "s10", name: "大江山の鬼ヶ城", icon: "👑",
     cpuName: "大江山の鬼王・酒呑童子", ai: "demon", cpuBias: "fire",
-    desc: "第一巻の最終決戦。28マスの鬼ヶ城の頂から🏯本宮へ一直線に堕ちる「地獄回廊」——ただし🌋火口だらけ。鬼王は初期霊力+200。",
+    desc: "壱の巻の最終決戦。28マスの鬼ヶ城の頂から🏯本宮へ一直線に堕ちる「地獄回廊」——ただし🌋火口だらけ。鬼王は初期霊力+200。",
     board: {
       rings: [{ w: 9, h: 7 }],
       // 地獄回廊は「堕ちる」だけの➡一方通行（v23: 自由移動化に伴い明示）
@@ -290,7 +292,7 @@ const STAGES = [
       "0,6": "FORTUNE", "8,6": "SPRING",
     },
     elementAt: { "4,1": "fire", "4,3": "fire", "4,5": "fire" },
-    elements: ["fire", "water", "wood", "earth", "fire"],
+    elements: ["fire", "water", "metal", "wood", "earth", "fire"],
     theme: { glow: "#401820", bg: "#140c10", path: "#2a141c", dot: "#904a5a" },
     hud: { left: "26%", top: "50%", width: "40%" },
     rules: { target: 4500, maxRounds: 45, cpuMagicBonus: 200 },
@@ -322,7 +324,7 @@ const STAGES = [
       "0,5": "FORTUNE", "6,5": "SPRING",
     },
     gatesNeeded: "all",
-    elements: ["fire", "wood", "earth", "water"],
+    elements: ["wood", "fire", "earth", "metal", "water"],
     theme: { glow: "#1e2440", bg: "#0d1120", path: "#181e33", dot: "#5a6ab0" },
     hud: { left: "50%", top: "43%", width: "32%" },
     rules: { target: 3200, maxRounds: 44 },
@@ -348,7 +350,7 @@ const STAGES = [
       "0,7": "FORTUNE", "7,7": "FORTUNE",
       "3,5": "SPRING",
     },
-    elements: ["fire", "wood", "earth", "water"],
+    elements: ["wood", "fire", "earth", "metal", "water"],
     theme: { glow: "#3a2a40", bg: "#160f20", path: "#291f36", dot: "#9a6ab8" },
     hud: { left: "69%", top: "70%", width: "28%" },
     rules: { target: 3600, maxRounds: 46 },
@@ -370,7 +372,7 @@ const STAGES = [
       "0,0": "FORTUNE", "11,0": "FORTUNE",
       "2,4": "SPRING", "8,0": "BOOST", "8,4": "SPRING",
     },
-    elements: ["wood", "earth", "fire", "water", "wood"],
+    elements: ["wood", "earth", "metal", "fire", "water", "wood"],
     theme: { glow: "#3c3a1e", bg: "#171610", path: "#2a2816", dot: "#b0a45a" },
     hud: { left: "50%", top: "26%", width: "50%" },
     rules: { target: 3800, maxRounds: 48 },
@@ -402,7 +404,7 @@ const STAGES = [
       "0,0": "FORTUNE", "9,9": "FORTUNE",
       "3,4": "SPRING",
     },
-    elements: ["earth", "water", "fire", "wood", "earth"],
+    elements: ["earth", "water", "metal", "fire", "wood", "earth"],
     theme: { glow: "#3a3226", bg: "#151310", path: "#2a2418", dot: "#b08a4a" },
     hud: { left: "24%", top: "78%", width: "34%" },
     rules: { target: 4000, maxRounds: 50 },
@@ -412,8 +414,8 @@ const STAGES = [
     //   ⛩️鳥居4つは全て必須（gatesNeeded:"all"）。巫女は帝4柱を固定エースに従える（cpuAces）。
     id: "s15", name: "五帝の宮", icon: "🕯️", boss: true, // boss:true＝対戦中のBGMがボス曲になる
     cpuName: "五帝の巫女・ちはや", ai: "hard",
-    cpuAces: ["ignisking", "sylvanking", "terraking", "nereusking"],
-    desc: "中央の祭壇から四方の玉座の間へ渡る56マスの大宮。⛩️4つの玉座はすべて必須通過点。巫女ちはやは👑火・木・地・水の帝を従える——五帝の目覚めが遅いことを祈れ。",
+    cpuAces: ["seiryu", "suzaku", "byakko", "genbu"],
+    desc: "中央の祭壇から四方の玉座の間へ渡る56マスの大宮。⛩️4つの玉座はすべて必須通過点。巫女ちはやは👑四神——青龍・朱雀・白虎・玄武——を従える。目覚めが遅いことを祈れ。",
     board: {
       rings: [
         { w: 4, h: 4, x0: 3, y0: 3 },   // 中央の祭壇（本宮はここ）
@@ -431,7 +433,7 @@ const STAGES = [
       "4,3": "SPRING", "5,6": "SPRING",
     },
     gatesNeeded: "all",
-    elements: ["fire", "wood", "earth", "water"],
+    elements: ["wood", "fire", "earth", "metal", "water"],
     theme: { glow: "#403420", bg: "#181207", path: "#2e2412", dot: "#c8a44a" },
     hud: { left: "78%", top: "22%", width: "30%" },
     rules: { target: 4200, maxRounds: 50, cpuMagicBonus: 300 },
@@ -441,8 +443,8 @@ const STAGES = [
     //   百鬼夜行の主・久遠自身が盤上に立つ（cpuAces=aeonking×2）。中央は🌋火口に守られた💎時の霊泉。
     id: "s16", name: "常世の玉座", icon: "⏳", boss: true, // 最終決戦もボス曲
     cpuName: "百鬼夜行の主・久遠", ai: "demon", cpuBias: "water",
-    cpuAces: ["aeonking", "aeonking"],
-    desc: "第二巻の最終決戦。51マスの大環に「時の十字」が交わる常世の玉座——中央の💎大霊力は🌋時の奔流に守られている。百鬼夜行の主・久遠は自らの写し身を従え、潤沢な資金で時を支配する。",
+    cpuAces: ["koryu", "shiramen"],
+    desc: "弐の巻の最終決戦。51マスの大環に「時の十字」が交わる常世の玉座——中央の💎大霊力は🌋時の奔流に守られている。百鬼夜行の主・久遠は中央の帝👑黄龍と己の写し身を従え、潤沢な資金で盤を支配する。",
     board: {
       rings: [{ w: 10, h: 10 }],
       chords: [
@@ -459,7 +461,7 @@ const STAGES = [
       "0,9": "FORTUNE", "9,9": "FORTUNE",
       "3,5": "SPRING",
     },
-    elements: ["water", "fire", "earth", "wood", "water"],
+    elements: ["water", "fire", "earth", "metal", "wood", "water"],
     theme: { glow: "#2a2440", bg: "#100e1c", path: "#1e1a33", dot: "#8a7ab8" },
     hud: { left: "24%", top: "24%", width: "34%" },
     rules: { target: 4800, maxRounds: 52, cpuMagicBonus: 400, magicTileG: 300 },
