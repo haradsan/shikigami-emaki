@@ -761,23 +761,44 @@ const TITLE_EMBLEM_SVG = (() => {
   </svg>`;
 })();
 
-// ---------- タイトル画面のシルエット・フリーズ（地平に並ぶ式神たち） ----------
-// カードのアーキタイプをそのまま使い、世界の住人として夜景に並べる
+// ---------- タイトル画面のシルエット・フリーズ（百鬼夜行の行列） ----------
+// カードのアーキタイプをそのまま使い、提灯を掲げてゆっくり練り歩く夜行の列にする。
+// 行列全体が横にゆっくり揺れ進み、提灯の火が明滅する＝絵巻「百鬼夜行」の空気
 const TITLE_FRIEZE_SVG = (() => {
   const spot = (arch, elem, x, o = {}, s = 1) => {
     const p = ART_PAL[elem];
     return `<g transform="translate(${x} ${77 - 63 * s}) scale(${s})">
       <g fill="#0d0a16" stroke="${p.line}" stroke-opacity="0.4" stroke-width="1" stroke-linejoin="round">${ARCH[arch](p, o)}</g></g>`;
   };
+  // 行列が掲げる提灯（竿＋火袋）。火はそれぞれ違う周期で明滅する
+  const lantern = (x, s = 1, dur = 2.6) => `
+    <g transform="translate(${x} 0) scale(${s})">
+      <path d="M0 76 L7 40" stroke="#0d0a16" stroke-width="2.2"/>
+      <ellipse cx="8" cy="34" rx="6.5" ry="8.5" fill="#2a1a08" stroke="#0d0a16" stroke-width="1.4"/>
+      <ellipse cx="8" cy="34" rx="4.5" ry="6.5" fill="#ffb43d" opacity="0.75">
+        <animate attributeName="opacity" values="0.75;0.3;0.66;0.75" dur="${dur}s" repeatCount="indefinite"/>
+      </ellipse>
+      <ellipse cx="8" cy="34" rx="9" ry="11" fill="#ffb43d" opacity="0.14">
+        <animate attributeName="opacity" values="0.14;0.05;0.14" dur="${dur}s" repeatCount="indefinite"/>
+      </ellipse>
+    </g>`;
   return `<svg viewBox="0 0 840 84" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-    ${spot("tree", "wood", 10, { face: 1 }, 1.0)}
-    ${spot("golem", "earth", 130, { veins: 1 }, 0.95)}
-    ${spot("fairy", "neutral", 255, {}, 0.85)}
-    ${spot("dragon", "fire", 345, { flame: 1, big: 1 }, 1.15)}
-    ${spot("humanoid", "spell", 495, { hat: 1, staff: 1 }, 0.9)}
-    ${spot("serpent", "water", 585, { fins: 1 }, 1.0)}
-    ${spot("beast", "earth", 700, { spikes: 1 }, 0.9)}
-    <rect x="0" y="76" width="840" height="8" fill="#0d0a16"/>
-    <line x1="0" y1="76" x2="840" y2="76" stroke="#ffd76a" stroke-opacity="0.25" stroke-width="1"/>
+    <g>
+      <animateTransform attributeName="transform" type="translate"
+        values="0 0; -16 0; 0 0" dur="34s" repeatCount="indefinite"/>
+      ${lantern(96, 0.9, 3.1)}
+      ${spot("tree", "wood", 10, { face: 1 }, 1.0)}
+      ${spot("golem", "earth", 130, { veins: 1 }, 0.95)}
+      ${lantern(238, 1.05, 2.4)}
+      ${spot("fairy", "neutral", 255, {}, 0.85)}
+      ${spot("dragon", "fire", 345, { flame: 1, big: 1 }, 1.15)}
+      ${lantern(478, 0.8, 2.9)}
+      ${spot("humanoid", "spell", 495, { hat: 1, staff: 1 }, 0.9)}
+      ${spot("serpent", "water", 585, { fins: 1 }, 1.0)}
+      ${lantern(688, 1.0, 2.2)}
+      ${spot("beast", "earth", 700, { spikes: 1 }, 0.9)}
+    </g>
+    <rect x="-20" y="76" width="880" height="8" fill="#0d0a16"/>
+    <line x1="-20" y1="76" x2="860" y2="76" stroke="#ffd76a" stroke-opacity="0.25" stroke-width="1"/>
   </svg>`;
 })();

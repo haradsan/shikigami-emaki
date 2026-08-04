@@ -224,7 +224,7 @@ main {
   height: calc(var(--board-base, 66vh) * var(--zoom, 1));
   aspect-ratio: 1;
 }
-.tile rect { transition: stroke 0.2s; }
+.tile .t-shape { transition: stroke 0.2s; }
 
 /* ============================================================
    下段（v27）— 手札 ＋ 操作ドック（ダイス）
@@ -1717,3 +1717,67 @@ body.map-focus #hud-bar::before {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ============================================================
+   v31 絵巻装飾 — 蝋燭・宝玉のハメ込み・絵巻の軸
+   ============================================================ */
+/* 絵巻の軸: 盤面エリアの左右に漆塗りの軸木を立て、「開いた巻物」を強調する */
+#board-wrap {
+  border-left: 13px solid;
+  border-right: 13px solid;
+  border-top: 0;
+  border-bottom: 0;
+  border-image: linear-gradient(180deg, #8a683a, #47301a 16%, #241708 50%, #47301a 84%, #8a683a) 1;
+}
+
+/* 宝玉のハメ込み（鳥居の通過）: 空の窪み → 金の玉が嵌まる */
+.ps-inlay { display: inline-flex; align-items: center; gap: 2.5px; }
+.jewel {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #14100a;
+  border: 1px solid #4a3d28;
+  box-shadow: inset 0 1.5px 2px #000c;
+  display: inline-block;
+}
+.jewel.on {
+  background: radial-gradient(circle at 35% 30%, #fff3c4, #ffd76a 45%, #b8860b 90%);
+  border-color: #ffd76a;
+  box-shadow: 0 0 6px #ffd76a99, inset 0 -1px 1px #6b4a0a;
+}
+
+/* 蝋燭の点灯（周回数・ステージ踏破） */
+.ps-candles { display: inline-flex; align-items: flex-end; gap: 3.5px; }
+.candle {
+  position: relative;
+  width: 4.5px; height: 10px;
+  background: linear-gradient(180deg, #ede0c2, #b8a888);
+  border-radius: 1.5px 1.5px 1px 1px;
+  display: inline-block;
+  opacity: 0.4;
+}
+.candle::before { /* 炎（未点灯は燻んだ芯） */
+  content: "";
+  position: absolute;
+  left: 50%; top: -5px;
+  transform: translateX(-50%);
+  width: 3.5px; height: 5px;
+  border-radius: 50% 50% 44% 44% / 62% 62% 38% 38%;
+  background: #4a4238;
+}
+.candle.lit { opacity: 1; }
+.candle.lit::before {
+  background: radial-gradient(circle at 50% 72%, #fff8d8, #ffb43d 62%, #ff7a45);
+  box-shadow: 0 0 7px 2.5px #ffb43d77;
+  animation: candleFlick 1.4s ease-in-out infinite alternate;
+}
+@keyframes candleFlick {
+  from { transform: translateX(-50%) scaleY(1); }
+  55%  { transform: translateX(-56%) scaleY(0.86); }
+  to   { transform: translateX(-46%) scaleY(1.06); }
+}
+.candle-n { font-size: 10px; color: var(--gold); margin-left: 1px; }
+/* ステージ一覧の踏破の灯（少し大きい蝋燭） */
+.candle.big { width: 7px; height: 16px; }
+.candle.big::before { top: -8px; width: 5.5px; height: 8px; }
+.candle.big.lit::before { box-shadow: 0 0 10px 4px #ffb43d66; }

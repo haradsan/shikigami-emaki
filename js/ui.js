@@ -47,50 +47,130 @@ function elemNote(card, tile) {
 }
 
 // ---------- 盤面 ----------
-function tilePx(tile) { return { x: tile.x * CELL + 5, y: tile.y * CELL + 5 }; }
+// v31「絵巻盤面」: 正方形のグリッドマスをやめ、絵巻に描かれた「石畳の道」にする。
+//  ・各マスは手描き風の不定形（霊地=岩・特別マス=絵馬札・本宮=社）
+//  ・位置はステージ・マスごとに固定の「ゆらぎ」を持ち、道は墨の刷毛で曲がる
+//  ・下層に「すやり霞」（絵巻の金霞）を流す
+// レイアウトの実体はグラフ（tile.next）のままなので、ゲームロジックは無変更。
+
+// ステージ・マスごとに固定の擬似乱数（0..1）。毎描画で同じ値＝盤面は揺れない
+function tileRand(seed) { const v = Math.sin(seed) * 43758.5453; return v - Math.floor(v); }
+function tileJitter(tile) {
+  const si = (typeof G !== "undefined" && G) ? G.stageIdx + 1 : 1;
+  const s = si * 91.17 + tile.id * 7.13;
+  return {
+    jx: (tileRand(s) - 0.5) * 16,          // 位置のゆらぎ（±8px）
+    jy: (tileRand(s + 1.7) - 0.5) * 16,
+    rot: (tileRand(s + 3.1) - 0.5) * 5,    // 傾きのゆらぎ（±2.5度）
+  };
+}
+function tilePx(tile) {
+  const j = tileJitter(tile);
+  return { x: tile.x * CELL + 5 + j.jx, y: tile.y * CELL + 5 + j.jy };
+}
+
+// 霊地の「岩」バリエーション（90×90の箱に収まる手描き風の不定形）。id で出し分ける
+const STONE_PATHS = [
+  "M8 26 C6 12 20 4 34 6 C48 2 66 3 76 8 C86 13 88 28 85 42 C88 58 84 74 74 82 C60 89 42 88 28 85 C14 88 6 76 7 60 C4 48 6 36 8 26 Z",
+  "M12 18 C22 6 38 8 50 5 C64 2 80 8 84 20 C89 34 84 46 86 60 C88 74 76 86 62 84 C48 88 32 89 20 83 C8 78 8 64 9 50 C6 36 8 28 12 18 Z",
+  "M6 32 C4 18 14 8 28 7 C42 3 58 4 70 6 C82 9 87 22 84 34 C87 48 89 64 80 76 C70 87 54 85 40 87 C26 90 12 84 10 70 C7 58 9 44 6 32 Z",
+  "M10 22 C16 8 30 3 44 6 C58 2 74 6 82 14 C90 24 84 38 87 52 C89 66 82 80 68 83 C54 89 38 86 24 84 C10 82 4 70 8 56 C5 44 6 32 10 22 Z",
+];
+// 特別マス（鳥居・札・霊力など）＝絵馬の札。本宮＝屋根つきの社
+const EMA_PATH = "M45 3 L84 25 C86 45 85 66 82 83 C60 88 30 88 8 83 C5 66 4 45 6 25 Z";
+const tileShapeOf = t =>
+  t.type === "LAND" ? STONE_PATHS[t.id % STONE_PATHS.length] : EMA_PATH;
+
+// すやり霞（絵巻の金霞）: 盤面下層に流れる横帯。群内は同色＝重なっても濃くならない
+function kasumiSVG(w, h) {
+  const W = w * CELL, H = h * CELL;
+  let out = "";
+  const bands = [
+    { y: H * 0.16, x: -W * 0.06, l: W * 0.6, s: 1.0 },
+    { y: H * 0.5,  x: W * 0.45,  l: W * 0.62, s: 1.15 },
+    { y: H * 0.84, x: W * 0.1,   l: W * 0.55, s: 0.9 },
+  ];
+  bands.forEach((b, i) => {
+    const r = 15 * b.s;
+    let bumps = "";
+    for (let k = 0; k < 4; k++) {
+      const bx = b.x + b.l * (0.12 + 0.25 * k) + tileRand(i * 7 + k) * 30;
+      bumps += `<circle cx="${bx.toFixed(0)}" cy="${(b.y - r * 0.5).toFixed(0)}" r="${(r * (0.9 + 0.4 * tileRand(i + k * 3))).toFixed(0)}"/>`;
+    }
+    out += `<g fill="#e8c46a" opacity="0.055">` +
+      `<rect x="${b.x.toFixed(0)}" y="${(b.y - r).toFixed(0)}" width="${b.l.toFixed(0)}" height="${(r * 2).toFixed(0)}" rx="${r}"/>${bumps}</g>` +
+      `<path d="M${b.x.toFixed(0)} ${(b.y + r).toFixed(0)} h${b.l.toFixed(0)}" stroke="#e8c46a" stroke-width="1" opacity="0.13" fill="none"/>`;
+  });
+  return out;
+}
 
 function renderBoard(g) {
   const svg = document.getElementById("board");
+  const w = Math.max(...g.tiles.map(t => t.x)) + 1;
+  const h = Math.max(...g.tiles.map(t => t.y)) + 1;
   let html = "";
-  // 霊脈の道（マスをつなぐ道）: タイルの下層に描く。外周の太い道＋中央を流れる霊力の点線。
-  // 色はステージのテーマ（stage.theme）で変わり、盤面ごとの雰囲気を出す
+  // 最下層: すやり霞（絵巻の空気）
+  html += kasumiSVG(w, h);
+  // 霊脈の道: 墨の刷毛でゆるく曲がる線＋霊力の点線。両方向の重複は描かない
   const th = g.stage.theme || {};
   const pathCol = th.path || "#241e33", dotCol = th.dot || "#5c5480";
+  const drawn = new Set();
   g.tiles.forEach(tile => {
-    const c1 = tilePx(tile);
     tile.next.forEach(nid => {
-      const c2 = tilePx(g.tiles[nid]);
+      const a = Math.min(tile.id, nid), b = Math.max(tile.id, nid);
+      const key = a + "-" + b;
+      if (drawn.has(key)) return;
+      drawn.add(key);
+      const c1 = tilePx(g.tiles[a]), c2 = tilePx(g.tiles[b]);
       const [x1, y1, x2, y2] = [c1.x + TILE / 2, c1.y + TILE / 2, c2.x + TILE / 2, c2.y + TILE / 2];
-      html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${pathCol}" stroke-width="16" stroke-linecap="round"/>`;
-      html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${dotCol}" stroke-width="2.5" stroke-dasharray="2 9" stroke-linecap="round" opacity="0.9"/>`;
+      // 中点を法線方向に少しずらして「筆のたわみ」を出す（マス同様に固定のゆらぎ）
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+      const k = (tileRand(a * 13.7 + b * 3.3) - 0.5) * 30;
+      const cx = (x1 + x2) / 2 - dy / len * k, cy = (y1 + y2) / 2 + dx / len * k;
+      const d = `M${x1.toFixed(1)} ${y1.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+      html += `<path d="${d}" fill="none" stroke="${pathCol}" stroke-width="17" stroke-linecap="round"/>`;
+      html += `<path d="${d}" fill="none" stroke="${dotCol}" stroke-width="2.5" stroke-dasharray="2 9" stroke-linecap="round" opacity="0.9"/>`;
     });
   });
   g.tiles.forEach(tile => {
     const { x, y } = tilePx(tile);
+    const rot = tileJitter(tile).rot;
     const isLand = tile.type === "LAND";
+    const shape = tileShapeOf(tile);
     const fill = isLand ? `url(#tg-${tile.element})`
       : tile.type === "CASTLE" ? "url(#tg-castle)"
       : tile.type === "MAGMA" ? "#5a2418"
       : "url(#tg-special)";
     const stroke = tile.owner !== null ? PLAYER_COLORS[tile.owner]
       : tile.type === "CASTLE" ? "#c9a755" : "#5a5470";
-    const sw = tile.owner !== null ? 4 : tile.type === "CASTLE" ? 2.5 : 1.5;
-    html += `<g class="tile" data-tile="${tile.id}">`;
+    const sw = tile.owner !== null ? 4 : tile.type === "CASTLE" ? 2.5 : 1.8;
+    // マス全体を移動＋微回転（手貼りの札の風合い）。内部は 0..90 のローカル座標
+    html += `<g class="tile" data-tile="${tile.id}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)} 45 45)">`;
     // 所有地はプレイヤー色のオーラで一目で分かるように
     if (tile.owner !== null) {
-      html += `<rect x="${x - 3}" y="${y - 3}" width="${TILE + 6}" height="${TILE + 6}" rx="13" fill="none" stroke="${PLAYER_COLORS[tile.owner]}" stroke-width="7" opacity="0.22"/>`;
+      html += `<path d="${shape}" fill="none" stroke="${PLAYER_COLORS[tile.owner]}" stroke-width="10" opacity="0.22" stroke-linejoin="round"/>`;
     }
-    html += `<rect x="${x}" y="${y}" width="${TILE}" height="${TILE}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
-    // 内側のハイライト線（タイルの立体感）
-    html += `<rect x="${x + 2.5}" y="${y + 2.5}" width="${TILE - 5}" height="${TILE - 5}" rx="8" fill="none" stroke="#fff" stroke-opacity="${tile.type === "CASTLE" ? 0.12 : 0.06}" stroke-width="1"/>`;
+    html += `<path class="t-shape" d="${shape}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/>`;
+    // 墨の輪郭（外側にもう1本細い線＝描き起こしの線）
+    html += `<path d="${shape}" fill="none" stroke="#0d0a06" stroke-opacity="0.5" stroke-width="0.8" transform="translate(1.2 1.6)"/>`;
+    if (!isLand && tile.type !== "CASTLE") {
+      // 絵馬の梁と紐穴
+      html += `<path d="M10 26 L80 26" stroke="#0d0a06" stroke-opacity="0.35" stroke-width="2"/>`;
+      html += `<circle cx="45" cy="13" r="2.4" fill="#0d0a06" fill-opacity="0.55"/>`;
+    }
+    if (tile.type === "CASTLE") {
+      // 社の二重屋根（金の描線）
+      html += `<path d="M45 3 L84 25 M45 3 L6 25" stroke="#ffd76a" stroke-width="2.2" opacity="0.8" fill="none"/>`;
+      html += `<path d="M14 20 L45 32 L76 20" stroke="#c9a755" stroke-width="1.4" opacity="0.6" fill="none"/>`;
+    }
     if (isLand) {
-      // 土地の属性は「左上コーナーの角丸チップ」で表示（＝土地の属性だと分かる位置）
-      html += `<rect x="${x + 4}" y="${y + 4}" width="26" height="22" rx="6" fill="${ELEMENTS[tile.element].color}cc"/>`;
-      html += `<text x="${x + 17}" y="${y + 20}" font-size="15" text-anchor="middle">${ELEMENTS[tile.element].icon}</text>`;
-      html += `<text x="${x + TILE - 7}" y="${y + 20}" font-size="14" fill="#cfc9e0" text-anchor="end" font-weight="bold">Lv${tile.level}</text>`;
-      // レベルを数字だけでなく「5段階のピップ・メーター」でも表示（一目で強さが分かるように）
+      // 土地の属性は「左上の短冊チップ」で表示（＝土地の属性だと分かる位置）
+      html += `<rect x="7" y="7" width="26" height="22" rx="6" fill="${ELEMENTS[tile.element].color}cc"/>`;
+      html += `<text x="20" y="23" font-size="15" text-anchor="middle">${ELEMENTS[tile.element].icon}</text>`;
+      html += `<text x="${TILE - 9}" y="23" font-size="14" fill="#cfc9e0" text-anchor="end" font-weight="bold">Lv${tile.level}</text>`;
+      // レベルの5段階ピップ・メーター
       const PIP_N = LAND_VALUE.length, pipGap = 9, pipR = 3.4;
-      const pipStartX = x + TILE / 2 - (PIP_N - 1) * pipGap / 2, pipY = y + 31;
+      const pipStartX = TILE / 2 - (PIP_N - 1) * pipGap / 2, pipY = 33;
       for (let lv = 1; lv <= PIP_N; lv++) {
         const px = pipStartX + (lv - 1) * pipGap;
         const on = lv <= tile.level;
@@ -103,49 +183,40 @@ function renderBoard(g) {
         const wounded = cur < c.hp;
         const hpStr = wounded ? `${cur}/${c.hp}` : `${c.hp}`;
         const hpFill = wounded ? "#ff8a6a" : "#ffe08a"; // 傷ついていれば赤み
-        const cx = x + TILE / 2;
-        // 式神の属性は「丸いバッジ」で表示（＝コマ＝式神の属性。土地チップと形で区別）
-        html += `<circle cx="${x + 15}" cy="${y + 46}" r="11" fill="${ce.color}" stroke="#fff" stroke-width="1.5"/>`;
-        html += `<text x="${x + 15}" y="${y + 50}" font-size="12" text-anchor="middle">${ce.icon}</text>`;
-        html += `<text x="${cx + 9}" y="${y + 44}" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold">${esc(c.name.slice(0, 5))}</text>`;
-        // ST（小）＋ HP（大きく・読みやすく）
-        html += `<text x="${cx}" y="${y + 66}" text-anchor="middle">` +
+        // 式神の属性は「丸いバッジ」で表示（土地チップと形で区別）
+        html += `<circle cx="17" cy="48" r="11" fill="${ce.color}" stroke="#fff" stroke-width="1.5"/>`;
+        html += `<text x="17" y="52" font-size="12" text-anchor="middle">${ce.icon}</text>`;
+        html += `<text x="${TILE / 2 + 9}" y="46" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold">${esc(c.name.slice(0, 5))}</text>`;
+        html += `<text x="${TILE / 2}" y="68" text-anchor="middle">` +
           `<tspan font-size="12" fill="#c9c2da">ST${c.st}</tspan>` +
           `<tspan font-size="17" font-weight="bold" fill="${hpFill}"> HP${hpStr}</tspan></text>`;
       }
       if (tile.owner !== null) {
         const toll = tollOf(g, tile);
-        html += `<text x="${x + TILE / 2}" y="${y + TILE - 5}" font-size="13" fill="${PLAYER_COLORS[tile.owner]}" text-anchor="middle" font-weight="bold">${toll}G</text>`;
+        html += `<text x="${TILE / 2}" y="${TILE - 6}" font-size="13" fill="${PLAYER_COLORS[tile.owner]}" text-anchor="middle" font-weight="bold">${toll}G</text>`;
       }
     } else {
-      // 霊力マスは宝石がきらめき、本宮は少し大きな紋章で特別感を出す
-      const iconSize = tile.type === "CASTLE" ? 34 : 30;
-      html += `<text x="${x + TILE / 2}" y="${y + 46}" font-size="${iconSize}" text-anchor="middle">${TILE_ICONS[tile.type]}</text>`;
+      const iconSize = tile.type === "CASTLE" ? 34 : 28;
+      html += `<text x="${TILE / 2}" y="${tile.type === "CASTLE" ? 52 : 50}" font-size="${iconSize}" text-anchor="middle">${TILE_ICONS[tile.type]}</text>`;
       if (tile.type === "MAGIC") {
-        html += `<text x="${x + TILE - 16}" y="${y + 22}" font-size="11" text-anchor="middle">✨<animate attributeName="opacity" values="1;0.2;1" dur="1.8s" repeatCount="indefinite"/></text>`;
+        html += `<text x="${TILE - 20}" y="30" font-size="11" text-anchor="middle">✨<animate attributeName="opacity" values="1;0.2;1" dur="1.8s" repeatCount="indefinite"/></text>`;
       }
-      if (tile.type === "CASTLE") {
-        html += `<path d="M${x + TILE / 2 - 16} ${y + 12} h32" stroke="#ffd76a" stroke-width="1.5" opacity="0.7"/>`;
-      }
-      html += `<text x="${x + TILE / 2}" y="${y + 70}" font-size="12" fill="#b8b2cc" text-anchor="middle">${TILE_LABELS[tile.type]}</text>`;
+      html += `<text x="${TILE / 2}" y="72" font-size="12" fill="#b8b2cc" text-anchor="middle">${TILE_LABELS[tile.type]}</text>`;
     }
     // 盤面エフェクト（🛡️結界/🕸️罠/🚧関所札）のバッジ
     const ov = overlayOf(g, tile);
     if (ov) {
       const ovIcon = ov.kind === "sanctuary" ? "🛡️" : ov.kind === "snare" ? "🕸️" : ov.kind === "block" ? "🚧" : "✨";
       const ovColor = ov.kind === "sanctuary" ? "#8ecbff" : ov.kind === "snare" ? "#c9a0ff" : ov.kind === "block" ? "#ffb84d" : "#ddd";
-      html += `<rect x="${x}" y="${y}" width="${TILE}" height="${TILE}" rx="10" fill="none" stroke="${ovColor}" stroke-width="3" stroke-dasharray="7 5" opacity="0.9"/>`;
-      html += `<text x="${x + TILE / 2}" y="${y + 16}" font-size="15" text-anchor="middle">${ovIcon}</text>`;
+      html += `<path d="${shape}" fill="none" stroke="${ovColor}" stroke-width="3" stroke-dasharray="7 5" opacity="0.9"/>`;
+      html += `<text x="${TILE / 2}" y="20" font-size="15" text-anchor="middle">${ovIcon}</text>`;
     }
-    // 矢印表示（v23・自由移動）:
-    //  ・➡一方通行マス＝唯一の出口を赤金の大矢印で明示（特別マスであることが一目で分かるように）
-    //  ・三叉路以上（隣接3方向以上）の合流マス＝出られる方向を小矢印で示す
-    //  ※通常のマスは全方向に進めるため矢印は描かない（盤面のノイズになる）
+    // 矢印表示（v23・自由移動）: 一方通行の大矢印＋三叉路以上の小矢印
     const arrow = (nt, fill, big) => {
       const dx = Math.sign(nt.x - tile.x), dy = Math.sign(nt.y - tile.y);
-      const cx2 = x + TILE / 2 + dx * (TILE / 2 - 2);
-      const cy2 = y + TILE / 2 + dy * (TILE / 2 - 2);
-      const L = big ? 1.45 : 1; // 一方通行の矢印はひとまわり大きい
+      const cx2 = TILE / 2 + dx * (TILE / 2 - 2);
+      const cy2 = TILE / 2 + dy * (TILE / 2 - 2);
+      const L = big ? 1.45 : 1;
       const tipX = cx2 + dx * 7 * L, tipY = cy2 + dy * 7 * L;
       const b1X = cx2 - dx * 4 * L - dy * 6 * L, b1Y = cy2 - dy * 4 * L - dx * 6 * L;
       const b2X = cx2 - dx * 4 * L + dy * 6 * L, b2Y = cy2 - dy * 4 * L + dx * 6 * L;
@@ -157,33 +228,34 @@ function renderBoard(g) {
       const neigh = neighborsOf(g, tile).filter(t => !(t.onewayTo != null && t.onewayTo === tile.id));
       if (neigh.length > 2) neigh.forEach(nt => { html += arrow(nt, "#ffd76a", false); });
     }
-    // マスの通し番号（常時表示）。霊地・式神選択の選択肢と盤面を対応づけるための目印
-    html += `<text x="${x + 6}" y="${y + TILE - 6}" font-size="10" fill="#9a92b5" text-anchor="start">#${tile.id}</text>`;
-    // 選択対象マスの強調（呪術対象／霊地売却／侵攻先など）。盤面から直接クリックして選べる
+    // マスの通し番号（常時表示）
+    html += `<text x="10" y="${TILE - 8}" font-size="10" fill="#9a92b5" text-anchor="start">#${tile.id}</text>`;
+    // 選択対象マスの強調（呪術対象／霊地売却／侵攻先など）
     if (UI.selectableTiles && UI.selectableTiles.has(tile.id)) {
-      html += `<rect x="${x - 2}" y="${y - 2}" width="${TILE + 4}" height="${TILE + 4}" rx="12" fill="none" stroke="#ffe066" stroke-width="5"><animate attributeName="opacity" values="1;0.3;1" dur="1s" repeatCount="indefinite"/></rect>`;
-      html += `<rect x="${x + TILE / 2 - 19}" y="${y + TILE / 2 - 15}" width="38" height="28" rx="8" fill="#ffe066" opacity="0.96"/>`;
-      html += `<text x="${x + TILE / 2}" y="${y + TILE / 2 + 6}" font-size="18" fill="#1a1526" text-anchor="middle" font-weight="bold">#${tile.id}</text>`;
+      html += `<path d="${shape}" fill="none" stroke="#ffe066" stroke-width="5" stroke-linejoin="round"><animate attributeName="opacity" values="1;0.3;1" dur="1s" repeatCount="indefinite"/></path>`;
+      html += `<rect x="${TILE / 2 - 19}" y="${TILE / 2 - 15}" width="38" height="28" rx="8" fill="#ffe066" opacity="0.96"/>`;
+      html += `<text x="${TILE / 2}" y="${TILE / 2 + 6}" font-size="18" fill="#1a1526" text-anchor="middle" font-weight="bold">#${tile.id}</text>`;
     }
     html += `</g>`;
   });
-  // プレイヤー駒（宝珠風・手番プレイヤーの駒は光が脈動する）
+  // プレイヤー駒: 人形代（ひとかたしろ）＝陰陽師が式を打つ紙の人形。手番の駒は光が脈動する
   g.players.forEach(p => {
     if (!p.alive) return;
     const { x, y } = tilePx(g.tiles[p.pos]);
     const off = TOKEN_OFFSETS[p.id] || TOKEN_OFFSETS[0];
     const cx = x + off.dx, cy = y + off.dy;
     const active = g.current === p.id && !g.over;
-    html += `<g class="token">`;
+    html += `<g class="token" transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)})">`;
     if (active) {
-      html += `<circle cx="${cx}" cy="${cy}" r="16" fill="none" stroke="${PLAYER_COLORS[p.id]}" stroke-width="2.5" opacity="0.6">` +
+      html += `<circle cx="0" cy="0" r="16" fill="none" stroke="${PLAYER_COLORS[p.id]}" stroke-width="2.5" opacity="0.6">` +
         `<animate attributeName="r" values="14;19;14" dur="1.5s" repeatCount="indefinite"/>` +
         `<animate attributeName="opacity" values="0.7;0.15;0.7" dur="1.5s" repeatCount="indefinite"/></circle>`;
     }
-    html += `<circle cx="${cx}" cy="${cy + 1.5}" r="13" fill="#000" opacity="0.35"/>`;
-    html += `<circle cx="${cx}" cy="${cy}" r="13" fill="url(#tokP${p.id})" stroke="#fff" stroke-width="2"/>`;
-    html += `<ellipse cx="${cx - 4}" cy="${cy - 5}" rx="4.5" ry="3" fill="#fff" opacity="0.45"/>`;
-    html += `<text x="${cx}" y="${cy + 5}" font-size="13" fill="#fff" text-anchor="middle" font-weight="bold" style="text-shadow:0 1px 2px #000">${(g.hotseat || g.players.length > 2) ? p.id + 1 : (p.id === 0 ? "P" : "C")}</text>`;
+    html += `<ellipse cx="0" cy="12" rx="9" ry="3" fill="#000" opacity="0.35"/>`;
+    html += `<g fill="url(#tokP${p.id})" stroke="#fff" stroke-width="1.6" stroke-linejoin="round">` +
+      `<circle cx="0" cy="-8.5" r="5"/>` +
+      `<path d="M-3.4 -4.5 L3.4 -4.5 L10.5 2.5 L7 5.5 L3.6 2.6 L4.8 12 L-4.8 12 L-3.6 2.6 L-7 5.5 L-10.5 2.5 Z"/></g>`;
+    html += `<text x="0" y="8.5" font-size="8.5" fill="#fff" text-anchor="middle" font-weight="bold" style="text-shadow:0 1px 2px #000">${(g.hotseat || g.players.length > 2) ? p.id + 1 : (p.id === 0 ? "P" : "C")}</text>`;
     html += `</g>`;
   });
   svg.innerHTML = html;
@@ -237,7 +309,14 @@ function renderPanels(g) {
       .map(e => ({ e, n: chainCount(g, p.id, e) }))
       .filter(c => c.n > 0)
       .map(c => `${ELEMENTS[c.e].icon}${c.n}`).join("") || "－";
-    const gates = "●".repeat(Math.min(p.gates.size, needed)) + "○".repeat(Math.max(0, needed - p.gates.size));
+    // 鳥居の通過は「宝玉のハメ込み」で表す（空の窪みに金の玉が嵌まっていく）
+    const gates = Array.from({ length: needed }, (_, i) =>
+      `<i class="jewel${i < p.gates.size ? " on" : ""}"></i>`).join("");
+    // 周回は「蝋燭の点灯」で表す（1周ごとに1本灯る。4本を超えたら本数を添える）
+    const litN = Math.min(p.laps, 4);
+    const candles = Array.from({ length: 4 }, (_, i) =>
+      `<i class="candle${i < litN ? " lit" : ""}"></i>`).join("") +
+      (p.laps > 4 ? `<b class="candle-n">×${p.laps}</b>` : "");
     const reached = assets >= RULES.target; // 目標達成＝本宮へ凱旋すれば勝ち（⚑リーチ表示）
     el.style.setProperty("--pc", PLAYER_COLORS[p.id]); // 左端の色帯＝プレイヤー色
     el.classList.toggle("active", g.current === p.id && !g.over);
@@ -261,8 +340,8 @@ function renderPanels(g) {
       </div>
       <div class="ps-meta">
         <span title="属性の連鎖（同属性の自領数）">🔗${chains}</span>
-        <span title="通過した鳥居">⛩️${gates}</span>
-        <span title="周回数">🔄${p.laps}</span>
+        <span class="ps-inlay" title="通過した鳥居（宝玉が嵌まっていく）">⛩️${gates}</span>
+        <span class="ps-candles" title="周回数（1周ごとに蝋燭が灯る）">${candles}</span>
         <span title="山札の残り">🎴${p.deck.length}</span>
         <span class="ps-gap">${rankGapText(rows, me)}</span>
       </div>`;
@@ -975,7 +1054,7 @@ function showStageSelect(opts = {}) {
         <span class="st-bg" aria-hidden="true">${unlocked ? s.icon : "🔒"}</span>
         <span class="st-icon">${unlocked ? s.icon : "🔒"}</span>
         <span class="st-main"><b><span class="st-no">STAGE ${i + 1}</span>${unlocked ? esc(s.name) : "？？？"}</b><small>${desc}</small></span>
-        <span class="st-star">${cleared ? "⭐" : ""}</span>
+        <span class="st-star">${cleared ? `<i class="candle big lit" title="踏破の灯"></i>` : unlocked ? `<i class="candle big" title="未踏破"></i>` : ""}</span>
       </button>`;
     }).join("");
     const diff = DIFFICULTIES[loadDifficulty()];

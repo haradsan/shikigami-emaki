@@ -326,9 +326,13 @@ function buildDeck(biasElement = null, maxCost = Infinity) {
     for (let i = 0; i < n; i++) deck.push(pool[Math.floor(Math.random() * pool.length)].id);
   };
   // 建造物（ST0・反撃しない施設）と noCpu 呪術（AIの発動条件が無い）は
-  // CPU/おまかせデッキには入れない（構築デッキでは使える）
-  main.forEach(e => pickType(c => c.type === "creature" && !c.structure && c.element === e, 6));
-  sub.forEach(e => pickType(c => c.type === "creature" && !c.structure && c.element === e, 2));
+  // CPU/おまかせデッキには入れない（構築デッキでは使える）。
+  // v31: 👑五帝（300Gの別格極札）は除外——「文箱・交換所・ボスのエース（cpuAces）で出会う」
+  // という設計（CARD_DB定義部のコメント）どおりにする。ボスは cpuAces で確定投入されるので影響なし。
+  // 140G帯の極札（久久能智など）は従来どおり自動デッキに入りうる（デッキの華として残す）
+  const notEmperor = c => !(cardRarity(c) === "legendary" && c.cost >= 300);
+  main.forEach(e => pickType(c => c.type === "creature" && !c.structure && notEmperor(c) && c.element === e, 6));
+  sub.forEach(e => pickType(c => c.type === "creature" && !c.structure && notEmperor(c) && c.element === e, 2));
   pickType(c => c.type === "spell" && !c.noCpu, 6);
   pickType(c => c.type === "item", 6);
   return shuffle(deck);

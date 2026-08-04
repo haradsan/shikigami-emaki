@@ -24,6 +24,9 @@ let AI_PROFILE = AI_PROFILES.normal;
 // 未設定なら従来どおりグローバルの AI_PROFILE（ステージ既定 × 全体難易度）を使う
 function aiProf(p) { return (p && p.aiProfile) || AI_PROFILE; }
 
+// spell種別からカードを逆引き（v30.1: カードidは弾の刷新で変わるため、id直書きはここを通す）
+function cardBySpell(kind) { return CARD_DB.find(c => c.type === "spell" && c.spell === kind) || null; }
+
 // 相手全員（三つ巴では2人）が1〜6マス以内に踏み得るマスidの集合（防衛系呪術の判断用）。
 // v24: 通常移動は順方向のみに戻ったため、逆走側（backstepDests）の警戒は外した
 // （逆走は🔄時流逆転・🎋時空の渦のときだけ＝稀なので前方だけ警戒する）
@@ -686,7 +689,8 @@ function aiPickSalvage(g, p) {
 
 // 湯治を使う価値があるか: 相手が近づいている高額地に、深く傷ついた防衛式神がいる
 function aiWantRegen(g, p) {
-  if (p.magic < CARD_BY_ID.regen.cost + aiProf(p).reserve) return false;
+  const regenCard = cardBySpell("regen");
+  if (!regenCard || p.magic < regenCard.cost + aiProf(p).reserve) return false;
   const near = aiNearTilesOfOpponents(g, p);
   return ownedLands(g, p.id).some(t => {
     if (!t.creature || !isWounded(t.creature)) return false;
@@ -725,7 +729,9 @@ function aiPickEnsnareTarget(g, p) {
 
 // 引き直し: 式神がほぼ無く手札が渋滞している時に手札をリフレッシュ
 function aiWantRenew(g, p) {
-  const cost = CARD_BY_ID.renew.cost;
+  const renewCard = cardBySpell("renew");
+  if (!renewCard) return false;
+  const cost = renewCard.cost;
   if (p.magic < cost + aiProf(p).reserve + 60) return false;
   const creatures = aiHandCards(p).filter(c => c.type === "creature").length;
   return creatures <= 1 && p.hand.length >= 4;

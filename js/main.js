@@ -34,8 +34,9 @@ async function startGame(stageIdx, opts = {}) {
   const w = Math.max(...G.tiles.map(t => t.x)) + 1;
   const h = Math.max(...G.tiles.map(t => t.y)) + 1;
   const svg = document.getElementById("board");
-  svg.setAttribute("viewBox", `0 0 ${w * 100} ${h * 100}`);
-  svg.style.aspectRatio = `${w} / ${h}`;
+  // v31: マス位置に手描き風のゆらぎ（±8px）が入るため、切れないよう余白を14px取る
+  svg.setAttribute("viewBox", `-14 -14 ${w * 100 + 28} ${h * 100 + 28}`);
+  svg.style.aspectRatio = `${w * 100 + 28} / ${h * 100 + 28}`;
   // ステージのテーマカラーで背景を染める（盤面ごとの空気を変える。タイトルへ戻るとき解除）
   const th = G.stage.theme;
   document.body.style.background = th
