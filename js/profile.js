@@ -41,6 +41,19 @@ const Profile = (() => {
       save();
       return [];
     },
+    // 実績: 条件を満たしたものを記録し、新しく取れたものを返す
+    achieve(when, ctx) {
+      d.ach = d.ach || {};
+      const got = [];
+      for (const a of ACHIEVEMENTS) {
+        if (a.when !== when || d.ach[a.id]) continue;
+        let ok = false;
+        try { ok = a.check(ctx); } catch (e) { ok = false; }
+        if (ok) { d.ach[a.id] = Date.now(); got.push(a); }
+      }
+      if (got.length) save();
+      return got;
+    },
     tip(key) { if (d.tips[key]) return false; d.tips[key] = 1; save(); return true; },
     setSpeed(v) { d.speed = v; save(); },
     reset() { d = def(); save(); },

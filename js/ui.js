@@ -48,6 +48,18 @@ const UI = (() => {
     $("#fx-layer").appendChild(f);
     setTimeout(() => f.remove(), 900);
   }
+  // 実績の知らせ（金の帯）
+  function achieveToast(list) {
+    (list || []).forEach((a, i) => setTimeout(() => {
+      const t = document.createElement("div");
+      t.className = "ach-toast";
+      t.innerHTML = `${Art.stamp("録")}<div><small>実績</small><b>${esc(a.name)}</b><span>${esc(a.desc)}</span></div>`;
+      document.body.appendChild(t);
+      SFX.coin(2);
+      setTimeout(() => t.remove(), 3200);
+    }, 600 + i * 900));
+  }
+
   // 手ざわり（対応端末だけ小さく震える）
   const buzz = (p) => { try { if (navigator.vibrate && SFX.enabled) navigator.vibrate(p); } catch (e) { /* */ } };
 
@@ -545,6 +557,7 @@ const UI = (() => {
     }
     renderShikiRow($("#shiki-row"));
     await playScoring(res);
+    achieveToast(Profile.achieve("play", { keys: res.score.keys, total: res.score.total, run }));
     // 打ったあとの出来事
     for (const e of res.events) {
       if (e.t === "break") toast("薄氷の札が割れた！", true);
@@ -1003,6 +1016,7 @@ const UI = (() => {
     ];
     body.innerHTML = `
       <div class="end-title ${cleared ? "" : "lose"}">${cleared ? "一年の結び" : "一年の終わり"}</div>
+      ${run.daily ? `<div class="dim" style="font-size:12px">日替わりの一年（${run.daily.replace(/-/g, "/")}）</div>` : ""}
       <div class="end-lines">${lines.map((l, i) => `<p style="animation-delay:${i * 0.5}s">${esc(l)}</p>`).join("")}</div>
       ${run.shiki.length ? `<div class="end-team">${run.shiki.map((s) => `<div class="et"><div class="et-pt">${Art.portrait(s.id)}</div><div class="et-n">${esc(SHIKI_BY_ID[s.id].name)}</div></div>`).join("")}</div>` : ""}
       <div class="end-stats">
@@ -1070,6 +1084,21 @@ const UI = (() => {
           <div class="effect">${esc(y.qtext || "癖なし")}</div><p class="lore">「${esc(y.line)}」</p></div></div>`);
       });
     }
+    if (tab === "rec") {
+      const ach = P.ach || {};
+      const got = ACHIEVEMENTS.filter((a) => ach[a.id]).length;
+      const bestY = P.bestHandYaku ? P.bestHandYaku.map((k) => YAKU[k].name).join("＋") : "";
+      body.innerHTML = `<div class="rec-stats">
+          <div><span>遊んだ年</span><b>${P.runs}</b></div>
+          <div><span>結んだ年</span><b>${P.clears}</b></div>
+          <div><span>位階</span><b>${RANKS[P.maxRank || 0].name}</b></div>
+          <div><span>一打の最高</span><b>${fmt(P.bestHand)}</b></div>
+          ${bestY ? `<div><span>その役</span><b style="font-size:11.5px">${esc(bestY)}</b></div>` : ""}
+          <div><span>出会った式神</span><b>${Object.keys(P.seenShiki).length}/${SHIKI.length}</b></div>
+        </div>
+        <p class="dim" style="font-size:12px;margin-bottom:6px">実績 ${got}/${ACHIEVEMENTS.length}</p>
+        <div class="ach-list">${ACHIEVEMENTS.map((a) => `<div class="ach ${ach[a.id] ? "" : "no"}">${Art.stamp("録")}<div><b>${esc(a.name)}</b><span>${esc(a.desc)}</span></div></div>`).join("")}</div>`;
+    }
     if (tab === "fuda") {
       body.innerHTML = `<p class="dim" style="font-size:12px;margin-bottom:8px">花札四十八枚。月（植物）が12、種類が4（光・種・短冊・カス）。</p>
         <div class="deck-grid">${BASE_DECK.map((c, i) => Art.card({ ...c, uid: "b" + i })).join("")}</div>`;
@@ -1103,7 +1132,7 @@ const UI = (() => {
   }
 
   return {
-    bindStatic, show, toast, modal, closeModal, talk, renderTitle, renderSelect, renderEmaki, renderRound, renderShop, renderEnd, renderBook,
+    bindStatic, show, toast, modal, closeModal, talk, achieveToast, renderTitle, renderSelect, renderEmaki, renderRound, renderShop, renderEnd, renderBook,
     showCashout, showPack, showSeason, showHowto, showSettings, showYakuList, showDeck,
     setRun(r) { run = r; sel = []; armedFu = null; busy = false; },
     get run() { return run; },

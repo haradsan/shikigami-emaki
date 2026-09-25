@@ -669,3 +669,28 @@ const RANKS = [
   { name: "正四位", text: "利子がつかない" },
   { name: "正三位", text: "祓いの目標がさらに1.25倍・式神が1銭高い" },
 ];
+
+// ---------- 実績（図鑑の「記録」に並ぶ。達成すると朱印が押される） ----------
+// when: "play"（打つたび: ctx={keys,total,run}）/ "clear"（祓い成功）/ "end"（一年の終わり: ctx={run,cleared}）
+const ACHIEVEMENTS = [
+  { id: "first",    name: "初祓い",         desc: "はじめて妖を祓う",                     when: "clear", check: () => true },
+  { id: "hanami",   name: "花の宴",         desc: "花見酒と月見酒を一度に打つ",           when: "play", check: (c) => c.keys.includes("hanami") && c.keys.includes("tsukimi") },
+  { id: "isc",      name: "猪鹿蝶",         desc: "猪鹿蝶を打つ",                         when: "play", check: (c) => c.keys.includes("inoshikacho") },
+  { id: "gokou",    name: "五光",           desc: "五光を打つ",                           when: "play", check: (c) => c.keys.includes("gokou") },
+  { id: "teshi",    name: "手四",           desc: "手四を打つ",                           when: "play", check: (c) => c.keys.includes("teshi") },
+  { id: "stack4",   name: "重ね打ち",       desc: "役を4つ以上重ねて打つ",                 when: "play", check: (c) => c.keys.length >= 4 },
+  { id: "man",      name: "一万の霊力",     desc: "一打で10,000以上",                      when: "play", check: (c) => c.total >= 1e4 },
+  { id: "juman",    name: "十万の霊力",     desc: "一打で100,000以上",                     when: "play", check: (c) => c.total >= 1e5 },
+  { id: "oku",      name: "億の霊力",       desc: "一打で1億以上",                         when: "play", check: (c) => c.total >= 1e8 },
+  { id: "aun",      name: "阿吽",           desc: "狛犬の阿と吽をそろえて打つ",             when: "play", check: (c) => ["a_komainu", "un_komainu"].every((id) => c.run.shiki.some((s) => s.id === id)) },
+  { id: "fuurai",   name: "風神雷神",       desc: "風神と雷神をそろえて打つ",               when: "play", check: (c) => ["fuujin", "raijin"].every((id) => c.run.shiki.some((s) => s.id === id)) },
+  { id: "sanen",    name: "三猿",           desc: "見ざる・聞かざる・言わざるをそろえて打つ", when: "play", check: (c) => ["mizaru", "kikazaru", "iwazaru"].every((id) => c.run.shiki.some((s) => s.id === id)) },
+  { id: "goshinki", name: "五神器顕現",     desc: "神器を五つ集める",                       when: "clear", check: (c) => c.run.jingi.length >= 5 },
+  { id: "legend",   name: "極の縁",         desc: "極の式神を連れて祓う",                   when: "clear", check: (c) => c.run.shiki.some((s) => SHIKI_BY_ID[s.id].rar === 4) },
+  { id: "year",     name: "一年の結び",     desc: "師走の百鬼夜行を祓う",                   when: "end", check: (c) => c.cleared },
+  { id: "rank3",    name: "五位の陰陽師",   desc: "従五位以上で一年を結ぶ",                 when: "end", check: (c) => c.cleared && c.run.rank >= 3 },
+  { id: "rank5",    name: "殿上の陰陽師",   desc: "正三位で一年を結ぶ",                     when: "end", check: (c) => c.cleared && c.run.rank >= 5 },
+  { id: "year2",    name: "二年目の師走",   desc: "無限の絵巻で二年目の師走を祓う",         when: "clear", check: (c) => c.run.year >= 2 && c.run.month === 12 },
+  { id: "thin",     name: "薄い山",         desc: "山札を30枚以下にして祓う",               when: "clear", check: (c) => c.run.deck.length <= 30 },
+  { id: "poor",     name: "清貧",           desc: "持ち銭0で大妖を祓う",                     when: "clear", check: (c) => c.run.zeni === 0 && c.kind === "boss" },
+];

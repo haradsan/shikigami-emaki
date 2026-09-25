@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
 <!-- ?v= はキャッシュ避け。更新したら必ず番号を上げること（スマホは古い版を握り続ける） -->
-<link rel="stylesheet" href="css/style.css?v=40">
+<link rel="stylesheet" href="css/style.css?v=41">
 </head>
 <body>
 <div id="app">
@@ -32,12 +32,13 @@
       <button id="btn-continue" class="btn big gold hidden">続きから</button>
       <button id="btn-new" class="btn big">はじめから</button>
       <div class="title-row">
+        <button id="btn-daily" class="btn">日替わり</button>
         <button id="btn-book" class="btn">図鑑</button>
         <button id="btn-howto" class="btn">遊び方</button>
         <button id="btn-settings" class="btn">設定</button>
       </div>
     </div>
-    <div class="title-foot">v40 ・ <a href="classic/" class="dim-link">旧版（盤上遊戯）</a></div>
+    <div class="title-foot">v41 ・ <a href="classic/" class="dim-link">旧版（盤上遊戯）</a></div>
   </section>
 
   <!-- ===== 陰陽師えらび ===== -->
@@ -105,6 +106,7 @@
       <button class="tab" data-tab="yaku">役と歌</button>
       <button class="tab" data-tab="yokai">妖</button>
       <button class="tab" data-tab="fuda">札</button>
+      <button class="tab" data-tab="rec">記録</button>
     </div>
     <div id="book-body" class="book-body"></div>
   </section>
@@ -116,18 +118,18 @@
 <div id="overlay" class="overlay hidden"></div>
 <div id="fx-layer" class="fx-layer"></div>
 
-<script src="js/data.js?v=40"></script>
-<script src="js/score.js?v=40"></script>
-<script src="js/run.js?v=40"></script>
-<script src="js/art-hana.js?v=40"></script>
-<script src="js/art-shiki.js?v=40"></script>
-<script src="js/art-yokai.js?v=40"></script>
-<script src="js/art.js?v=40"></script>
-<script src="js/bgm.js?v=40"></script>
-<script src="js/sfx.js?v=40"></script>
-<script src="js/profile.js?v=40"></script>
-<script src="js/ui.js?v=40"></script>
-<script src="js/main.js?v=40"></script>
+<script src="js/data.js?v=41"></script>
+<script src="js/score.js?v=41"></script>
+<script src="js/run.js?v=41"></script>
+<script src="js/art-hana.js?v=41"></script>
+<script src="js/art-shiki.js?v=41"></script>
+<script src="js/art-yokai.js?v=41"></script>
+<script src="js/art.js?v=41"></script>
+<script src="js/bgm.js?v=41"></script>
+<script src="js/sfx.js?v=41"></script>
+<script src="js/profile.js?v=41"></script>
+<script src="js/ui.js?v=41"></script>
+<script src="js/main.js?v=41"></script>
 <script>
   // 開発用: ?sim=1 のときだけ検証ボットを読み込む
   if (/[?&]sim=1/.test(location.search)) { const s = document.createElement("script"); s.src = "js/sim.js?v=" + Date.now(); document.body.appendChild(s); }

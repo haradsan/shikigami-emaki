@@ -17,6 +17,7 @@ const Main = (() => {
     $("#btn-new").onclick = () => newGame();
     $("#btn-continue").onclick = () => continueGame();
     $("#btn-book").onclick = () => UI.renderBook();
+    $("#btn-daily").onclick = () => dailyGame();
     $("#btn-howto").onclick = () => UI.showHowto();
     $("#btn-settings").onclick = () => UI.showSettings();
     const q = new URLSearchParams(location.search);
@@ -89,6 +90,30 @@ const Main = (() => {
     else UI.renderSelect(start);
   }
 
+  // 日替わりの一年: その日の日付から決まる同じ札・同じ妖・同じ市で遊ぶ（家族で到達月を比べられる）
+  function todayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  function dailyGame() {
+    const key = todayKey();
+    let seed = 2166136261;
+    for (const ch of "shiki-hana-" + key) { seed ^= ch.charCodeAt(0); seed = Math.imul(seed, 16777619) >>> 0; }
+    const best = (Profile.data.daily || {})[key];
+    const c = UI.modal(`<h3>日替わりの一年</h3>
+      <p>${key.replace(/-/g, "/")} の札。今日はだれが遊んでも、同じ妖・同じ札の並びから始まります。家族で「どの月まで行けたか」を比べてみてください。</p>
+      <p style="font-size:13px;color:#7a4a10">陰陽師はひなた・位階は無位で固定。${best ? `今日の最高：<b>${best.label}</b>` : "まだ今日は遊んでいません。"}</p>
+      <div class="mrow"><button class="btn shu" data-go>はじめる</button><button class="btn" data-close>やめる</button></div>`);
+    c.querySelector("[data-go]").onclick = () => {
+      UI.closeModal();
+      run = Run.newRun("hinata", seed, 0);
+      run.daily = key;
+      UI.setRun(run);
+      save();
+      prologue(() => toEmaki(true));
+    };
+  }
+
   function prologue(then) {
     const om = ONMYOJI.find((o) => o.id === run.onmyoji);
     const lines = STORY.prologue.map((l) => l.replace("見習い陰陽師のひなた", `${om.title}の${om.name}`));
@@ -154,6 +179,7 @@ const Main = (() => {
     const p = run.lastPayout;
     if (!resumed) {
       Profile.beatYokai(p.yokai);
+      UI.achieveToast(Profile.achieve("clear", { run, kind: p.kind }));
       SFX.clear();
       // 朱印を押す演出
       const f = document.createElement("div");
@@ -184,7 +210,20 @@ const Main = (() => {
 
   function endRun(cleared) {
     let newly = [];
-    if (!run.endRecorded) { newly = Profile.endRun(run, cleared); run.endRecorded = true; }
+    if (!run.endRecorded) {
+      newly = Profile.endRun(run, cleared);
+      run.endRecorded = true;
+      UI.achieveToast(Profile.achieve("end", { run, cleared }));
+      if (run.daily) {
+        // 日替わりの記録（その日の最高到達）
+        const d = Profile.data;
+        d.daily = d.daily || {};
+        const reach = cleared ? 13 : run.month;
+        const prev = d.daily[run.daily];
+        if (!prev || reach > prev.reach) d.daily[run.daily] = { reach, label: cleared ? "一年を結んだ" : `${MONTHS[run.month].wa}まで` };
+        Profile.save();
+      }
+    }
     if (cleared) { SFX.clear(); save(); }
     else { SFX.fail(); Run.clearSave(); }
     UI.renderEnd(cleared, newly);
