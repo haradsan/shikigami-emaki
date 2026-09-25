@@ -234,7 +234,7 @@ const Run = (() => {
     if (q && q.playCost) { const lose = Math.min(run.zeni, q.playCost * played.length); run.zeni -= lose; if (lose) events.push({ t: "zeni", d: -lose }); }
 
     const cleared = r.score >= r.target;
-    const failed = !cleared && r.hands <= 0;
+    let failed = !cleared && r.hands <= 0;
     let drawn = [];
     if (!cleared && !failed) {
       if (q && q.dropOnPlay && r.hand.length) {
@@ -243,6 +243,8 @@ const Run = (() => {
         events.push({ t: "drop", uid: u });
       }
       drawn = drawUp(run);
+      // 札が尽きた（山札も手札も空）ら、もう打てないので祓いは失敗
+      if (!r.hand.length) { failed = true; events.push({ t: "empty" }); }
     }
     if (cleared) roundCleared(run);
     if (failed) runOver(run, false);
@@ -264,7 +266,9 @@ const Run = (() => {
     for (const s of Score.activeShiki(run, r).map((x) => x.s)) { const f = SHIKI_BY_ID[s.id].fx; if (f && f.onDiscard) f.onDiscard(run, gone, s); }
     if (q && q.discardCost) { const lose = Math.min(run.zeni, q.discardCost); run.zeni -= lose; if (lose) events.push({ t: "zeni", d: -lose }); }
     const drawn = drawUp(run);
-    return { events, drawn, gone };
+    let failed = false;
+    if (!r.hand.length) { failed = true; runOver(run, false); events.push({ t: "empty" }); }
+    return { events, drawn, gone, failed };
   }
 
   // ---------- 祓い成功 → 精算 ----------
@@ -549,6 +553,11 @@ const Run = (() => {
     const r = applyFu(run, id, uids);
     if (r.error) return r;
     run.fu.splice(fi, 1);
+    // 祓えで手札が減ったら引き直す（山札も尽きていれば、その祓いは失敗）
+    if (r.removed && run.phase === "round") {
+      r.drawn = drawUp(run);
+      if (!run.round.hand.length) { runOver(run, false); r.failed = true; }
+    }
     return { ok: true, id, ...r };
   }
   function sellFu(run, fi) {

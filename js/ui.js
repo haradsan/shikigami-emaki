@@ -138,7 +138,7 @@ const UI = (() => {
     const inst = run.shiki[i];
     if (!inst) return;
     const d = SHIKI_BY_ID[inst.id];
-    const canSell = !busy && run.phase !== "round" || opts.allowSell;
+    const canSell = !busy;
     const bondTxt = d.bond ? `<p class="dim" style="color:#7a4a10;font-size:12px">🤝 絆: ${esc(bondName(d.bond))}</p>` : "";
     const c = modal(`
       <div class="det">
@@ -379,6 +379,7 @@ const UI = (() => {
     if (res.zeni) msg += `（+${res.zeni}銭）`;
     if (res.shiki) { msg += `：${SHIKI_BY_ID[res.shiki].name}が来た！`; Profile.seeShiki(res.shiki); }
     toast(msg);
+    if (res.failed) { save(); setTimeout(() => Main.endRun(false), 600); return; }
     if (res.removed) sel = [];
     sel = sel.filter((u) => run.round && run.round.hand.includes(u));
     save();
@@ -550,6 +551,7 @@ const UI = (() => {
       if (e.t === "gild") toast("雷獣が札に金箔を焼きつけた");
       if (e.t === "zeni") toast(`${e.d}銭（崇徳院の取り立て）`, true);
       if (e.t === "drop") toast("雨降り小僧：札が1枚流された", true);
+      if (e.t === "empty") toast("札が尽きた……", true);
     }
     renderYokaiBar();
     renderShikiRow($("#shiki-row"));
@@ -665,6 +667,7 @@ const UI = (() => {
     sel = [];
     for (const e of res.events) if (e.t === "zeni") toast(`${e.d}銭（小豆代）`, true);
     save();
+    if (res.failed) { toast("札が尽きた……", true); await wait(600); Main.endRun(false); return; }
     busy = false;
     renderHand(true, res.drawn);
     renderShikiRow($("#shiki-row"));
