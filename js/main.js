@@ -78,7 +78,15 @@ const Main = (() => {
     UI.renderTitle(!!saved && saved.phase !== "over");
   }
 
-  function newGame() {
+  function newGame(force) {
+    // 続きのデータがあるときは、うっかり上書きしないよう確かめる
+    const saved = Run.load();
+    if (!force && saved && saved.phase !== "over" && saved.phase !== "clear" && document.body.dataset.screen === "title") {
+      const c = UI.modal(`<h3>はじめから遊びますか？</h3><p>いま続いている一年（${MONTHS[saved.month].wa}${saved.year > 1 ? "・" + saved.year + "年目" : ""}）は消えます。</p>
+        <div class="mrow"><button class="btn shu" data-yes>はじめから</button><button class="btn" data-close>やめる</button></div>`);
+      c.querySelector("[data-yes]").onclick = () => { UI.closeModal(); newGame(true); };
+      return;
+    }
     const u = Profile.data.unlocked;
     const choices = ONMYOJI.filter((o) => u[o.id]);
     const start = (id, rank = 0) => {
@@ -98,12 +106,15 @@ const Main = (() => {
   }
   function dailyGame() {
     const key = todayKey();
+    const saved = Run.load();
+    const warn = saved && saved.phase !== "over" && saved.phase !== "clear" ? `<p style="font-size:12.5px;color:#a0281e">※ いま続いている一年（${MONTHS[saved.month].wa}）は消えます。</p>` : "";
     let seed = 2166136261;
     for (const ch of "shiki-hana-" + key) { seed ^= ch.charCodeAt(0); seed = Math.imul(seed, 16777619) >>> 0; }
     const best = (Profile.data.daily || {})[key];
     const c = UI.modal(`<h3>日替わりの一年</h3>
       <p>${key.replace(/-/g, "/")} の札。今日はだれが遊んでも、同じ妖・同じ札の並びから始まります。家族で「どの月まで行けたか」を比べてみてください。</p>
       <p style="font-size:13px;color:#7a4a10">陰陽師はひなた・位階は無位で固定。${best ? `今日の最高：<b>${best.label}</b>` : "まだ今日は遊んでいません。"}</p>
+      ${warn}
       <div class="mrow"><button class="btn shu" data-go>はじめる</button><button class="btn" data-close>やめる</button></div>`);
     c.querySelector("[data-go]").onclick = () => {
       UI.closeModal();
