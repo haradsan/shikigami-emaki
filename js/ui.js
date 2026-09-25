@@ -590,7 +590,6 @@ const UI = (() => {
     resetCalc();
     renderHand(true, res.drawn);
     updateButtons();
-    $("#top-zeni");
     $("#round-top").innerHTML = topbarHtml();
     bindTop($("#round-top"));
   }
