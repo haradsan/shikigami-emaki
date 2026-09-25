@@ -69,6 +69,7 @@ const Main = (() => {
     if (s === "book") UI.renderBook(q.get("tab") || "shiki");
     if (s === "howto") { UI.renderTitle(false); UI.showHowto(); }
     if (s === "yaku") { UI.renderEmaki(); UI.showYakuList(); }
+    if (s === "uta") { Run.openShop(run); UI.renderShop(); const k = q.get("key") || "hanami"; run.levels[k] = 2; UI.showUta(k); }
   }
 
   function toTitle() {

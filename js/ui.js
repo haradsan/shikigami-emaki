@@ -808,11 +808,28 @@ const UI = (() => {
         toast(`${j.name}を台座に嵌めた`);
         if (res.all) setTimeout(() => showGoshinki(), 300);
       }
-      if (kind === "items" && w.kind === "yomi") toast(`${YAKU[w.id].name}が ${run.levels[w.id]}段 になった`);
       save();
+      if (kind === "items" && w.kind === "yomi") { renderShop(); showUta(w.id); return; }
       if (res.pack) { renderShop(); showPack(); return; }
       renderShop();
     };
+  }
+
+  // 詠み札を詠んだとき: 歌を縦書きで一首ひらく
+  function showUta(key) {
+    const y = YOMI[key], Y = YAKU[key];
+    const lv = run.levels[key] || 1;
+    const v = Score.yakuValue(run, key);
+    const lines = y.uta.split(" ");
+    SFX.page();
+    setTimeout(() => SFX.bun(4), 200);
+    const c = modal(`<div class="uta-view">
+        <div class="uta-text">${lines.map((l, i) => `<span style="animation-delay:${0.15 + i * 0.28}s">${esc(l)}</span>`).join("")}</div>
+        <div class="uta-poet">${esc(y.poet)}</div>
+      </div>
+      <p style="text-align:center;margin-top:8px"><b>${esc(Y.name)}</b> が <b>${lv}段</b> に　<span class="kbd-bun">文${v.bun}</span> × <span class="kbd-bai">倍${v.bai}</span></p>
+      <div class="mrow"><button class="btn gold" data-close>詠み終える</button></div>`);
+    c.classList.add("kotoba");
   }
 
   function showGoshinki() {
@@ -860,7 +877,7 @@ const UI = (() => {
       const res = Run.pickPack(run, i, packSel.slice());
       if (res.error) { SFX.error(); toast(res.error, true); return; }
       SFX.buy();
-      if (res.level) toast(`${YAKU[res.key].name}が ${res.level}段 になった`);
+      if (res.level) { save(); if (!run.pack) renderShop(); showUta(res.key); return; }
       if (res.card) toast(`${cardName(res.card)}を山札に加えた`);
       if (res.used) {
         toast(`${FU[chosen].name}を使った${res.zeni ? `（+${res.zeni}銭）` : ""}${res.shiki ? `：${SHIKI_BY_ID[res.shiki].name}が来た！` : ""}`);
@@ -1133,7 +1150,7 @@ const UI = (() => {
 
   return {
     bindStatic, show, toast, modal, closeModal, talk, achieveToast, renderTitle, renderSelect, renderEmaki, renderRound, renderShop, renderEnd, renderBook,
-    showCashout, showPack, showSeason, showHowto, showSettings, showYakuList, showDeck,
+    showCashout, showPack, showSeason, showUta, showHowto, showSettings, showYakuList, showDeck,
     setRun(r) { run = r; sel = []; armedFu = null; busy = false; },
     get run() { return run; },
     get busy() { return busy; },
