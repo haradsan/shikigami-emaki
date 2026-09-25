@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BGM試験台</title>
+<style>
+  body { background: #1b1712; color: #f3e9d2; font: 14px/1.5 sans-serif; margin: 16px; }
+  button { font: inherit; margin: 2px; padding: 6px 12px; background: #3a2f24; color: #f3e9d2; border: 1px solid #8a6d3b; border-radius: 6px; }
+  button.on { background: #c8322a; }
+  pre { background: #0f0d0a; padding: 8px; white-space: pre-wrap; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>BGM 試験台（dev専用）</h1>
+<p>最初にどこかをタップ（クリック）すると鳴り出す。曲ボタンで切替。</p>
+<div id="tracks"></div>
+<div><button id="toggle">ON/OFF</button> <button id="bad">未知の曲名を送る</button> <button id="ana">作曲の解析</button> <button id="off">オフライン合成で音量測定</button></div>
+<h3>状態</h3><pre id="st"></pre>
+<h3>解析</h3><pre id="out"></pre>
+<script src="../js/bgm.js?t=3"></script>
+<script>
+  const $ = (s) => document.querySelector(s);
+  const NAMES = ["title", "battle", "boss", "pack", "win", "lose"];
+  NAMES.forEach((n) => {
+    const b = document.createElement("button");
+    b.textContent = n; b.dataset.t = n;
+    b.onclick = () => BGM.setTrack(n);
+    $("#tracks").appendChild(b);
+  });
+  $("#toggle").onclick = () => BGM.toggle();
+  $("#bad").onclick = () => { BGM.setTrack("nope"); BGM.setTrack("constructor"); BGM.setTrack("toString"); };
+  BGM.init();
+  setInterval(() => {
+    const d = BGM._debug;
+    $("#st").textContent = JSON.stringify({ running: BGM.running, enabled: BGM.enabled, track: BGM.track, ...d }, null, 1);
+    document.querySelectorAll("[data-t]").forEach((b) => b.classList.toggle("on", b.dataset.t === BGM.track));
+  }, 250);
+  window.runAnalysis = () => {
+    const res = {};
+    NAMES.forEach((n) => { res[n] = BGM._analyze(n, 30, 7); });
+    return res;
+  };
+  window.runOffline = async (secs) => {
+    const res = {};
+    for (const n of NAMES) { const r = await BGM._offline(n, secs || 40); res[n] = { events: r.events, peak: r.peak, rms: r.rms, rmsDb: r.rmsDb, nan: r.nan, maxSecPeak: Math.max(...r.perSec.map((p) => p[0])), minSecRms: Math.min(...r.perSec.slice(1, -1).map((p) => p[1])) }; }
+    return res;
+  };
+  $("#ana").onclick = () => {
+    const r = runAnalysis();
+    $("#out").textContent = Object.entries(r).map(([n, a]) => `${n}: ${a.seconds}s\n  variants ${JSON.stringify(a.variants)}\n  range ${JSON.stringify(a.range)}\n  count ${JSON.stringify(a.count)}`).join("\n");
+  };
+  $("#off").onclick = async () => { $("#out").textContent = "合成中…"; $("#out").textContent = JSON.stringify(await runOffline(40), null, 1); };
+</script>
+</body>
+</html>

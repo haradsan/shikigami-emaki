@@ -152,7 +152,8 @@ const Sim = (() => {
         const w = s.shiki[i];
         if (w.sold || w.cost > run.zeni) continue;
         if (SHIKI_BY_ID[w.id].passive || ["zashiki", "bakedanuki", "kanedama", "kasha", "raijuu", "baku", "hakutaku", "sunekosuri", "kodama", "betobeto", "jorogumo", "shuten", "fuujin", "raijin"].includes(w.id)) {
-          // 点に直接出ない式神はざっくり評価
+          // 点に直接出ない式神はざっくり評価（枠が空いているときだけ）
+          if (cur.length >= Run.passives(run).slots) continue;
           const v = base * (1 + 0.12 * SHIKI_BY_ID[w.id].rar);
           if (!best || v > best.v) best = { i, v, replace: -1 };
           continue;
@@ -194,7 +195,7 @@ const Sim = (() => {
   }
 
   function runOne(seed, opts = {}) {
-    const run = Run.newRun(opts.onmyoji || "hinata", seed);
+    const run = Run.newRun(opts.onmyoji || "hinata", seed, opts.rank || 0);
     const perMonth = [];
     let guard = 0;
     while (guard++ < 200) {
