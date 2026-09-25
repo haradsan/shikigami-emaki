@@ -24,13 +24,15 @@ const Profile = (() => {
     // 一打の最高記録。通知するのは「それなりの記録を塗り替えたとき」だけ（序盤に毎回出ないように）
     hand(total, keys) { if (total > d.bestHand) { const prev = d.bestHand; d.bestHand = total; d.bestHandYaku = keys; save(); return prev >= 1000; } return false; },
     // 一年が終わったとき
-    endRun(run, cleared) {
-      d.runs += 1;
-      const reached = run.year > 1 ? 12 : (cleared ? 12 : run.month - 1);
-      if (run.year > d.bestYear || (run.year === d.bestYear && reached > d.bestMonth)) { d.bestMonth = reached; }
-      if (run.year > d.bestYear) d.bestYear = run.year;
+    // again=true: 無限の絵巻で結びのあとに倒れた（遊んだ年・結んだ年は数え直さず、到達だけ更新）
+    endRun(run, cleared, again) {
+      if (!again) d.runs += 1;
+      // 到達: その年の「祓い終えた月」（結んだ年は12）
+      const reached = cleared ? 12 : run.month - 1;
+      if (run.year > d.bestYear) { d.bestYear = run.year; d.bestMonth = reached; }
+      else if (run.year === d.bestYear && reached > d.bestMonth) d.bestMonth = reached;
       if (cleared) {
-        d.clears += 1;
+        if (!again) d.clears += 1;
         const nextRank = Math.min(RANKS.length - 1, (run.rank || 0) + 1);
         if (nextRank > (d.maxRank || 0)) { d.maxRank = nextRank; d.newRank = nextRank; }
         const newly = [];

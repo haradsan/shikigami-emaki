@@ -165,7 +165,11 @@ const Run = (() => {
     if (r.hands <= 0) return { ok: false, reason: "打ちが残っていない" };
     const q = Score.effectiveQuirk(run, r);
     if (q && q.maxPlay && uids.length > q.maxPlay) return { ok: false, reason: `この妖の前では${q.maxPlay}枚までしか打てない` };
-    if (q && q.mustPlay && uids.length !== q.mustPlay) return { ok: false, reason: `この妖の前では${q.mustPlay}枚ちょうどで打つ` };
+    // 天井嘗: 5枚ちょうど。ただし手札が5枚に満たないときは、手札すべてで打てる（詰み防止）
+    if (q && q.mustPlay) {
+      const need = Math.min(q.mustPlay, r.hand.length);
+      if (uids.length !== need) return { ok: false, reason: `この妖の前では${need}枚ちょうどで打つ` };
+    }
     return { ok: true };
   }
   function canDiscard(run, uids) {
@@ -177,12 +181,20 @@ const Run = (() => {
     return { ok: true };
   }
 
-  // 選択中の札の見込み（乱数も成長も使わない）
+  // 選択中の札の見込み。本番の play() と同じく「打ち-1・成長型の式神を1回ぶん進めた」写しで数える
+  //   （提灯お化けの最後の一打・龍神の4打目・すねこすり等の成長も見込みに出る）。本物の状態は変えない。
+  //   伏せ札（土蜘蛛）を手札に残す場合、その札は見込みに入れない＝中身が漏れない
   function preview(run, uids) {
     const r = run.round;
     const played = orderInHand(run, uids);
-    const held = cards(run, r.hand.filter((u) => !uids.includes(u)));
-    return Score.scorePlay(run, r, played, held, { preview: true });
+    const held = cards(run, r.hand.filter((u) => !uids.includes(u) && !r.faceDown.includes(u)));
+    const vrun = { ...run, shiki: run.shiki.map((s) => ({ ...s, data: JSON.parse(JSON.stringify(s.data || {})) })) };
+    const vr = { ...r, hands: r.hands - 1, handsPlayed: r.handsPlayed + 1 };
+    const q = Score.effectiveQuirk(vrun, vr);
+    const ev = Score.evaluate(played, { blockedMonth: q && q.noRepeat ? new Set(r.usedYaku) : null });
+    const info = { played, yakuKeys: ev.keys, gild: false };
+    Score.activeShiki(vrun, vr).forEach(({ s }) => { const f = SHIKI_BY_ID[s.id].fx; if (f && f.onPlay) f.onPlay(vrun, info, s); });
+    return Score.scorePlay(vrun, vr, played, held, { preview: true });
   }
   // 打った札は「手札の並び順」で数える（左から）
   function orderInHand(run, uids) {
@@ -348,13 +360,13 @@ const Run = (() => {
     for (let i = 0; i < nShiki; i++) { const id = rollShiki(run, R); shop.shiki.push({ id, cost: SHIKI_BY_ID[id].cost + (run.rank >= 5 ? 1 : 0) }); }
     for (let i = 0; i < SHOP.itemSlots; i++) shop.items.push(rollItem(run, R));
     for (let i = 0; i < SHOP.packSlots; i++) shop.packs.push(rollPack(R));
-    // 神器: 季節ごとに1つ（まだ持っていない物から）。季節の最初の市（前の月が大妖）で新しく並ぶ
+    // 神器: 二月ごとに1つ（睦月・如月の市／弥生・卯月の市／…／長月〜霜月の市の5回）。
+    // 1年の市は11回なので、5つすべて集めることもできる。同じ期間に買ったら次の期間まで並ばない
     const left = JINGI.filter((j) => !run.jingi.includes(j.id));
-    const seasonKey = `${run.year}-${Math.ceil(run.month / 3)}`;
+    const seasonKey = `${run.year}-${Math.min(5, Math.ceil(run.month / 2))}`;
     if (left.length) {
-      if (!run.jingiOffer || run.jingiOffer.season !== seasonKey || run.jingi.includes(run.jingiOffer.id)) {
-        run.jingiOffer = run.jingiOffer && run.jingiOffer.season === seasonKey && !run.jingi.includes(run.jingiOffer.id)
-          ? run.jingiOffer : { season: seasonKey, id: R.pick(left).id, bought: false };
+      if (!run.jingiOffer || run.jingiOffer.season !== seasonKey) {
+        run.jingiOffer = { season: seasonKey, id: R.pick(left).id, bought: false };
       }
       if (!run.jingiOffer.bought) shop.jingi = { id: run.jingiOffer.id, cost: JINGI_PRICE };
     }
@@ -394,6 +406,7 @@ const Run = (() => {
         run.fu.push(slot.id);
       }
     } else if (kind === "packs") {
+      if (slot.kind === "shiki" && slotsFree(run) <= 0) return { error: "式神の枠がいっぱい（売ると空く）" };
       run.zeni -= slot.cost;
       slot.sold = true;
       openPack(run, slot.kind);
@@ -511,6 +524,7 @@ const Run = (() => {
   function applyFu(run, id, uids, pool) {
     const f = FU[id];
     if (!f) return { error: "?" };
+    if (f.need[1] === 0) uids = []; // 札を選ばない呪符は、選択中の札があっても無視する
     const inPool = pool || (run.round ? run.round.hand : []);
     const sel = run.round ? orderInHand(run, uids.filter((u) => inPool.includes(u)))
       : uids.filter((u) => inPool.includes(u)).map((u) => card(run, u));
@@ -588,11 +602,14 @@ const Run = (() => {
       return run;
     } catch (e) { return null; }
   }
+  function loadRaw() {
+    try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
+  }
   function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 
   return {
     newRun, passives, targetOf, card, cards, startRound, drawUp, canPlay, canDiscard, preview, play, discard,
     cashOut, continueEndless, openShop, reroll, rerollCost, buy, sell, moveShiki, levelUp, openPack, pickPack, closePack,
-    applyFu, useFu, sellFu, leaveShop, save, load, clearSave, slotsFree, addShiki, addCard, burnCard, rng, visibleYaku, orderInHand,
+    applyFu, useFu, sellFu, leaveShop, save, load, loadRaw, clearSave, slotsFree, addShiki, addCard, burnCard, rng, visibleYaku, orderInHand,
   };
 })();

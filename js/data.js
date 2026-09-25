@@ -384,7 +384,7 @@ const SHIKI = [
     lore: "日輪に棲む三本足の烏。光の札を導く、神の使い。",
     fx: { onCard(ctx, c) { if (c.t === "hikari") ctx.mulBai(1.5); } } },
   { id: "kudagitsune", name: "管狐", yomi: "くだぎつね", rar: 3, cost: 10,
-    text: "右どなりの式神の力を写す",
+    text: "右どなりの式神の「点を増やす力」を写す（銭・枠・成長の力は写せない）",
     lore: "竹筒に棲む小さな狐。となりの式神のまねが、本物より上手い。",
     fx: {}, flag: "copyRight" },
   { id: "baku", name: "獏", yomi: "ばく", rar: 3, cost: 9,
@@ -515,7 +515,7 @@ const BOSS_POOL = { 3: ["tsuchigumo", "sutoku"], 6: ["orochi", "ootakemaru"], 9:
 
 // ---------- 目標（霊力） ----------
 // index = 月（1〜12）。大妖・最終は別倍率を掛けない（この表がそのまま目標）。
-const TARGETS = [0, 300, 450, 800, 1000, 1400, 2400, 3000, 4300, 6800, 9500, 14000, 21000];
+const TARGETS = [0, 300, 450, 800, 1000, 1400, 2400, 3000, 4300, 6200, 8800, 13000, 19500];
 function targetFor(year, month) {
   let t = TARGETS[month];
   // 二年目以降（無限の絵巻）: 師走の目標から、月ごとに1.35倍ずつ上がり続ける

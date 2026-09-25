@@ -102,10 +102,11 @@ const Score = (() => {
     else if (lights.length === 4) list.push({ key: rain ? "ameshikou" : "shikou", cards: lights });
     else if (lights.length === 3 && !rain) list.push({ key: "sankou", cards: lights });
 
-    // --- 役なし → 素札（いちばん文の高い札1枚） ---
+    // --- 役なし → 素札（いちばん文の高い札1枚。癖で数えない札は後回し・雲母摺は+40で比べる） ---
     if (list.length === 0 && played.length) {
+      const val = (c) => (opts.debuffType && c.t === opts.debuffType ? -1 : TYPES[c.t].bun + (c.enh === "kira" ? 40 : 0));
       let best = played[0];
-      for (const c of played) if (TYPES[c.t].bun > TYPES[best.t].bun) best = c;
+      for (const c of played) if (val(c) > val(best)) best = c;
       list.push({ key: "sufuda", cards: [best] });
     }
 
@@ -133,14 +134,16 @@ const Score = (() => {
   }
 
   // 管狐（右どなりの写し）の解決: 写し先の式神インスタンスを返す（無ければ null）
-  function resolveCopy(run, idx, seen = new Set()) {
+  // 写せるのは「点を増やす力」（onCard・onHeld・onScore）だけ。眠っている式神は写せない
+  function resolveCopy(run, idx, round, seen = new Set()) {
     const me = run.shiki[idx];
     if (!me) return null;
+    if (round && round.sleeping === idx && seen.size) return null;
     const def = SHIKI_BY_ID[me.id];
     if (def.flag !== "copyRight") return me;
     if (seen.has(idx)) return null;
     seen.add(idx);
-    return resolveCopy(run, idx + 1, seen);
+    return resolveCopy(run, idx + 1, round, seen);
   }
 
   function hasFlag(run, round, flag) {
@@ -156,6 +159,7 @@ const Score = (() => {
       splash: hasFlag(run, round, "splash"),
       gapNagare: hasFlag(run, round, "gapNagare"),
       blockedMonth: quirk && quirk.noRepeat ? new Set(round.usedYaku) : null,
+      debuffType: quirk && quirk.debuffType,
     });
     const steps = [];
     const ctx = {
@@ -190,7 +194,7 @@ const Score = (() => {
     // 式神のフックを左から呼ぶ（管狐は右どなりの効果を写す）
     const eachShiki = (hook, ...args) => {
       for (const { s, i } of act) {
-        const target = resolveCopy(run, i);
+        const target = resolveCopy(run, i, round);
         if (!target) continue;
         const def = SHIKI_BY_ID[target.id];
         if (def.fx && def.fx[hook]) {

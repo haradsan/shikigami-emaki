@@ -74,6 +74,9 @@ const Main = (() => {
 
   function toTitle() {
     UI.closeModal();
+    // 負けの演出中にアプリを閉じた一年は、ここで記録だけ済ませて片づける
+    const raw = Run.loadRaw();
+    if (raw && raw.phase === "over") { if (raw.endRecorded !== "over") recordEnd(raw, false, false); Run.clearSave(); }
     const saved = Run.load();
     UI.renderTitle(!!saved && saved.phase !== "over");
   }
@@ -205,7 +208,10 @@ const Main = (() => {
       setTimeout(() => cash(), 1100);
     } else cash();
     function cash() {
+      // 演出の途中で「あきらめる」「タイトルへ」などが起きていたら、精算は出さない
+      if (run !== Main.run || run.phase !== "cashout" || document.body.dataset.screen !== "round") return;
       UI.showCashout(() => {
+        if (run.phase !== "cashout") return;
         Run.cashOut(run);
         save();
         if (run.phase === "clear") endRun(true);
@@ -221,24 +227,31 @@ const Main = (() => {
   }
 
   function endRun(cleared) {
-    let newly = [];
-    if (!run.endRecorded) {
-      newly = Profile.endRun(run, cleared);
-      run.endRecorded = true;
-      UI.achieveToast(Profile.achieve("end", { run, cleared }));
-      if (run.daily) {
-        // 日替わりの記録（その日の最高到達）
-        const d = Profile.data;
-        d.daily = d.daily || {};
-        const reach = cleared ? 13 : run.month;
-        const prev = d.daily[run.daily];
-        if (!prev || reach > prev.reach) d.daily[run.daily] = { reach, label: cleared ? "一年を結んだ" : `${MONTHS[run.month].wa}まで` };
-        Profile.save();
-      }
-    }
+    const newly = recordEnd(run, cleared, true);
     if (cleared) { SFX.clear(); save(); }
     else { SFX.fail(); Run.clearSave(); }
     UI.renderEnd(cleared, newly);
+  }
+
+  // 一年の終わりを記録する（一度きり。無限の絵巻で結びのあとに倒れたときは、到達だけを追記する）
+  function recordEnd(r, cleared, withToast) {
+    const key = cleared ? `clear-${r.year}` : "over";
+    if (r.endRecorded === key) return [];
+    const again = !!r.endRecorded;
+    const newly = Profile.endRun(r, cleared, again);
+    r.endRecorded = key;
+    const got = Profile.achieve("end", { run: r, cleared });
+    if (withToast) UI.achieveToast(got);
+    if (r.daily) {
+      // 日替わりの記録（その日の最高到達）
+      const d = Profile.data;
+      d.daily = d.daily || {};
+      const reach = cleared ? 13 : r.month;
+      const prev = d.daily[r.daily];
+      if (!prev || reach > prev.reach) d.daily[r.daily] = { reach, label: cleared ? "一年を結んだ" : `${MONTHS[r.month].wa}まで` };
+      Profile.save();
+    }
+    return newly;
   }
 
   function endless() {

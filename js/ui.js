@@ -172,7 +172,7 @@ const UI = (() => {
         <button class="btn" data-close>閉じる</button>
       </div>
       <p class="dim" style="font-size:11px;color:#7a6a4a;margin-top:6px">式神は左から順に力を発揮します。並べ替えで「足し算→掛け算」の順にすると強い。</p>`);
-    $$("[data-mv]", c).forEach((b) => b.onclick = () => { Run.moveShiki(run, i, +b.dataset.mv); save(); closeModal(); refresh(); showShikiDetail(i + +b.dataset.mv, opts); });
+    $$("[data-mv]", c).forEach((b) => b.onclick = () => { if (busy) return; Run.moveShiki(run, i, +b.dataset.mv); save(); closeModal(); refresh(); showShikiDetail(i + +b.dataset.mv, opts); });
     const sb = $("[data-sell]", c);
     if (sb) sb.onclick = () => {
       const res = Run.sell(run, i);
@@ -199,7 +199,7 @@ const UI = (() => {
   }
   function bindTop(el) {
     const mb = $("[data-menu]", el);
-    if (mb) mb.onclick = () => showMenu();
+    if (mb) mb.onclick = () => { if (busy) { toast("演出が終わってから"); return; } showMenu(); };
   }
 
   function showMenu() {
@@ -403,8 +403,11 @@ const UI = (() => {
   function sortedHand() {
     const r = run.round;
     const hand = r.hand.map((u) => Run.card(run, u));
-    if (sortMode === "month") hand.sort((a, b) => a.m - b.m || TYPES[b.t].rank - TYPES[a.t].rank || a.uid - b.uid);
-    else hand.sort((a, b) => TYPES[b.t].rank - TYPES[a.t].rank || a.m - b.m || a.uid - b.uid);
+    // 伏せ札は並び順で中身が分からないよう、いつも右端（配られた順）に置く
+    const fd = (c) => r.faceDown.includes(c.uid);
+    const cmpFd = (a, b) => (fd(a) - fd(b)) || (fd(a) && fd(b) ? a.uid - b.uid : 0);
+    if (sortMode === "month") hand.sort((a, b) => cmpFd(a, b) || a.m - b.m || TYPES[b.t].rank - TYPES[a.t].rank || a.uid - b.uid);
+    else hand.sort((a, b) => cmpFd(a, b) || TYPES[b.t].rank - TYPES[a.t].rank || a.m - b.m || a.uid - b.uid);
     // 打つ順＝手札の並び順（Run.orderInHand）に反映させる
     r.hand = hand.map((c) => c.uid);
     return hand;
@@ -717,7 +720,7 @@ const UI = (() => {
     "式神は左から順に働く。並びも大事ですぜ",
     "歌の札で役を磨けば、同じ役でも桁が変わる",
     "銭は五枚ごとに一枚の利子がつく。貯めるのも手ですよ",
-    "神器は季節にひとつ。五つそろえば……ふふ",
+    "神器はふた月にひとつ。五つそろえば……ふふ",
     "札を祓って山を薄くすると、狙いの役が来やすくなる",
     "絆のある式神は、そろうと化けますぜ",
   ];
@@ -741,7 +744,7 @@ const UI = (() => {
     h += `<div class="shop-sec"><h4>文箱</h4><div class="wares">${s.packs.map((w, i) => ware("packs", i, Art.pack(w.kind), PACKS[w.kind].name, w.cost, "", w.sold)).join("")}</div></div>`;
     if (s.jingi) {
       const j = JINGI.find((x) => x.id === s.jingi.id);
-      h += `<div class="shop-sec"><h4>神器（この季節だけ）</h4><div class="wares">${ware("jingi", 0, Art.jingi(j.id), j.name, s.jingi.cost, j.text, s.jingi.sold)}</div></div>`;
+      h += `<div class="shop-sec"><h4>神器（ふた月にひとつ）</h4><div class="wares">${ware("jingi", 0, Art.jingi(j.id), j.name, s.jingi.cost, j.text, s.jingi.sold)}</div></div>`;
     }
     body.innerHTML = h;
     $$(".ware", body).forEach((w) => w.onclick = () => showWare(w.dataset.k, +w.dataset.i));
@@ -756,7 +759,7 @@ const UI = (() => {
         <li><b>呪符</b>：祓いの最中に、選んだ手札を作り替える</li>
         <li><b>詠み札</b>：百人一首の歌。役の段位が上がり、文と倍が増える</li>
         <li><b>文箱</b>：中から一つ選べる福袋</li>
-        <li><b>神器</b>：季節にひとつ。五つそろえば「五神器顕現」</li></ul>
+        <li><b>神器</b>：ふた月にひとつ並ぶ。五つそろえば「五神器顕現」</li></ul>
         <p style="font-size:12.5px">銭は手元に5枚ごとに利子が1枚つきます。</p></div>
         <div class="mrow"><button class="btn gold" data-close>わかった</button></div>`), 200);
     }
@@ -789,11 +792,12 @@ const UI = (() => {
     } else if (kind === "jingi") {
       const j = JINGI.find((x) => x.id === w.id);
       head = `<div class="det"><div style="flex:none;width:80px">${Art.jingi(j.id)}</div><div><h3>${esc(j.name)}</h3><div class="effect">${esc(j.text)}</div>
-        <p style="font-size:12px;color:#7a6a4a">神器はこの季節（三か月）のあいだ市に並びます。<b>五つすべて集めると「五神器顕現」</b>——以後すべての打ちで 倍×${JINGI_ALL_BONUS}。（いま ${run.jingi.length}/5）</p></div></div>`;
+        <p style="font-size:12px;color:#7a6a4a">神器はふた月（睦月・如月／弥生・卯月／…／長月〜霜月）ごとにひとつ市に並びます。<b>五つすべて集めると「五神器顕現」</b>——以後すべての打ちで 倍×${JINGI_ALL_BONUS}。（いま ${run.jingi.length}/5）</p></div></div>`;
     }
     let block = w.cost > run.zeni ? "銭が足りない" : "";
     if (!block && kind === "shiki" && Run.slotsFree(run) <= 0) block = "式神の枠がいっぱい";
     if (!block && kind === "items" && w.kind === "fu" && run.fu.length >= Run.passives(run).fuSlots) block = "呪符の枠がいっぱい";
+    if (!block && kind === "packs" && w.kind === "shiki" && Run.slotsFree(run) <= 0) block = "式神の枠がいっぱい";
     const hintFull = block === "式神の枠がいっぱい" ? `<p style="font-size:12px;color:#7a4a10;margin-top:6px">上の式神をタップすると手放せます。</p>` : "";
     const c = modal(head + body + hintFull + `<div class="mrow"><button class="btn gold" data-buy ${block ? "disabled" : ""}>${block || "買う"}（${w.cost}銭）</button><button class="btn" data-close>やめる</button></div>`);
     $("[data-buy]", c).onclick = () => {
@@ -960,7 +964,7 @@ const UI = (() => {
       <p>光20・種10・短冊5・カス1。その月の札は<b>旬</b>で、役に加わると倍+2。札の右下に種類、左上に月が書いてあります。</p>
       <h4>四、夜市と式神</h4>
       <p>祓いのあとは化け狸の夜市。<b>式神</b>は5体まで連れて行け、それぞれの力で文や倍を増やします（左から順に発動）。
-      <b>呪符</b>で札を作り替え、<b>詠み札</b>（百人一首）で役を磨き、季節ごとの<b>神器</b>を五つ集めれば「五神器顕現」。</p>
+      <b>呪符</b>で札を作り替え、<b>詠み札</b>（百人一首）で役を磨き、ふた月ごとに並ぶ<b>神器</b>を五つ集めれば「五神器顕現」。</p>
       <h4>五、妖の癖</h4>
       <p>妖はそれぞれ意地悪な癖を持ちます。3・6・9月は季節の大妖、12月は百鬼夜行の主。絵巻の地図で先の妖を確かめて備えましょう。</p>
       <h4>こつ</h4>
