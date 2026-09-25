@@ -1,1509 +1,1109 @@
 // ============================================================
-// ui.js — 描画とユーザー入力（盤面SVG / パネル / 手札 / ログ / ダイアログ）
+// ui.js — 画面の描画と操作。状態は run.js（Run）が持ち、ここは見せ方と演出だけ。
+//   画面: title / select / emaki（月の地図）/ round（祓い）/ shop（夜市）/ end / book（図鑑）
+//   演出: 採点は scorePlay が返す steps を1つずつ再生（文・倍の数え上げ、式神が跳ねる）
 // ============================================================
 "use strict";
 
-const UI = {};
-UI.selectableTiles = null; // 盤面で選択候補として光らせるマスidの Set（霊地・式神選択中）
-// 決定待ちのダイアログ数。「👁 盤面を確認」でオーバーレイを一時的に閉じている間も 1 のまま。
-// これが 0 でないときにヘルプ/捨札/マス情報など別のダイアログを開くと、保留中のダイアログが
-// 上書きされて Promise が永遠に解決されず進行が止まる（実際に起きた金縛りバグ）ため、開く側は必ず確認する。
-UI.dialogBusy = 0;
-// 受け身ダイアログ（🔍マス情報など・ゲーム進行と無関係なもの）を閉じる関数。
-// 進行フロー側の新しいダイアログが開くとき、開きっぱなしの受け身ダイアログを自動で閉じて
-// 上書き（＝Promise未解決・busyカウンタずれ）を防ぐ。
-UI._passiveClose = null;
-function closePassiveDialog() {
-  if (UI._passiveClose) { const f = UI._passiveClose; UI._passiveClose = null; f(); }
-}
-function setSelectableTiles(ids) { UI.selectableTiles = ids instanceof Set ? ids : new Set(ids); }
-function clearSelectableTiles() { UI.selectableTiles = null; }
-const PLAYER_COLORS = ["#4da3ff", "#ff5b5b", "#7ed957"]; // 🔵自分 / 🔴相手1 / 🟢相手2（三つ巴）
-const P_ICONS = ["🔵", "🔴", "🟢"];   // パネル・ログ・ダイアログで使うプレイヤー印
-const P_MINI  = ["🔹", "🔸", "💚"];   // ルートプレビューで土地の所有者を示す小印
-const CELL = 100, TILE = 90;
-// 盤面上の駒の位置（同じマスに複数人が重なっても見分けられるよう左右＋中央にずらす）
-const TOKEN_OFFSETS = [
-  { dx: 20, dy: -8 },        // P0: 左上
-  { dx: TILE - 20, dy: -8 }, // P1: 右上
-  { dx: TILE / 2, dy: -16 }, // P2: 中央やや上（三つ巴）
-];
+const UI = (() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const esc = Art.esc;
+  let run = null;
+  let sel = [];            // 選択中の札 uid（選んだ順）
+  let sortMode = "month";  // month / type
+  let busy = false;        // 演出中は操作を受けつけない
+  let armedFu = null;      // 使おうとしている呪符の番号
+  let skip = false;        // 演出の早送り
+  const speed = () => (skip ? 0.15 : 1 / (Profile.data.speed || 1));
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms * speed()));
 
-// 演出速度の倍率。稽古では小さくして時短にする（startGameで設定）
-let GAME_SPEED = 1;
-function sleep(ms) { return new Promise(r => setTimeout(r, ms * GAME_SPEED)); }
+  // ---------- 画面切り替え ----------
+  function show(id) {
+    if (id !== "round") busy = false;
+    $$(".screen").forEach((s) => s.classList.toggle("on", s.id === "scr-" + id));
+    document.body.dataset.screen = id;
+  }
 
-const TILE_ICONS = { CASTLE: "🏯", GATE: "⛩️", CARD: "🎴", MAGIC: "💎", WARP: "🌀", MAGMA: "🌋", BOOST: "💨", FORTUNE: "🎋", SPRING: "♨️" };
-const TILE_LABELS = { CASTLE: "本宮", GATE: "鳥居", CARD: "札", MAGIC: "霊力", WARP: "神隠し", MAGMA: "火口", BOOST: "疾風", FORTUNE: "おみくじ", SPRING: "霊泉" };
+  // ---------- 小物 ----------
+  function toast(msg, bad = false) {
+    const area = $("#toast-area");
+    const t = document.createElement("div");
+    t.className = "toast" + (bad ? " bad" : "");
+    t.textContent = msg;
+    (area && $("#scr-round").classList.contains("on") ? area : document.body).appendChild(t);
+    if (!area || !$("#scr-round").classList.contains("on")) {
+      Object.assign(t.style, { position: "fixed", top: "70px", left: "50%", transform: "translateX(-50%)", zIndex: 60 });
+    }
+    setTimeout(() => t.remove(), 2800);
+  }
+  function floatAt(el, text, cls) {
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const f = document.createElement("div");
+    f.className = "float " + cls;
+    f.textContent = text;
+    f.style.left = r.left + r.width / 2 + "px";
+    f.style.top = r.top + r.height * 0.3 + "px";
+    $("#fx-layer").appendChild(f);
+    setTimeout(() => f.remove(), 900);
+  }
+  // 手ざわり（対応端末だけ小さく震える）
+  const buzz = (p) => { try { if (navigator.vibrate && SFX.enabled) navigator.vibrate(p); } catch (e) { /* */ } };
 
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+  // 式神のひとこと（吹き出し）。idx を省くと、その場面の台詞を持つ式神から選ぶ
+  let lastTalk = 0;
+  function talk(kind, idx) {
+    if (!run || !run.shiki.length) return;
+    const now = Date.now();
+    if (idx === undefined && now - lastTalk < 3500) return; // しゃべりすぎない
+    let i = idx;
+    if (i === undefined) {
+      const cand = run.shiki.map((s, k) => k).filter((k) => SHIKI_TALK[run.shiki[k].id] && SHIKI_TALK[run.shiki[k].id][kind]);
+      const pool = cand.length ? cand : run.shiki.map((s, k) => k);
+      i = pool[Math.floor(Math.random() * pool.length)];
+    }
+    const s = run.shiki[i];
+    if (!s) return;
+    const t = (SHIKI_TALK[s.id] && SHIKI_TALK[s.id][kind]) || (GENERIC_TALK[kind] ? GENERIC_TALK[kind][Math.floor(Math.random() * GENERIC_TALK[kind].length)] : null);
+    if (!t) return;
+    const el = document.querySelector(`.screen.on .shiki[data-si="${i}"]`);
+    if (!el) return;
+    lastTalk = now;
+    const r = el.getBoundingClientRect();
+    const b = document.createElement("div");
+    b.className = "bubble";
+    b.textContent = t;
+    b.style.left = Math.max(100, Math.min(window.innerWidth - 100, r.left + r.width / 2)) + "px";
+    b.style.top = r.top - 6 + "px";
+    document.body.appendChild(b);
+    setTimeout(() => b.remove(), 2800);
+  }
 
-// 式神と土地の属性関係の注記（ダイアログ用）。無属性は一致も相生もしない（土地の加護・恵みなし）
-function elemNote(card, tile) {
-  if (card.element === "neutral") return "・<b>無属性</b>（土地の加護なし）";
-  if (card.element === tile.element) return "・属性一致（土地の加護）";
-  if (isSouseiParent(tile.element, card.element)) return `・<b>相生の恵み</b>（防衛HP+${SOUSEI_HP}）`;
-  return "・<b>属性不一致</b>";
-}
-
-// ---------- 盤面 ----------
-// v31「絵巻盤面」: 正方形のグリッドマスをやめ、絵巻に描かれた「石畳の道」にする。
-//  ・各マスは手描き風の不定形（霊地=岩・特別マス=絵馬札・本宮=社）
-//  ・位置はステージ・マスごとに固定の「ゆらぎ」を持ち、道は墨の刷毛で曲がる
-//  ・下層に「すやり霞」（絵巻の金霞）を流す
-// レイアウトの実体はグラフ（tile.next）のままなので、ゲームロジックは無変更。
-
-// ステージ・マスごとに固定の擬似乱数（0..1）。毎描画で同じ値＝盤面は揺れない
-function tileRand(seed) { const v = Math.sin(seed) * 43758.5453; return v - Math.floor(v); }
-function tileJitter(tile) {
-  const si = (typeof G !== "undefined" && G) ? G.stageIdx + 1 : 1;
-  const s = si * 91.17 + tile.id * 7.13;
-  return {
-    jx: (tileRand(s) - 0.5) * 16,          // 位置のゆらぎ（±8px）
-    jy: (tileRand(s + 1.7) - 0.5) * 16,
-    rot: (tileRand(s + 3.1) - 0.5) * 5,    // 傾きのゆらぎ（±2.5度）
+  // 大きな数は「万・億」でまとめる（枠からはみ出さないように）
+  const fmt = (n) => {
+    if (n >= 1e12) return (n / 1e12).toFixed(2) + "兆";
+    if (n >= 1e8) return (n / 1e8).toFixed(2) + "億";
+    if (n >= 1e5) return (n / 1e4).toFixed(1) + "万";
+    return Math.round(n).toLocaleString();
   };
-}
-function tilePx(tile) {
-  const j = tileJitter(tile);
-  return { x: tile.x * CELL + 5 + j.jx, y: tile.y * CELL + 5 + j.jy };
-}
+  const fmtBai = (n) => (n >= 1e5 ? fmt(n) : (Math.round(n * 10) / 10).toLocaleString());
+  const zeniHtml = (n) => `<span class="tb-zeni">${Art.coin(16)}${n}</span>`;
 
-// 霊地の「岩」バリエーション（90×90の箱に収まる手描き風の不定形）。id で出し分ける
-const STONE_PATHS = [
-  "M8 26 C6 12 20 4 34 6 C48 2 66 3 76 8 C86 13 88 28 85 42 C88 58 84 74 74 82 C60 89 42 88 28 85 C14 88 6 76 7 60 C4 48 6 36 8 26 Z",
-  "M12 18 C22 6 38 8 50 5 C64 2 80 8 84 20 C89 34 84 46 86 60 C88 74 76 86 62 84 C48 88 32 89 20 83 C8 78 8 64 9 50 C6 36 8 28 12 18 Z",
-  "M6 32 C4 18 14 8 28 7 C42 3 58 4 70 6 C82 9 87 22 84 34 C87 48 89 64 80 76 C70 87 54 85 40 87 C26 90 12 84 10 70 C7 58 9 44 6 32 Z",
-  "M10 22 C16 8 30 3 44 6 C58 2 74 6 82 14 C90 24 84 38 87 52 C89 66 82 80 68 83 C54 89 38 86 24 84 C10 82 4 70 8 56 C5 44 6 32 10 22 Z",
-];
-// 特別マス（鳥居・札・霊力など）＝絵馬の札。本宮＝屋根つきの社
-const EMA_PATH = "M45 3 L84 25 C86 45 85 66 82 83 C60 88 30 88 8 83 C5 66 4 45 6 25 Z";
-const tileShapeOf = t =>
-  t.type === "LAND" ? STONE_PATHS[t.id % STONE_PATHS.length] : EMA_PATH;
+  function modal(html, opts = {}) {
+    const m = $("#modal"), c = $("#modal-card");
+    c.innerHTML = (opts.noClose ? "" : `<button class="close-x" data-close>×</button>`) + html;
+    m.classList.remove("hidden");
+    m.onclick = (e) => {
+      if (e.target === m && !opts.noClose) closeModal();
+      const cl = e.target.closest("[data-close]");
+      if (cl) closeModal();
+    };
+    return c;
+  }
+  function closeModal() { $("#modal").classList.add("hidden"); $("#modal-card").innerHTML = ""; if (modal.onclose) { const f = modal.onclose; modal.onclose = null; f(); } }
 
-// すやり霞（絵巻の金霞）: 盤面下層に流れる横帯。群内は同色＝重なっても濃くならない
-function kasumiSVG(w, h) {
-  const W = w * CELL, H = h * CELL;
-  let out = "";
-  const bands = [
-    { y: H * 0.16, x: -W * 0.06, l: W * 0.6, s: 1.0 },
-    { y: H * 0.5,  x: W * 0.45,  l: W * 0.62, s: 1.15 },
-    { y: H * 0.84, x: W * 0.1,   l: W * 0.55, s: 0.9 },
+  // ---------- 札・式神の部品 ----------
+  function shikiHtml(inst, i, opts = {}) {
+    const d = SHIKI_BY_ID[inst.id];
+    let cnt = "";
+    if (d.fmt && inst.data) {
+      const v = d.fmt(inst, run);
+      const val = v.n !== undefined ? v.n : v.x;
+      if (val && val !== "1.0" && val !== 0) cnt = `<div class="cnt">${v.x ? "×" + val : "+" + val}</div>`;
+    }
+    const bond = d.bond ? `<div class="bond">絆</div>` : "";
+    const asleep = opts.asleep ? " asleep" : "";
+    return `<div class="shiki r${d.rar}${asleep}" data-si="${i}" data-id="${d.id}"><div class="pt">${Art.portrait(d.id)}</div><div class="sn">${esc(d.name)}</div>${cnt}${bond}</div>`;
+  }
+  function shikiText(inst) {
+    const d = SHIKI_BY_ID[inst.id];
+    let t = d.text;
+    if (d.fmt && inst.data) { const v = d.fmt(inst, run); t = t.replace("{n}", v.n).replace("{x}", v.x); }
+    return t;
+  }
+  function renderShikiRow(el, opts = {}) {
+    const p = Run.passives(run);
+    const r = run.round;
+    let h = run.shiki.map((s, i) => shikiHtml(s, i, { asleep: r && r.sleeping === i })).join("");
+    for (let i = run.shiki.length; i < p.slots; i++) h += `<div class="shiki empty"></div>`;
+    el.innerHTML = h;
+    const n = Math.max(p.slots, run.shiki.length);
+    const w = Math.min(64, Math.floor((Math.min(window.innerWidth, 480) - 24 - (n - 1) * 5) / n));
+    el.style.setProperty("--sw", w + "px");
+    $$(".shiki[data-si]", el).forEach((s) => s.onclick = () => showShikiDetail(+s.dataset.si, opts));
+  }
+
+  function showShikiDetail(i, opts = {}) {
+    const inst = run.shiki[i];
+    if (!inst) return;
+    const d = SHIKI_BY_ID[inst.id];
+    const canSell = !busy && run.phase !== "round" || opts.allowSell;
+    const bondTxt = d.bond ? `<p class="dim" style="color:#7a4a10;font-size:12px">🤝 絆: ${esc(bondName(d.bond))}</p>` : "";
+    const c = modal(`
+      <div class="det">
+        <div class="big-pt">${Art.portrait(d.id)}</div>
+        <div>
+          <span class="rar" style="background:${RAR[d.rar].color}">${RAR[d.rar].name}</span>
+          <h3>${esc(d.name)} <span class="yomi-kana">${esc(d.yomi)}</span></h3>
+          <div class="effect">${esc(shikiText(inst))}</div>
+          ${bondTxt}
+        </div>
+      </div>
+      <p class="lore" style="margin-top:8px;font-size:13px;color:#5c4d33">${esc(d.lore)}</p>
+      <div class="mrow">
+        <button class="btn" data-mv="-1" ${i === 0 ? "disabled" : ""}>‹ 左へ</button>
+        <button class="btn" data-mv="1" ${i === run.shiki.length - 1 ? "disabled" : ""}>右へ ›</button>
+      </div>
+      <div class="mrow">
+        <button class="btn shu" data-sell ${canSell ? "" : "disabled"}>手放す（${sellPrice(inst)}銭）</button>
+        <button class="btn" data-close>閉じる</button>
+      </div>
+      <p class="dim" style="font-size:11px;color:#7a6a4a;margin-top:6px">式神は左から順に力を発揮します。並べ替えで「足し算→掛け算」の順にすると強い。</p>`);
+    $$("[data-mv]", c).forEach((b) => b.onclick = () => { Run.moveShiki(run, i, +b.dataset.mv); save(); closeModal(); refresh(); showShikiDetail(i + +b.dataset.mv, opts); });
+    const sb = $("[data-sell]", c);
+    if (sb) sb.onclick = () => {
+      const res = Run.sell(run, i);
+      if (res.ok) { SFX.coin(); toast(`${d.name}を手放した（+${res.price}銭）`); save(); closeModal(); refresh(); }
+    };
+  }
+  const bondName = (b) => ({ komainu: "狛犬・阿 と 狛犬・吽", sanen: "見ざる・聞かざる・言わざる", fuurai: "風神 と 雷神" }[b] || "");
+
+  function refresh() {
+    const ph = run && run.phase;
+    if (ph === "round") renderRound();
+    else if (ph === "shop" || ph === "pack") renderShop();
+    else if (ph === "map") renderEmaki();
+  }
+
+  // ---------- 上の帯 ----------
+  function topbarHtml() {
+    const mo = MONTHS[run.month];
+    const yr = run.year > 1 ? `${run.year}年目・` : "";
+    return `<div class="tb-month"><span class="plant" style="background:${mo.color}">${mo.plant[0]}</span><div>${mo.wa}<small>${yr}${KANSUJI[run.month]}月・${mo.plant}</small></div></div>
+      <div class="tb-spacer"></div>
+      ${zeniHtml(run.zeni)}
+      <button class="btn tb-menu" data-menu>≡</button>`;
+  }
+  function bindTop(el) {
+    const mb = $("[data-menu]", el);
+    if (mb) mb.onclick = () => showMenu();
+  }
+
+  function showMenu() {
+    const c = modal(`<h3>ひと休み</h3>
+      <div class="mrow"><button class="btn" data-a="yaku">役と段位</button><button class="btn" data-a="deck">山札を見る</button></div>
+      <div class="mrow"><button class="btn" data-a="howto">遊び方</button><button class="btn" data-a="settings">設定</button></div>
+      <div class="mrow"><button class="btn" data-a="title">タイトルへ（続きは保存）</button></div>
+      <div class="mrow"><button class="btn shu" data-a="giveup">この一年をあきらめる</button></div>`);
+    $$("[data-a]", c).forEach((b) => b.onclick = () => {
+      const a = b.dataset.a;
+      if (a === "yaku") showYakuList();
+      if (a === "deck") showDeck();
+      if (a === "howto") showHowto();
+      if (a === "settings") showSettings();
+      if (a === "title") { closeModal(); save(); Main.toTitle(); }
+      if (a === "giveup") {
+        const cc = modal(`<h3>本当にあきらめますか？</h3><p>この一年の記録はここで終わります。</p>
+          <div class="mrow"><button class="btn shu" data-yes>あきらめる</button><button class="btn" data-close>やめておく</button></div>`);
+        $("[data-yes]", cc).onclick = () => { closeModal(); run.phase = "over"; Main.endRun(false); };
+      }
+    });
+  }
+
+  // ============================================================
+  //  絵巻（月の地図）
+  // ============================================================
+  function renderEmaki() {
+    show("emaki");
+    const top = $("#emaki-top");
+    top.innerHTML = topbarHtml();
+    bindTop(top);
+    // 十二段の絵巻
+    const strip = $("#emaki-strip");
+    let h = "";
+    for (let m = 1; m <= 12; m++) {
+      const mo = MONTHS[m];
+      const yid = run.plan[m];
+      const y = YOKAI[yid];
+      const done = m < run.month;
+      const now = m === run.month;
+      const repr = BASE_DECK.find((c) => c.m === m && (c.t === "hikari" || c.t === "tane")) || BASE_DECK.find((c) => c.m === m);
+      h += `<div class="ep ${done ? "done" : now ? "now" : "future"} ${y.kind}" data-m="${m}">
+        <div class="ep-wa">${mo.wa}</div><div class="ep-plant">${KANSUJI[m]}月・${mo.plant}</div>
+        <div class="ep-art">${Art.card({ ...repr, uid: "" }, { noIdx: true })}</div>
+        <div class="ep-yk">${Art.portrait(y.portrait)}</div>
+        ${done ? Art.stamp("祓") : ""}
+        <div class="ep-candle">${Art.candle(done)}</div>
+      </div>`;
+    }
+    strip.innerHTML = h;
+    requestAnimationFrame(() => {
+      const now = $(".ep.now", strip);
+      const sc = $("#emaki-scroll");
+      if (now && sc) sc.scrollLeft = now.offsetLeft - sc.clientWidth / 2 + now.clientWidth / 2;
+    });
+    $$(".ep", strip).forEach((e) => e.onclick = () => {
+      const m = +e.dataset.m;
+      const y = YOKAI[run.plan[m]];
+      toast(`${MONTHS[m].wa}：${y.name}${y.qtext ? "（" + y.qtext + "）" : ""}`);
+    });
+
+    // 次の妖
+    const m = run.month;
+    const yid = run.plan[m];
+    const y = YOKAI[yid];
+    Profile.meetYokai(yid);
+    const target = Run.targetOf(run, m);
+    const kindLbl = y.kind === "boss" ? `${y.season}の大妖` : y.kind === "final" ? "百鬼夜行の主" : "小妖";
+    const panel = $("#emaki-panel");
+    const jingiShelf = `<div class="jingi-shelf"><span class="lbl">神器</span>${JINGI.map((j) => `<div class="slot ${run.jingi.includes(j.id) ? "have" : ""}" title="${j.name}">${Art.jingi(j.id, run.jingi.includes(j.id))}</div>`).join("")}</div>`;
+    panel.innerHTML = `
+      <p class="month-text">${esc(MONTH_TEXT[m] || "")}</p>
+      <div class="next-yokai ${y.kind}">
+        <div class="yp">${Art.portrait(y.portrait)}</div>
+        <div>
+          <div class="ny-name">${esc(y.name)} <span class="dim" style="font-size:11px">${kindLbl}</span></div>
+          <div class="ny-line">「${esc(y.line)}」</div>
+          <div class="ny-quirk">${y.qtext ? "癖：" + esc(y.qtext) : '<span class="dim">癖なし</span>'}</div>
+          <div class="ny-target">祓いの目標 <b>${fmt(target)}</b>${run.rank ? ` <span class="dim" style="font-size:11px">${RANKS[run.rank].name}</span>` : ""}</div>
+        </div>
+      </div>
+      ${jingiShelf}
+      <div id="emaki-shiki" class="shiki-row"></div>
+      <div class="fu-row" id="emaki-fu"></div>
+      <div class="emaki-actions">
+        <button class="btn" data-a="deck">山札</button>
+        <button class="btn" data-a="yaku">役と段位</button>
+      </div>
+      <button class="btn big shu" id="btn-go">祓いに向かう</button>`;
+    renderShikiRow($("#emaki-shiki"));
+    renderFuRow($("#emaki-fu"), false);
+    $$("[data-a]", panel).forEach((b) => b.onclick = () => (b.dataset.a === "deck" ? showDeck() : showYakuList()));
+    $("#btn-go").onclick = () => Main.startRound();
+    BGM.setTrack("title");
+  }
+
+  // 季節のはじめの詞書
+  function showSeason(season, then) {
+    const c = modal(`<div class="kotoba"><div class="season-ttl">${season}</div><p>${esc(STORY.season[season])}</p>
+      <div class="mrow"><button class="btn shu" data-close>ひらく</button></div></div>`);
+    c.classList.add("kotoba");
+    modal.onclose = then;
+    SFX.page();
+  }
+
+  // ============================================================
+  //  祓い（対局）
+  // ============================================================
+  function layoutSizes() {
+    const W = Math.min(window.innerWidth, 480);
+    const H = window.innerHeight;
+    const n = Math.max(8, run.round ? run.round.hand.length : 8);
+    // 手札: 重なりを許して横一列（札の幅は最大70px）
+    let cw = Math.min(70, Math.floor((W - 32) / (n * 0.7 + 0.3)));
+    if (H < 700) cw = Math.min(cw, 54);
+    document.documentElement.style.setProperty("--cw", cw + "px");
+    return { W, cw, n };
+  }
+
+  function renderRound() {
+    show("round");
+    const r = run.round;
+    const y = YOKAI[r.yokai];
+    const top = $("#round-top");
+    top.innerHTML = topbarHtml();
+    bindTop(top);
+    renderYokaiBar();
+    renderShikiRow($("#shiki-row"));
+    renderFuRow($("#fu-row"), true);
+    renderHand(false);
+    updateButtons();
+    if (!busy) resetCalc();
+    BGM.setTrack(y.kind === "boss" || y.kind === "final" ? "boss" : "battle");
+  }
+
+  function renderYokaiBar() {
+    const r = run.round;
+    const y = YOKAI[r.yokai];
+    const q = Score.effectiveQuirk(run, r);
+    const eaten = r.quirk && !q;
+    const kindLbl = y.kind === "boss" ? "大妖" : y.kind === "final" ? "主" : "小妖";
+    const pct = Math.min(100, (r.score / r.target) * 100);
+    const bar = $("#yokai-bar");
+    bar.className = "yokai-bar " + y.kind;
+    bar.innerHTML = `<div class="yp">${Art.portrait(y.portrait)}</div>
+      <div class="yinfo">
+        <div class="yname">${esc(y.name)}<span class="ykind">${kindLbl}</span></div>
+        <div class="yquirk ${y.qtext ? "" : "none"} ${eaten ? "eaten" : ""}">${y.qtext ? esc(y.qtext) + (eaten ? "（獏が食べた）" : "") : "癖なし"}</div>
+        <div class="goal"><div class="goal-bar"><div class="goal-fill" style="width:${pct}%"></div></div>
+          <div class="goal-num"><b id="g-score">${fmt(r.score)}</b> / ${fmt(r.target)}</div></div>
+      </div>`;
+    bar.onclick = () => toast(`${y.name}：「${y.line}」`);
+  }
+
+  function renderFuRow(el, inRound) {
+    const p = Run.passives(run);
+    let h = `<span class="lbl">呪符</span>`;
+    run.fu.forEach((id, i) => { h += `<div data-fi="${i}" class="fu-wrap">${Art.fu(id)}</div>`; });
+    for (let i = run.fu.length; i < p.fuSlots; i++) h += `<div class="fu-empty"></div>`;
+    el.innerHTML = h;
+    $$("[data-fi]", el).forEach((w) => {
+      const fc = $(".fu-card", w);
+      if (armedFu === +w.dataset.fi) fc.classList.add("armed");
+      w.onclick = () => showFuDetail(+w.dataset.fi, inRound);
+    });
+  }
+
+  function showFuDetail(fi, inRound) {
+    const id = run.fu[fi];
+    const f = FU[id];
+    const needCards = f.need[0] > 0;
+    const usable = !busy && (needCards ? run.phase === "round" : true);
+    const selInfo = needCards ? `<p style="font-size:12.5px;color:#7a4a10">${inRound ? `いま選んでいる札：${sel.length}枚` : "祓いの最中に、手札を選んでから使います"}</p>` : "";
+    const c = modal(`<div class="det"><div style="flex:none">${Art.fu(id).replace('class="fu-card', 'style="width:60px;height:96px" class="fu-card')}</div>
+      <div><h3>${esc(f.name)}</h3><div class="effect">${esc(f.text)}</div>${selInfo}</div></div>
+      <div class="mrow"><button class="btn shu" data-use ${usable ? "" : "disabled"}>使う</button><button class="btn" data-sellfu>手放す（1銭）</button><button class="btn" data-close>閉じる</button></div>`);
+    $("[data-use]", c).onclick = () => {
+      const res = Run.useFu(run, fi, sel.slice());
+      if (res.error) { SFX.error(); toast(res.error, true); return; }
+      closeModal();
+      SFX.open();
+      afterFu(res);
+    };
+    $("[data-sellfu]", c).onclick = () => { Run.sellFu(run, fi); SFX.coin(); closeModal(); save(); refresh(); };
+  }
+  function afterFu(res) {
+    const f = FU[res.id];
+    let msg = `${f.name}を使った`;
+    if (res.zeni) msg += `（+${res.zeni}銭）`;
+    if (res.shiki) { msg += `：${SHIKI_BY_ID[res.shiki].name}が来た！`; Profile.seeShiki(res.shiki); }
+    toast(msg);
+    if (res.removed) sel = [];
+    sel = sel.filter((u) => run.round && run.round.hand.includes(u));
+    save();
+    refresh();
+    // 変化した札を光らせる
+    for (const u of res.changed || []) { const el = $(`#hand .card[data-uid="${u}"]`); if (el) floatAt(el, "変化", "info"); }
+  }
+
+  function sortedHand() {
+    const r = run.round;
+    const hand = r.hand.map((u) => Run.card(run, u));
+    if (sortMode === "month") hand.sort((a, b) => a.m - b.m || TYPES[b.t].rank - TYPES[a.t].rank || a.uid - b.uid);
+    else hand.sort((a, b) => TYPES[b.t].rank - TYPES[a.t].rank || a.m - b.m || a.uid - b.uid);
+    // 打つ順＝手札の並び順（Run.orderInHand）に反映させる
+    r.hand = hand.map((c) => c.uid);
+    return hand;
+  }
+
+  function renderHand(animateNew, newUids = []) {
+    const r = run.round;
+    const el = $("#hand");
+    const { W, cw } = layoutSizes();
+    const hand = sortedHand();
+    const n = hand.length;
+    // 扇形に傾けると外側の札がはみ出すので、両端に少し余白をとる
+    const avail = W - 8 - 24;
+    const step = n > 1 ? Math.min(cw + 4, (avail - cw) / (n - 1)) : 0;
+    const totalW = step * (n - 1) + cw;
+    const x0 = (W - 8 - totalW) / 2;
+    el.innerHTML = hand.map((c) => Art.card(c, { month: r.month, faceDown: r.faceDown.includes(c.uid) })).join("");
+    $$(".card", el).forEach((ce, i) => {
+      const mid = (n - 1) / 2;
+      const rot = (i - mid) * 1.6;
+      const dy = Math.abs(i - mid) * Math.abs(i - mid) * 0.7;
+      ce.style.left = x0 + i * step + "px";
+      ce.style.transform = `translateY(${dy}px) rotate(${rot}deg)`;
+      ce.style.zIndex = 10 + i;
+      const uid = +ce.dataset.uid;
+      if (sel.includes(uid)) ce.classList.add("sel");
+      if (animateNew && newUids.includes(uid)) { ce.classList.add("deal"); ce.style.animationDelay = newUids.indexOf(uid) * 60 + "ms"; }
+      ce.onclick = () => toggleSel(uid, ce);
+      // 長押しで札の説明
+      let lp = null;
+      ce.addEventListener("touchstart", () => { lp = setTimeout(() => { lp = "done"; showCardInfo(uid); }, 480); }, { passive: true });
+      ce.addEventListener("touchend", (e) => { if (lp === "done") { e.preventDefault(); } clearTimeout(lp); lp = null; });
+      ce.addEventListener("touchmove", () => { clearTimeout(lp); lp = null; }, { passive: true });
+      ce.oncontextmenu = (e) => { e.preventDefault(); showCardInfo(uid); };
+    });
+    if (animateNew && newUids.length) newUids.forEach((u, i) => SFX.deal(i));
+    renderPile();
+  }
+  function renderPile() {
+    const r = run.round;
+    const pile = $("#pile");
+    if (!pile || !r) return;
+    const n = r.draw.length;
+    pile.innerHTML = [0, 1, 2].slice(0, Math.min(3, n)).map(() => `<div class="card face-down"><div class="art">${Art.backSvg()}</div></div>`).join("") + `<div class="pn">山 ${n}</div>`;
+    pile.onclick = () => showDeck();
+  }
+
+  function showCardInfo(uid) {
+    const c = Run.card(run, uid);
+    if (!c) return;
+    if (run.round && run.round.faceDown.includes(uid)) { toast("伏せ札：中身は見えない"); return; }
+    const lines = [];
+    lines.push(`${TYPES[c.t].name}の札：文 ${TYPES[c.t].bun}`);
+    if (run.round && c.m === run.round.month) lines.push("旬：役に加わると 倍+2");
+    if (c.enh) lines.push(`${ENH[c.enh].name}：${ENH[c.enh].desc}`);
+    if (c.seal) lines.push(`${SEAL[c.seal].name}：${SEAL[c.seal].desc}`);
+    modal(`<div class="det"><div style="flex:none;--cw:92px">${Art.card(c, { month: run.round && run.round.month })}</div>
+      <div><h3>${esc(cardName(c))}</h3><p style="font-size:12px;color:#7a6a4a">${MONTHS[c.m].wa}（${KANSUJI[c.m]}月）・${MONTHS[c.m].plant}</p>
+      ${lines.map((l) => `<p style="font-size:13.5px">${esc(l)}</p>`).join("")}</div></div>`);
+  }
+
+  function toggleSel(uid, ce) {
+    if (busy) return;
+    const i = sel.indexOf(uid);
+    if (i >= 0) { sel.splice(i, 1); ce.classList.remove("sel"); SFX.deselect(); }
+    else {
+      if (sel.length >= 5) { SFX.error(); toast("選べるのは5枚まで", true); return; }
+      sel.push(uid); ce.classList.add("sel"); SFX.select(); buzz(6);
+    }
+    updateButtons();
+    updatePreview();
+  }
+
+  function resetCalc() {
+    $("#played").innerHTML = "";
+    $("#yaku-chips").innerHTML = "";
+    $("#c-bun").textContent = "0";
+    $("#c-bai").textContent = "0";
+    $("#c-total").innerHTML = "";
+    $("#c-total").classList.remove("big");
+    updatePreview();
+  }
+
+  // 選択中の札の見込み
+  function updatePreview() {
+    if (busy || !run.round) return;
+    const chips = $("#yaku-chips");
+    if (!sel.length) {
+      chips.innerHTML = "";
+      $("#c-bun").textContent = "0"; $("#c-bai").textContent = "0";
+      const r = run.round;
+      const left = Math.max(0, r.target - r.score);
+      $("#c-total").innerHTML = r.handsPlayed === 0 && run.month === 1 && run.year === 1
+        ? `<div class="hint">札をタップして選び（最大5枚）、<b>打つ</b>で役を作ろう。<br>同じ月の札をそろえると「合わせ」。長押しで札の説明。</div>`
+        : `<small>あと ${fmt(left)}</small>`;
+      return;
+    }
+    // 伏せ札（土蜘蛛）が混じっていたら、見込みは出さない（中身が分かってしまうため）
+    if (sel.some((u) => run.round.faceDown.includes(u))) {
+      chips.innerHTML = `<span class="ychip">伏せ札あり</span>`;
+      $("#c-bun").textContent = "？"; $("#c-bai").textContent = "？";
+      $("#c-total").innerHTML = `<small>打ってみるまで分からない</small>`;
+      return;
+    }
+    const pv = Run.preview(run, sel);
+    chips.innerHTML = pv.yaku.map((y) => yakuChip(y)).join("") + (pv.blocked ? `<span class="ychip blocked">${YAKU[pv.blocked].name}</span>` : "");
+    $("#c-bun").textContent = fmt(pv.bun);
+    $("#c-bai").textContent = fmtBai(pv.bai);
+    const hasRandom = run.shiki.some((s) => s.id === "amanojaku");
+    $("#c-total").innerHTML = `<small>見込み</small> ${fmt(pv.total)}${hasRandom ? "<small>前後</small>" : ""}`;
+  }
+  function yakuChip(y, anim) {
+    const Y = YAKU[y.key];
+    const lv = y.lvl > 1 ? `<span class="lv">${y.lvl}段</span>` : "";
+    return `<span class="ychip ${Y.cat} ${anim ? "stampin" : ""}">${esc(Y.name)}${lv}</span>`;
+  }
+
+  function updateButtons() {
+    const r = run.round;
+    if (!r) return;
+    const cp = Run.canPlay(run, sel);
+    const cd = Run.canDiscard(run, sel);
+    $("#btn-play").classList.toggle("off", busy || !cp.ok);
+    $("#btn-discard").classList.toggle("off", busy || !cd.ok);
+    $("#n-play").textContent = `残り${r.hands}`;
+    $("#n-discard").textContent = `残り${r.discards}`;
+    $("#btn-sort").textContent = sortMode === "month" ? "月順" : "種順";
+  }
+
+  // ---------- 打つ ----------
+  async function doPlay() {
+    if (busy) return;
+    const cp = Run.canPlay(run, sel);
+    if (!cp.ok) { SFX.error(); toast(cp.reason, true); return; }
+    busy = true; skip = false;
+    updateButtons();
+    const uids = Run.orderInHand(run, sel).map((c) => c.uid);
+    // 場へ出す演出
+    $$("#hand .card").forEach((ce) => { if (uids.includes(+ce.dataset.uid)) ce.classList.add("gone"); });
+    SFX.play();
+    await wait(200);
+    const res = Run.play(run, uids);
+    sel = [];
+    if (res.error) { busy = false; SFX.error(); toast(res.error, true); renderHand(false); updateButtons(); return; }
+    save();
+    // 妖の癖の通知
+    for (const e of res.events) {
+      if (e.t === "sleep") toast(`${SHIKI_BY_ID[run.shiki[e.idx].id].name}が化かされて眠った…`, true);
+      if (e.t === "shuffleShiki") toast("ぬらりひょん：「並びを変えてやろうかの」", true);
+    }
+    renderShikiRow($("#shiki-row"));
+    await playScoring(res);
+    // 打ったあとの出来事
+    for (const e of res.events) {
+      if (e.t === "break") toast("薄氷の札が割れた！", true);
+      if (e.t === "gild") toast("雷獣が札に金箔を焼きつけた");
+      if (e.t === "zeni") toast(`${e.d}銭（崇徳院の取り立て）`, true);
+      if (e.t === "drop") toast("雨降り小僧：札が1枚流された", true);
+    }
+    renderYokaiBar();
+    renderShikiRow($("#shiki-row"));
+    // 祓いが決着したら、次の画面が出るまで操作を止めたままにする（busy は次の画面で解く）
+    if (res.cleared) {
+      talk("clear");
+      await wait(350);
+      Main.roundCleared();
+      return;
+    }
+    if (!res.failed) {
+      const r = run.round;
+      if (res.score.total >= r.target * 0.4) talk("big");
+      else if (r.hands === 1) setTimeout(() => talk("last"), 400);
+    }
+    if (res.failed) {
+      await wait(500);
+      Main.endRun(false);
+      return;
+    }
+    await wait(250);
+    busy = false;
+    resetCalc();
+    renderHand(true, res.drawn);
+    updateButtons();
+    $("#top-zeni");
+    $("#round-top").innerHTML = topbarHtml();
+    bindTop($("#round-top"));
+  }
+
+  // 採点の再生
+  async function playScoring(res) {
+    const sc = res.score;
+    const played = $("#played");
+    played.innerHTML = res.played.map((c) => Art.card(c, { month: run.round ? run.round.month : null })).join("");
+    const chips = $("#yaku-chips");
+    chips.innerHTML = "";
+    let bun = 0, bai = 0, nb = 0, nm = 0;
+    const B = $("#c-bun"), M = $("#c-bai"), T = $("#c-total");
+    T.innerHTML = ""; T.classList.remove("big");
+    B.textContent = "0"; M.textContent = "0";
+    await wait(150);
+    // 数えない札は暗く
+    const scoredSet = new Set(sc.scored.map((c) => c.uid));
+    $$(".card", played).forEach((ce) => { if (!scoredSet.has(+ce.dataset.uid)) ce.style.opacity = ".45"; });
+    let yi = 0;
+    for (const st of sc.steps) {
+      let el = null;
+      if (st.k === "yaku") {
+        chips.insertAdjacentHTML("beforeend", yakuChip({ key: st.key, lvl: st.lvl }, true));
+        SFX.yaku(yi++);
+        Profile.seeYaku(st.key);
+        bun += st.dBun; bai += st.dBai;
+        B.textContent = fmt(bun); M.textContent = fmtBai(bai);
+        B.classList.remove("bump"); void B.offsetWidth; B.classList.add("bump");
+        await wait(380);
+        continue;
+      }
+      if (st.k === "card") el = $(`.card[data-uid="${st.uid}"]`, played);
+      if (st.k === "held") el = $(`#hand .card[data-uid="${st.uid}"]`);
+      if (st.k === "shiki") el = $(`#shiki-row .shiki[data-si="${st.idx}"]`);
+      if (st.k === "jingi") el = $("#c-total");
+      if (st.debuff) {
+        if (el) { el.classList.add("debuff"); floatAt(el, "無効", "info"); }
+        SFX.debuff();
+        await wait(220);
+        continue;
+      }
+      if (el) {
+        if (st.k === "card") { el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); }
+        if (st.k === "shiki") { el.classList.remove("fire"); void el.offsetWidth; el.classList.add("fire"); SFX.shiki(); }
+      }
+      if (st.dBun) { bun += st.dBun; B.textContent = fmt(bun); floatAt(el || B, `+${fmt(st.dBun)}${st.label && st.label !== "文" ? " " + st.label : ""}`, "bun"); SFX.bun(nb++); B.classList.remove("bump"); void B.offsetWidth; B.classList.add("bump"); }
+      if (st.dBai) { bai += st.dBai; M.textContent = fmtBai(bai); floatAt(el || M, `+${fmtBai(st.dBai)}倍${st.label ? " " + st.label : ""}`, "bai"); SFX.bai(nm++); M.classList.remove("bump"); void M.offsetWidth; M.classList.add("bump"); }
+      if (st.xBai) { bai *= st.xBai; M.textContent = fmtBai(bai); floatAt(el || M, `×${st.xBai}${st.label ? " " + st.label : ""}`, "xbai"); SFX.xbai(); M.classList.remove("bump"); void M.offsetWidth; M.classList.add("bump"); }
+      await wait(st.xBai ? 330 : 230);
+    }
+    // 合計
+    await wait(120);
+    const total = sc.total;
+    T.innerHTML = fmt(total);
+    T.classList.add("big");
+    const r = run.round;
+    const big = r ? total >= r.target * 0.5 : total > 1000;
+    SFX.total(big);
+    buzz(big ? [18, 50, 30] : 14);
+    if (Profile.hand(total, sc.keys)) setTimeout(() => toast(`一打の新記録！ ${fmt(total)}`), 400);
+    // 目標の帯
+    const g = $("#g-score");
+    if (g && run.round) {
+      g.textContent = fmt(run.round.score);
+      const fill = $(".goal-fill");
+      if (fill) fill.style.width = Math.min(100, (run.round.score / run.round.target) * 100) + "%";
+    } else if (g) {
+      // 祓いが終わった（run.round は精算で消えている）
+      const fill = $(".goal-fill");
+      if (fill) fill.style.width = "100%";
+      g.textContent = fmt(run.lastPayout ? total : total);
+    }
+    await wait(700);
+  }
+
+  // ---------- 流す ----------
+  async function doDiscard() {
+    if (busy) return;
+    const cd = Run.canDiscard(run, sel);
+    if (!cd.ok) { SFX.error(); toast(cd.reason, true); return; }
+    busy = true;
+    $$("#hand .card").forEach((ce) => { if (sel.includes(+ce.dataset.uid)) ce.classList.add("discarded"); });
+    SFX.discard();
+    await wait(260);
+    const res = Run.discard(run, sel.slice());
+    sel = [];
+    for (const e of res.events) if (e.t === "zeni") toast(`${e.d}銭（小豆代）`, true);
+    save();
+    busy = false;
+    renderHand(true, res.drawn);
+    renderShikiRow($("#shiki-row"));
+    $("#round-top").innerHTML = topbarHtml();
+    bindTop($("#round-top"));
+    resetCalc();
+    updateButtons();
+  }
+
+  // ---------- 精算 ----------
+  function showCashout(then) {
+    const p = run.lastPayout;
+    const y = YOKAI[p.yokai];
+    const lines = [];
+    lines.push([`${y.name}を祓った`, p.base]);
+    if (p.handsBonus) lines.push([`残りの打ち（${p.handsBonus}回）`, p.handsBonus]);
+    if (p.interest) lines.push([`利子（5銭ごとに1）`, p.interest]);
+    for (const s of p.shikiPay) lines.push([`${SHIKI_BY_ID[run.shiki[s.idx].id].name}`, s.amt]);
+    const c = modal(`<div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
+        <div style="width:64px;height:64px;border-radius:50%;overflow:hidden;background:#fffaf0;border:2px solid #1d1a17;flex:none">${Art.portrait(y.portrait)}</div>
+        <div><h3 style="margin:0">祓い成功</h3><p style="font-size:12.5px;color:#5c4d33;font-style:italic">「${esc(y.lose)}」</p></div>
+      </div>
+      <div class="payout">${lines.map(([t, v], i) => `<div class="pl" style="animation-delay:${i * 0.15}s"><span>${esc(t)}</span><b>${Art.coin(14)}+${v}</b></div>`).join("")}
+        <div class="pl total" style="animation-delay:${lines.length * 0.15}s"><span>合計</span><b>${Art.coin(18)}+${p.total}</b></div></div>
+      <div class="mrow"><button class="btn gold big" data-go>${run.round && run.round.kind === "final" && !run.endless ? "結びへ" : "夜市へ"}</button></div>`, { noClose: true });
+    lines.forEach((_, i) => setTimeout(() => SFX.coin(i), 150 * i + 100));
+    $("[data-go]", c).onclick = () => { closeModal(); then(); };
+  }
+
+  // ============================================================
+  //  夜市
+  // ============================================================
+  const MERCHANT_LINES = [
+    "へい、いらっしゃい。今宵も掘り出し物がそろってますよ",
+    "式神は左から順に働く。並びも大事ですぜ",
+    "歌の札で役を磨けば、同じ役でも桁が変わる",
+    "銭は五枚ごとに一枚の利子がつく。貯めるのも手ですよ",
+    "神器は季節にひとつ。五つそろえば……ふふ",
+    "札を祓って山を薄くすると、狙いの役が来やすくなる",
+    "絆のある式神は、そろうと化けますぜ",
   ];
-  bands.forEach((b, i) => {
-    const r = 15 * b.s;
-    let bumps = "";
-    for (let k = 0; k < 4; k++) {
-      const bx = b.x + b.l * (0.12 + 0.25 * k) + tileRand(i * 7 + k) * 30;
-      bumps += `<circle cx="${bx.toFixed(0)}" cy="${(b.y - r * 0.5).toFixed(0)}" r="${(r * (0.9 + 0.4 * tileRand(i + k * 3))).toFixed(0)}"/>`;
+  function renderShop() {
+    show("shop");
+    const top = $("#shop-top");
+    top.innerHTML = topbarHtml();
+    bindTop(top);
+    renderShikiRow($("#shop-shiki"), { allowSell: true });
+    renderFuRow($("#shop-fu"), false);
+    const s = run.shop;
+    const body = $("#shop-body");
+    const line = MERCHANT_LINES[(run.month + run.year * 3 + (s.rerolls || 0)) % MERCHANT_LINES.length];
+    const ware = (kind, i, inner, name, cost, desc, sold) =>
+      `<div class="ware ${sold ? "sold" : ""} ${cost > run.zeni ? "cant" : ""}" data-k="${kind}" data-i="${i}">${inner}<div class="wname">${esc(name)}</div>${desc ? `<div class="wdesc">${esc(desc)}</div>` : ""}<div class="price">${Art.coin(13)}${cost}</div></div>`;
+    let h = `<div class="merchant"><div class="mp">${Art.portrait("bakedanuki")}</div><div class="say">${esc(line)}</div></div>`;
+    h += `<div class="shop-sec"><h4>式神</h4><div class="wares">${s.shiki.map((w, i) => ware("shiki", i, shikiHtml({ id: w.id, data: SHIKI_BY_ID[w.id].init || {} }, -1), SHIKI_BY_ID[w.id].name, w.cost, "", w.sold)).join("")}</div></div>`;
+    h += `<div class="shop-sec"><h4>呪符・詠み札</h4><div class="wares">${s.items.map((w, i) => w.kind === "fu"
+      ? ware("items", i, Art.fu(w.id), FU[w.id].name, w.cost, "", w.sold)
+      : ware("items", i, Art.yomi(w.id), `${YAKU[w.id].name}の歌`, w.cost, `${YAKU[w.id].name} ${run.levels[w.id] || 1}→${(run.levels[w.id] || 1) + 1}段`, w.sold)).join("")}</div></div>`;
+    h += `<div class="shop-sec"><h4>文箱</h4><div class="wares">${s.packs.map((w, i) => ware("packs", i, Art.pack(w.kind), PACKS[w.kind].name, w.cost, "", w.sold)).join("")}</div></div>`;
+    if (s.jingi) {
+      const j = JINGI.find((x) => x.id === s.jingi.id);
+      h += `<div class="shop-sec"><h4>神器（この季節だけ）</h4><div class="wares">${ware("jingi", 0, Art.jingi(j.id), j.name, s.jingi.cost, j.text, s.jingi.sold)}</div></div>`;
     }
-    out += `<g fill="#e8c46a" opacity="0.055">` +
-      `<rect x="${b.x.toFixed(0)}" y="${(b.y - r).toFixed(0)}" width="${b.l.toFixed(0)}" height="${(r * 2).toFixed(0)}" rx="${r}"/>${bumps}</g>` +
-      `<path d="M${b.x.toFixed(0)} ${(b.y + r).toFixed(0)} h${b.l.toFixed(0)}" stroke="#e8c46a" stroke-width="1" opacity="0.13" fill="none"/>`;
-  });
-  return out;
-}
-
-function renderBoard(g) {
-  const svg = document.getElementById("board");
-  const w = Math.max(...g.tiles.map(t => t.x)) + 1;
-  const h = Math.max(...g.tiles.map(t => t.y)) + 1;
-  let html = "";
-  // 最下層: すやり霞（絵巻の空気）
-  html += kasumiSVG(w, h);
-  // 霊脈の道: 墨の刷毛でゆるく曲がる線＋霊力の点線。両方向の重複は描かない
-  const th = g.stage.theme || {};
-  const pathCol = th.path || "#241e33", dotCol = th.dot || "#5c5480";
-  const drawn = new Set();
-  g.tiles.forEach(tile => {
-    tile.next.forEach(nid => {
-      const a = Math.min(tile.id, nid), b = Math.max(tile.id, nid);
-      const key = a + "-" + b;
-      if (drawn.has(key)) return;
-      drawn.add(key);
-      const c1 = tilePx(g.tiles[a]), c2 = tilePx(g.tiles[b]);
-      const [x1, y1, x2, y2] = [c1.x + TILE / 2, c1.y + TILE / 2, c2.x + TILE / 2, c2.y + TILE / 2];
-      // 中点を法線方向に少しずらして「筆のたわみ」を出す（マス同様に固定のゆらぎ）
-      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
-      const k = (tileRand(a * 13.7 + b * 3.3) - 0.5) * 30;
-      const cx = (x1 + x2) / 2 - dy / len * k, cy = (y1 + y2) / 2 + dx / len * k;
-      const d = `M${x1.toFixed(1)} ${y1.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
-      html += `<path d="${d}" fill="none" stroke="${pathCol}" stroke-width="17" stroke-linecap="round"/>`;
-      html += `<path d="${d}" fill="none" stroke="${dotCol}" stroke-width="2.5" stroke-dasharray="2 9" stroke-linecap="round" opacity="0.9"/>`;
-    });
-  });
-  g.tiles.forEach(tile => {
-    const { x, y } = tilePx(tile);
-    const rot = tileJitter(tile).rot;
-    const isLand = tile.type === "LAND";
-    const shape = tileShapeOf(tile);
-    const fill = isLand ? `url(#tg-${tile.element})`
-      : tile.type === "CASTLE" ? "url(#tg-castle)"
-      : tile.type === "MAGMA" ? "#5a2418"
-      : "url(#tg-special)";
-    const stroke = tile.owner !== null ? PLAYER_COLORS[tile.owner]
-      : tile.type === "CASTLE" ? "#c9a755" : "#5a5470";
-    const sw = tile.owner !== null ? 4 : tile.type === "CASTLE" ? 2.5 : 1.8;
-    // マス全体を移動＋微回転（手貼りの札の風合い）。内部は 0..90 のローカル座標
-    html += `<g class="tile" data-tile="${tile.id}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)} 45 45)">`;
-    // 所有地はプレイヤー色のオーラで一目で分かるように
-    if (tile.owner !== null) {
-      html += `<path d="${shape}" fill="none" stroke="${PLAYER_COLORS[tile.owner]}" stroke-width="10" opacity="0.22" stroke-linejoin="round"/>`;
+    body.innerHTML = h;
+    $$(".ware", body).forEach((w) => w.onclick = () => showWare(w.dataset.k, +w.dataset.i));
+    $("#n-reroll").textContent = `${Run.rerollCost(run)}銭`;
+    $("#btn-reroll").classList.toggle("off", run.zeni < Run.rerollCost(run));
+    BGM.setTrack("pack");
+    if (Profile.tip("shop")) {
+      setTimeout(() => modal(`<div class="det"><div class="big-pt" style="border-radius:50%">${Art.portrait("bakedanuki")}</div><div><h3>夜市へようこそ</h3>
+        <p style="font-size:13px">狸のぽん太と申します。祓いで稼いだ銭で、旅の支度をどうぞ。</p></div></div>
+        <div class="howto"><ul>
+        <li><b>式神</b>：連れて歩く仲間。文や倍を増やす（5体まで・左から順に働く）</li>
+        <li><b>呪符</b>：祓いの最中に、選んだ手札を作り替える</li>
+        <li><b>詠み札</b>：百人一首の歌。役の段位が上がり、文と倍が増える</li>
+        <li><b>文箱</b>：中から一つ選べる福袋</li>
+        <li><b>神器</b>：季節にひとつ。五つそろえば「五神器顕現」</li></ul>
+        <p style="font-size:12.5px">銭は手元に5枚ごとに利子が1枚つきます。</p></div>
+        <div class="mrow"><button class="btn gold" data-close>わかった</button></div>`), 200);
     }
-    html += `<path class="t-shape" d="${shape}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/>`;
-    // 墨の輪郭（外側にもう1本細い線＝描き起こしの線）
-    html += `<path d="${shape}" fill="none" stroke="#0d0a06" stroke-opacity="0.5" stroke-width="0.8" transform="translate(1.2 1.6)"/>`;
-    if (!isLand && tile.type !== "CASTLE") {
-      // 絵馬の梁と紐穴
-      html += `<path d="M10 26 L80 26" stroke="#0d0a06" stroke-opacity="0.35" stroke-width="2"/>`;
-      html += `<circle cx="45" cy="13" r="2.4" fill="#0d0a06" fill-opacity="0.55"/>`;
-    }
-    if (tile.type === "CASTLE") {
-      // 社の二重屋根（金の描線）
-      html += `<path d="M45 3 L84 25 M45 3 L6 25" stroke="#ffd76a" stroke-width="2.2" opacity="0.8" fill="none"/>`;
-      html += `<path d="M14 20 L45 32 L76 20" stroke="#c9a755" stroke-width="1.4" opacity="0.6" fill="none"/>`;
-    }
-    if (isLand) {
-      // 土地の属性は「左上の短冊チップ」で表示（＝土地の属性だと分かる位置）
-      html += `<rect x="7" y="7" width="26" height="22" rx="6" fill="${ELEMENTS[tile.element].color}cc"/>`;
-      html += `<text x="20" y="23" font-size="15" text-anchor="middle">${ELEMENTS[tile.element].icon}</text>`;
-      html += `<text x="${TILE - 9}" y="23" font-size="14" fill="#cfc9e0" text-anchor="end" font-weight="bold">Lv${tile.level}</text>`;
-      // レベルの5段階ピップ・メーター
-      const PIP_N = LAND_VALUE.length, pipGap = 9, pipR = 3.4;
-      const pipStartX = TILE / 2 - (PIP_N - 1) * pipGap / 2, pipY = 33;
-      for (let lv = 1; lv <= PIP_N; lv++) {
-        const px = pipStartX + (lv - 1) * pipGap;
-        const on = lv <= tile.level;
-        html += `<circle cx="${px}" cy="${pipY}" r="${pipR}" fill="${on ? "#ffd76a" : "#453f5c"}"${on ? ' stroke="#8a6a12" stroke-width="0.6"' : ""}/>`;
-      }
-      if (tile.creature) {
-        const c = CARD_BY_ID[tile.creature.cardId];
-        const ce = ELEMENTS[c.element];
-        const cur = tile.creature.hp ?? c.hp;
-        const wounded = cur < c.hp;
-        const hpStr = wounded ? `${cur}/${c.hp}` : `${c.hp}`;
-        const hpFill = wounded ? "#ff8a6a" : "#ffe08a"; // 傷ついていれば赤み
-        // 式神の属性は「丸いバッジ」で表示（土地チップと形で区別）
-        html += `<circle cx="17" cy="48" r="11" fill="${ce.color}" stroke="#fff" stroke-width="1.5"/>`;
-        html += `<text x="17" y="52" font-size="12" text-anchor="middle">${ce.icon}</text>`;
-        html += `<text x="${TILE / 2 + 9}" y="46" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold">${esc(c.name.slice(0, 5))}</text>`;
-        html += `<text x="${TILE / 2}" y="68" text-anchor="middle">` +
-          `<tspan font-size="12" fill="#c9c2da">ST${c.st}</tspan>` +
-          `<tspan font-size="17" font-weight="bold" fill="${hpFill}"> HP${hpStr}</tspan></text>`;
-      }
-      if (tile.owner !== null) {
-        const toll = tollOf(g, tile);
-        html += `<text x="${TILE / 2}" y="${TILE - 6}" font-size="13" fill="${PLAYER_COLORS[tile.owner]}" text-anchor="middle" font-weight="bold">${toll}G</text>`;
-      }
-    } else {
-      const iconSize = tile.type === "CASTLE" ? 34 : 28;
-      html += `<text x="${TILE / 2}" y="${tile.type === "CASTLE" ? 52 : 50}" font-size="${iconSize}" text-anchor="middle">${TILE_ICONS[tile.type]}</text>`;
-      if (tile.type === "MAGIC") {
-        html += `<text x="${TILE - 20}" y="30" font-size="11" text-anchor="middle">✨<animate attributeName="opacity" values="1;0.2;1" dur="1.8s" repeatCount="indefinite"/></text>`;
-      }
-      html += `<text x="${TILE / 2}" y="72" font-size="12" fill="#b8b2cc" text-anchor="middle">${TILE_LABELS[tile.type]}</text>`;
-    }
-    // 盤面エフェクト（🛡️結界/🕸️罠/🚧関所札）のバッジ
-    const ov = overlayOf(g, tile);
-    if (ov) {
-      const ovIcon = ov.kind === "sanctuary" ? "🛡️" : ov.kind === "snare" ? "🕸️" : ov.kind === "block" ? "🚧" : "✨";
-      const ovColor = ov.kind === "sanctuary" ? "#8ecbff" : ov.kind === "snare" ? "#c9a0ff" : ov.kind === "block" ? "#ffb84d" : "#ddd";
-      html += `<path d="${shape}" fill="none" stroke="${ovColor}" stroke-width="3" stroke-dasharray="7 5" opacity="0.9"/>`;
-      html += `<text x="${TILE / 2}" y="20" font-size="15" text-anchor="middle">${ovIcon}</text>`;
-    }
-    // 矢印表示（v23・自由移動）: 一方通行の大矢印＋三叉路以上の小矢印
-    const arrow = (nt, fill, big) => {
-      const dx = Math.sign(nt.x - tile.x), dy = Math.sign(nt.y - tile.y);
-      const cx2 = TILE / 2 + dx * (TILE / 2 - 2);
-      const cy2 = TILE / 2 + dy * (TILE / 2 - 2);
-      const L = big ? 1.45 : 1;
-      const tipX = cx2 + dx * 7 * L, tipY = cy2 + dy * 7 * L;
-      const b1X = cx2 - dx * 4 * L - dy * 6 * L, b1Y = cy2 - dy * 4 * L - dx * 6 * L;
-      const b2X = cx2 - dx * 4 * L + dy * 6 * L, b2Y = cy2 - dy * 4 * L + dx * 6 * L;
-      return `<polygon points="${tipX},${tipY} ${b1X},${b1Y} ${b2X},${b2Y}" fill="${fill}" opacity="0.95"${big ? `><animate attributeName="opacity" values="1;0.45;1" dur="1.6s" repeatCount="indefinite"/></polygon>` : "/>"}`;
-    };
-    if (tile.onewayTo != null) {
-      html += arrow(g.tiles[tile.onewayTo], "#ff9a3d", true);
-    } else {
-      const neigh = neighborsOf(g, tile).filter(t => !(t.onewayTo != null && t.onewayTo === tile.id));
-      if (neigh.length > 2) neigh.forEach(nt => { html += arrow(nt, "#ffd76a", false); });
-    }
-    // マスの通し番号（常時表示）
-    html += `<text x="10" y="${TILE - 8}" font-size="10" fill="#9a92b5" text-anchor="start">#${tile.id}</text>`;
-    // 選択対象マスの強調（呪術対象／霊地売却／侵攻先など）
-    if (UI.selectableTiles && UI.selectableTiles.has(tile.id)) {
-      html += `<path d="${shape}" fill="none" stroke="#ffe066" stroke-width="5" stroke-linejoin="round"><animate attributeName="opacity" values="1;0.3;1" dur="1s" repeatCount="indefinite"/></path>`;
-      html += `<rect x="${TILE / 2 - 19}" y="${TILE / 2 - 15}" width="38" height="28" rx="8" fill="#ffe066" opacity="0.96"/>`;
-      html += `<text x="${TILE / 2}" y="${TILE / 2 + 6}" font-size="18" fill="#1a1526" text-anchor="middle" font-weight="bold">#${tile.id}</text>`;
-    }
-    html += `</g>`;
-  });
-  // プレイヤー駒: 人形代（ひとかたしろ）＝陰陽師が式を打つ紙の人形。手番の駒は光が脈動する
-  g.players.forEach(p => {
-    if (!p.alive) return;
-    const { x, y } = tilePx(g.tiles[p.pos]);
-    const off = TOKEN_OFFSETS[p.id] || TOKEN_OFFSETS[0];
-    const cx = x + off.dx, cy = y + off.dy;
-    const active = g.current === p.id && !g.over;
-    html += `<g class="token" transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)})">`;
-    if (active) {
-      html += `<circle cx="0" cy="0" r="16" fill="none" stroke="${PLAYER_COLORS[p.id]}" stroke-width="2.5" opacity="0.6">` +
-        `<animate attributeName="r" values="14;19;14" dur="1.5s" repeatCount="indefinite"/>` +
-        `<animate attributeName="opacity" values="0.7;0.15;0.7" dur="1.5s" repeatCount="indefinite"/></circle>`;
-    }
-    html += `<ellipse cx="0" cy="12" rx="9" ry="3" fill="#000" opacity="0.35"/>`;
-    html += `<g fill="url(#tokP${p.id})" stroke="#fff" stroke-width="1.6" stroke-linejoin="round">` +
-      `<circle cx="0" cy="-8.5" r="5"/>` +
-      `<path d="M-3.4 -4.5 L3.4 -4.5 L10.5 2.5 L7 5.5 L3.6 2.6 L4.8 12 L-4.8 12 L-3.6 2.6 L-7 5.5 L-10.5 2.5 Z"/></g>`;
-    html += `<text x="0" y="8.5" font-size="8.5" fill="#fff" text-anchor="middle" font-weight="bold" style="text-shadow:0 1px 2px #000">${(g.hotseat || g.players.length > 2) ? p.id + 1 : (p.id === 0 ? "P" : "C")}</text>`;
-    html += `</g>`;
-  });
-  svg.innerHTML = html;
-}
-
-// ---------- 現状順位（standings） ----------
-// 勝利条件は「総資産 → 本宮へ凱旋」なので、順位は総資産（霊力＋所有地の価値）の多い順で決める。
-// 同額は同順位（1位・1位・3位）。ラウンド上限による資産勝負の判定と同じ基準。
-function standingsOf(g) {
-  const rows = g.players.map(p => ({ id: p.id, assets: assetsOf(g, p) }))
-    .sort((a, b) => b.assets - a.assets);
-  let rank = 0, prev = null;
-  rows.forEach((r, i) => {
-    if (r.assets !== prev) { rank = i + 1; prev = r.assets; }
-    r.rank = rank;
-  });
-  return rows;
-}
-const RANK_MEDALS = ["🥇", "🥈", "🥉"];
-function rankMedal(rank) { return RANK_MEDALS[rank - 1] || "🏳"; }
-// 首位との差（首位なら2位との差）を短い文で。ぱっと見て「今どれだけ勝っているか」が分かるように
-function rankGapText(rows, me) {
-  if (rows.length < 2) return "";
-  if (me.rank === 1) {
-    const others = rows.filter(r => r.id !== me.id);
-    if (others.some(r => r.rank === 1)) return "同率首位"; // 首位が並んでいる＝「2位に+○G」ではない
-    const next = others[0]; // rows は総資産の降順なので、自分を除いた先頭が次点
-    return `${next.rank}位に +${me.assets - next.assets}G`;
   }
-  return `首位まで -${rows[0].assets - me.assets}G`;
-}
 
-// ---------- プレイヤー情報窓（v27: 画面上部に3名分を圧縮して固定） ----------
-// v26までは4隅のフローティング窓だったため盤面が隠れていた。v27では上部のフロー配置に変え、
-// 1人あたり3行（①順位・名前・霊力 ②総資産バー ③連鎖/鳥居/周回/山札＋首位との差）に圧縮。
-// クリックで詳細ポップアップ（showPlayerDetail）＝畳んだ情報はそこで読める。
-function renderPanels(g) {
-  const rows = standingsOf(g); // 現状順位（総資産順）
-  // 2人なら2列にして1枚あたりを広く使う（3人目の枠は .unused で消す）
-  const strips = document.getElementById("pstrips");
-  if (strips) strips.classList.toggle("n2", g.players.length < 3);
-  const p2el = document.getElementById("panel-2");
-  if (p2el) p2el.classList.toggle("unused", g.players.length < 3);
-  const needed = gatesNeededOf(g);
-  g.players.forEach(p => {
-    const el = document.getElementById(`panel-${p.id}`);
-    if (!el) return;
-    const me = rows.find(r => r.id === p.id);
-    const assets = me.assets;
-    const chains = Object.keys(ELEMENTS)
-      .map(e => ({ e, n: chainCount(g, p.id, e) }))
-      .filter(c => c.n > 0)
-      .map(c => `${ELEMENTS[c.e].icon}${c.n}`).join("") || "－";
-    // 鳥居の通過は「宝玉のハメ込み」で表す（空の窪みに金の玉が嵌まっていく）
-    const gates = Array.from({ length: needed }, (_, i) =>
-      `<i class="jewel${i < p.gates.size ? " on" : ""}"></i>`).join("");
-    // 周回は「蝋燭の点灯」で表す（1周ごとに1本灯る。4本を超えたら本数を添える）
-    const litN = Math.min(p.laps, 4);
-    const candles = Array.from({ length: 4 }, (_, i) =>
-      `<i class="candle${i < litN ? " lit" : ""}"></i>`).join("") +
-      (p.laps > 4 ? `<b class="candle-n">×${p.laps}</b>` : "");
-    const reached = assets >= RULES.target; // 目標達成＝本宮へ凱旋すれば勝ち（⚑リーチ表示）
-    el.style.setProperty("--pc", PLAYER_COLORS[p.id]); // 左端の色帯＝プレイヤー色
-    el.classList.toggle("active", g.current === p.id && !g.over);
-    el.classList.toggle("dead", !p.alive);
-    el.classList.toggle("reached", reached && !g.over);
-    el.dataset.pid = p.id;
-    el.title = `${p.name}の詳細（所有地・鳥居・山札など）を開く`;
-    // CPUはキャラの顔絵（chars.js）を名前の横に出して「相手の存在」を感じさせる
-    const ch = (typeof charOf === "function") ? charOf(p) : null;
-    const face = ch ? `<span class="p-face">${charPortraitSVG(ch, 20)}</span>` : P_ICONS[p.id];
-    el.innerHTML = `
-      <div class="ps-top">
-        <span class="p-rank r${me.rank}" title="総資産で決まる現在の順位（ラウンド上限の資産勝負もこの順位）">${rankMedal(me.rank)}${me.rank}</span>
-        ${face}<span class="ps-name" style="color:${PLAYER_COLORS[p.id]}">${esc(p.name)}</span>
-        ${reached ? `<span class="p-reach" title="目標資産に到達！ 本宮へ凱旋すれば勝利">⚑凱旋</span>` : ""}
+  function showWare(kind, i) {
+    const s = run.shop;
+    const w = kind === "jingi" ? s.jingi : s[kind][i];
+    if (!w || w.sold) return;
+    let head = "", body = "";
+    if (kind === "shiki") {
+      const d = SHIKI_BY_ID[w.id];
+      Profile.seeShiki(w.id);
+      head = `<div class="det"><div class="big-pt">${Art.portrait(d.id)}</div><div><span class="rar" style="background:${RAR[d.rar].color}">${RAR[d.rar].name}</span>
+        <h3>${esc(d.name)}</h3><div class="effect">${esc(d.text.replace("{n}", 0).replace("{x}", "1.0"))}</div>
+        ${d.bond ? `<p style="font-size:12px;color:#7a4a10">🤝 絆: ${esc(bondName(d.bond))}</p>` : ""}</div></div><p class="lore" style="margin-top:8px;font-size:13px;color:#5c4d33">${esc(d.lore)}</p>`;
+    } else if (kind === "items" && w.kind === "fu") {
+      const f = FU[w.id];
+      head = `<div class="det"><div style="flex:none">${Art.fu(w.id).replace('class="fu-card', 'style="width:60px;height:96px" class="fu-card')}</div><div><h3>${esc(f.name)}</h3><div class="effect">${esc(f.text)}</div>
+        <p style="font-size:12px;color:#7a6a4a">買うと呪符の枠に入ります（最大${Run.passives(run).fuSlots}枚）。</p></div></div>`;
+    } else if (kind === "items") {
+      const Y = YAKU[w.id], lv = run.levels[w.id] || 1, y = YOMI[w.id];
+      const a = Score.yakuValue(run, w.id), b = { bun: a.bun + Y.lv[0], bai: a.bai + Y.lv[1] };
+      head = `<h3>詠み札「${esc(Y.name)}」</h3><p style="font-size:15px;line-height:1.9;margin:6px 0 2px">${esc(y.uta)}</p><p style="font-size:12px;color:#7a6a4a;text-align:right">— ${esc(y.poet)}</p>
+        <p style="margin-top:8px">${esc(Y.name)}（${esc(Y.desc)}）が <b>${lv}段→${lv + 1}段</b><br>
+        <span class="kbd-bun">文 ${a.bun}→${b.bun}</span> ／ <span class="kbd-bai">倍 ${a.bai}→${b.bai}</span></p>`;
+    } else if (kind === "packs") {
+      const P = PACKS[w.kind];
+      head = `<div class="det"><div style="flex:none;width:96px">${Art.pack(w.kind)}</div><div><h3>${esc(P.name)}</h3><div class="effect">${esc(P.text)}</div></div></div>`;
+    } else if (kind === "jingi") {
+      const j = JINGI.find((x) => x.id === w.id);
+      head = `<div class="det"><div style="flex:none;width:80px">${Art.jingi(j.id)}</div><div><h3>${esc(j.name)}</h3><div class="effect">${esc(j.text)}</div>
+        <p style="font-size:12px;color:#7a6a4a">神器はこの季節（三か月）のあいだ市に並びます。<b>五つすべて集めると「五神器顕現」</b>——以後すべての打ちで 倍×${JINGI_ALL_BONUS}。（いま ${run.jingi.length}/5）</p></div></div>`;
+    }
+    let block = w.cost > run.zeni ? "銭が足りない" : "";
+    if (!block && kind === "shiki" && Run.slotsFree(run) <= 0) block = "式神の枠がいっぱい";
+    if (!block && kind === "items" && w.kind === "fu" && run.fu.length >= Run.passives(run).fuSlots) block = "呪符の枠がいっぱい";
+    const hintFull = block === "式神の枠がいっぱい" ? `<p style="font-size:12px;color:#7a4a10;margin-top:6px">上の式神をタップすると手放せます。</p>` : "";
+    const c = modal(head + body + hintFull + `<div class="mrow"><button class="btn gold" data-buy ${block ? "disabled" : ""}>${block || "買う"}（${w.cost}銭）</button><button class="btn" data-close>やめる</button></div>`);
+    $("[data-buy]", c).onclick = () => {
+      const res = Run.buy(run, kind, i);
+      if (res.error) { SFX.error(); toast(res.error, true); return; }
+      SFX.buy();
+      closeModal();
+      if (kind === "shiki") { Profile.seeShiki(w.id); setTimeout(() => talk("join", run.shiki.length - 1), 250); }
+      if (res.jingi) {
+        const j = JINGI.find((x) => x.id === res.jingi);
+        toast(`${j.name}を台座に嵌めた`);
+        if (res.all) setTimeout(() => showGoshinki(), 300);
+      }
+      if (kind === "items" && w.kind === "yomi") toast(`${YAKU[w.id].name}が ${run.levels[w.id]}段 になった`);
+      save();
+      if (res.pack) { renderShop(); showPack(); return; }
+      renderShop();
+    };
+  }
+
+  function showGoshinki() {
+    SFX.clear();
+    modal(`<div style="text-align:center"><h3 style="font-size:24px;color:#7a1a10">五神器顕現</h3>
+      <div style="display:flex;justify-content:center;gap:4px;margin:10px 0">${JINGI.map((j) => `<div style="width:52px">${Art.jingi(j.id)}</div>`).join("")}</div>
+      <p>剣・鏡・勾玉・宝珠・鈴。五つの神器が台座に並び、札が金色に脈打つ。</p>
+      <p style="margin-top:6px"><b>以後すべての打ちで 倍×${JINGI_ALL_BONUS}</b></p>
+      <div class="mrow"><button class="btn gold" data-close>ありがたく</button></div></div>`);
+  }
+
+  // ---------- 文箱 ----------
+  let packSel = [];
+  function showPack() {
+    const pk = run.pack;
+    if (!pk) return;
+    SFX.open();
+    packSel = [];
+    const P = PACKS[pk.kind];
+    const choiceHtml = (ch, i) => {
+      if (ch === null) return `<div class="pack-choice" style="opacity:.2"></div>`;
+      if (pk.kind === "fuda") {
+        const extra = [ch.enh ? ENH[ch.enh].name : "", ch.seal ? SEAL[ch.seal].name : ""].filter(Boolean).join("・");
+        return `<div class="pack-choice" data-c="${i}">${Art.card({ ...ch, uid: "p" + i })}<div class="pdesc">${esc(cardName(ch))}${extra ? "<br><b>" + esc(extra) + "</b>" : ""}</div></div>`;
+      }
+      if (pk.kind === "yomi") return `<div class="pack-choice" data-c="${i}">${Art.yomi(ch)}<div class="pdesc">${esc(YAKU[ch].name)} ${run.levels[ch] || 1}→${(run.levels[ch] || 1) + 1}段</div></div>`;
+      if (pk.kind === "jufu") return `<div class="pack-choice" data-c="${i}">${Art.fu(ch)}<div class="pdesc">${esc(FU[ch].text)}</div></div>`;
+      if (pk.kind === "shiki") { const d = SHIKI_BY_ID[ch]; Profile.seeShiki(ch); return `<div class="pack-choice" data-c="${i}">${shikiHtml({ id: ch, data: d.init || {} }, -1)}<div class="pdesc"><b>${esc(d.name)}</b><br>${esc(d.text.replace("{n}", 0).replace("{x}", "1.0"))}</div></div>`; }
+      return "";
+    };
+    const sample = pk.kind === "jufu" ? `<p style="font-size:12px;color:#5c4d33">札に使う呪符は、下の札（山札から5枚）を選んでから呪符をタップするとすぐ使えます。札を選ばずにタップすると持ち帰り。</p>
+      <div class="pack-sample">${pk.sample.map((u) => Run.card(run, u)).filter(Boolean).map((c) => Art.card(c)).join("")}</div>` : "";
+    const c = modal(`<h3>${esc(P.name)}</h3><p style="font-size:12.5px;color:#5c4d33">${pk.picks}つ選べます</p>
+      <div class="pack-view">${sample}<div class="pack-choices">${pk.choices.map(choiceHtml).join("")}</div></div>
+      <div class="mrow"><button class="btn" data-skip>選ばずに閉じる</button></div>`, { noClose: true });
+    $$(".pack-sample .card", c).forEach((ce) => ce.onclick = () => {
+      const u = +ce.dataset.uid;
+      const k = packSel.indexOf(u);
+      if (k >= 0) { packSel.splice(k, 1); ce.classList.remove("sel"); } else { packSel.push(u); ce.classList.add("sel"); }
+      SFX.select();
+    });
+    $$(".pack-choice[data-c]", c).forEach((pc) => pc.onclick = () => {
+      const i = +pc.dataset.c;
+      const chosen = pk.choices[i];
+      const res = Run.pickPack(run, i, packSel.slice());
+      if (res.error) { SFX.error(); toast(res.error, true); return; }
+      SFX.buy();
+      if (res.level) toast(`${YAKU[res.key].name}が ${res.level}段 になった`);
+      if (res.card) toast(`${cardName(res.card)}を山札に加えた`);
+      if (res.used) {
+        toast(`${FU[chosen].name}を使った${res.zeni ? `（+${res.zeni}銭）` : ""}${res.shiki ? `：${SHIKI_BY_ID[res.shiki].name}が来た！` : ""}`);
+        if (res.shiki) Profile.seeShiki(res.shiki);
+      }
+      if (res.kept) toast("呪符を持ち帰った");
+      save();
+      const joined = pk.kind === "shiki" || (res.used && res.shiki);
+      if (!run.pack) { closeModal(); renderShop(); } else showPack();
+      if (joined) setTimeout(() => talk("join", run.shiki.length - 1), 250);
+    });
+    $("[data-skip]", c).onclick = () => { Run.closePack(run); save(); closeModal(); renderShop(); };
+  }
+
+  // ============================================================
+  //  一覧・説明
+  // ============================================================
+  function showYakuList() {
+    const cats = [["month", "月の役（いちばん高いもの1つ）"], ["sorou", "揃い（5枚すべて同じ種類）"], ["deki", "出来役（成立したものはすべて重なる）"]];
+    const ex = {
+      awase: [[1, "hikari", "tsuru"], [1, "kasu"]], futaawase: [[1, "hikari", "tsuru"], [1, "kasu"], [8, "tane", "kari"], [8, "kasu"]],
+      sanbon: [[3, "hikari", "maku"], [3, "tan", "akatan"], [3, "kasu"]], nagare: [[4, "kasu"], [5, "kasu"], [6, "kasu"], [7, "kasu"], [8, "kasu"]],
+      oyako: [[9, "tane", "sakazuki"], [9, "tan", "aotan"], [9, "kasu"], [2, "kasu"], [2, "tane", "uguisu"]],
+      teshi: [[11, "hikari", "ame"], [11, "tane", "tsubame"], [11, "tan", "tan"], [11, "kasu", "kaminari"]],
+      kasuzoroi: [[1, "kasu"], [3, "kasu"], [5, "kasu"], [7, "kasu"], [12, "kasu"]],
+      tanzoroi: [[1, "tan", "akatan"], [4, "tan", "tan"], [6, "tan", "aotan"], [7, "tan", "tan"], [11, "tan", "tan"]],
+      tanezoroi: [[2, "tane", "uguisu"], [4, "tane", "hototogisu"], [5, "tane", "yatsuhashi"], [7, "tane", "inoshishi"], [10, "tane", "shika"]],
+      hanami: [[3, "hikari", "maku"], [9, "tane", "sakazuki"]], tsukimi: [[8, "hikari", "tsuki"], [9, "tane", "sakazuki"]],
+      sugawara: [[1, "hikari", "tsuru"], [2, "tane", "uguisu"], [3, "hikari", "maku"]],
+      akatan: [[1, "tan", "akatan"], [2, "tan", "akatan"], [3, "tan", "akatan"]], aotan: [[6, "tan", "aotan"], [9, "tan", "aotan"], [10, "tan", "aotan"]],
+      inoshikacho: [[7, "tane", "inoshishi"], [10, "tane", "shika"], [6, "tane", "chou"]],
+      sankou: [[1, "hikari", "tsuru"], [3, "hikari", "maku"], [8, "hikari", "tsuki"]],
+      ameshikou: [[1, "hikari", "tsuru"], [3, "hikari", "maku"], [8, "hikari", "tsuki"], [11, "hikari", "ame"]],
+      shikou: [[1, "hikari", "tsuru"], [3, "hikari", "maku"], [8, "hikari", "tsuki"], [12, "hikari", "houou"]],
+      gokou: [[1, "hikari", "tsuru"], [3, "hikari", "maku"], [8, "hikari", "tsuki"], [11, "hikari", "ame"], [12, "hikari", "houou"]],
+      sufuda: [[12, "hikari", "houou"]],
+    };
+    let h = `<h3>役と歌</h3><p style="font-size:12.5px;color:#5c4d33">打った札の中で成立した役は<b>すべて重なり</b>、文と倍が足し算されます。霊力＝文×倍。<br>札の文：光20・種10・短冊5・カス1。旬（その月の札）は倍+2。</p>`;
+    for (const [cat, title] of cats) {
+      h += `<div class="cat-h" style="color:#7a1a10">${title}</div><div class="yaku-list">`;
+      for (const k of YAKU_ORDER) {
+        const Y = YAKU[k];
+        if (Y.cat !== cat) continue;
+        if (Y.hidden && !(run && run.stats.yaku[k]) && !Profile.data.seenYaku[k]) continue;
+        const v = run ? Score.yakuValue(run, k) : { bun: Y.bun, bai: Y.bai, lvl: 1 };
+        const cards = (ex[k] || []).map(([m, t, sp]) => Art.card({ m, t, sp, v: 0, uid: "" }, { noIdx: true })).join("");
+        h += `<div class="yaku-row" style="background:#fff8;border-color:#a8946a;color:#1d1a17"><div class="yr-h"><span class="yr-name">${esc(Y.name)}</span>
+          <span class="yr-val"><span class="kbd-bun">${v.bun}</span> × <span class="kbd-bai">${v.bai}</span></span>${v.lvl > 1 ? `<span class="yr-lv" style="color:#7a1a10">${v.lvl}段</span>` : ""}</div>
+          <div class="yr-desc" style="color:#5c4d33">${esc(Y.desc)}</div><div class="yr-cards">${cards}</div></div>`;
+      }
+      h += `</div>`;
+    }
+    modal(h);
+  }
+
+  function showDeck() {
+    const inHand = run.round ? new Set(run.round.hand) : new Set();
+    const inDraw = run.round ? new Set(run.round.draw) : null;
+    const cards = run.deck.slice().sort((a, b) => a.m - b.m || TYPES[b.t].rank - TYPES[a.t].rank);
+    const cnt = { hikari: 0, tane: 0, tan: 0, kasu: 0 };
+    for (const c of run.deck) cnt[c.t]++;
+    const left = inDraw ? run.deck.filter((c) => inDraw.has(c.uid)) : run.deck;
+    modal(`<h3>山札 ${run.deck.length}枚</h3>
+      <p class="deck-sum">光${cnt.hikari}・種${cnt.tane}・短冊${cnt.tan}・カス${cnt.kasu}${inDraw ? `　／　残り山 ${left.length}枚（薄い札は手札か使用済み）` : ""}</p>
+      <div class="deck-grid">${cards.map((c) => Art.card(c).replace('class="card', `class="card ${inDraw && !inDraw.has(c.uid) ? "used" : ""}`)).join("")}</div>`);
+  }
+
+  function showHowto() {
+    const ex = (arr) => `<div class="ex">${arr.map(([m, t, sp]) => Art.card({ m, t, sp, v: 0, uid: "" })).join("")}</div>`;
+    modal(`<div class="howto"><h3>遊び方</h3>
+      <p>一年十二か月、月ごとに現れる妖を<b>花札の役</b>で祓います。師走の「百鬼夜行の主」を祓えば一年の結び。</p>
+      <h4>一、札を打つ</h4>
+      <p>手札から<b>1〜5枚</b>選んで「打つ」。打った札で役ができると<b>霊力＝<span class="kbd-bun">文</span>×<span class="kbd-bai">倍</span></b>が入ります。
+      祓いの目標に届けば成功。打ちは4回、札を捨てて引き直す「流す」は3回まで。</p>
+      <h4>二、役は重なる</h4>
+      <p>同じ月2枚で「合わせ」、3枚で「三本」、5か月続きで「月流れ」。5枚同じ種類で「揃い」。
+      花見酒・猪鹿蝶・三光などの<b>出来役</b>は、成立したものが<b>全部いっしょに</b>数えられます。</p>
+      ${ex([[3, "hikari", "maku"], [9, "tane", "sakazuki"], [8, "hikari", "tsuki"], [8, "kasu"]])}
+      <p style="font-size:12.5px">↑ 花見酒＋月見酒＋合わせ（芒）が一度に成立！</p>
+      <h4>三、札の文と旬</h4>
+      <p>光20・種10・短冊5・カス1。その月の札は<b>旬</b>で、役に加わると倍+2。札の右下に種類、左上に月が書いてあります。</p>
+      <h4>四、夜市と式神</h4>
+      <p>祓いのあとは化け狸の夜市。<b>式神</b>は5体まで連れて行け、それぞれの力で文や倍を増やします（左から順に発動）。
+      <b>呪符</b>で札を作り替え、<b>詠み札</b>（百人一首）で役を磨き、季節ごとの<b>神器</b>を五つ集めれば「五神器顕現」。</p>
+      <h4>五、妖の癖</h4>
+      <p>妖はそれぞれ意地悪な癖を持ちます。3・6・9月は季節の大妖、12月は百鬼夜行の主。絵巻の地図で先の妖を確かめて備えましょう。</p>
+      <h4>こつ</h4>
+      <ul><li>最初は「合わせ」「二つ合わせ」「三本」で十分。式神で倍を伸ばす</li>
+      <li>「倍＋」の式神を左、「倍×」の式神を右に置くと伸びる</li>
+      <li>銭を5枚ごとに利子。無駄遣いを控える月もあり</li>
+      <li>札を長押しすると説明が出ます</li></ul></div>`);
+  }
+
+  function showSettings() {
+    const sp = Profile.data.speed || 1;
+    const c = modal(`<h3>設定</h3>
+      <div class="set-row"><span>演出の速さ</span><div class="seg">${[1, 2, 3].map((v) => `<button class="btn ${sp === v ? "on" : ""}" data-sp="${v}">${["", "ふつう", "はやい", "とても"][v]}</button>`).join("")}</div></div>
+      <div class="set-row"><span>BGM</span><button class="btn" data-bgm>${BGM.enabled ? "ON" : "OFF"}</button></div>
+      <div class="set-row"><span>効果音</span><button class="btn" data-sfx>${SFX.enabled ? "ON" : "OFF"}</button></div>
+      <div class="set-row"><span>記録を消す</span><button class="btn shu" data-reset>消す</button></div>
+      <p style="font-size:11px;color:#7a6a4a;margin-top:10px">遊んだ記録はこの端末のブラウザに保存されます。</p>`);
+    $$("[data-sp]", c).forEach((b) => b.onclick = () => { Profile.setSpeed(+b.dataset.sp); showSettings(); });
+    $("[data-bgm]", c).onclick = () => { BGM.toggle(); showSettings(); };
+    $("[data-sfx]", c).onclick = () => { SFX.toggle(); showSettings(); };
+    $("[data-reset]", c).onclick = () => {
+      const cc = modal(`<h3>記録を消しますか？</h3><p>図鑑・解放・続きのデータがすべて消えます。</p><div class="mrow"><button class="btn shu" data-yes>消す</button><button class="btn" data-close>やめる</button></div>`);
+      $("[data-yes]", cc).onclick = () => { Profile.reset(); Run.clearSave(); closeModal(); location.reload(); };
+    };
+  }
+
+  // ============================================================
+  //  タイトル・陰陽師えらび・終わり・図鑑
+  // ============================================================
+  function renderTitle(hasSave) {
+    show("title");
+    $("#btn-continue").classList.toggle("hidden", !hasSave);
+    // 百鬼夜行の行列
+    const ids = ["y_nurarihyon", "kappa", "y_hitotsume", "karakasa", "chochin", "y_tsuchigumo", "kitsunebi", "y_mikoshi", "nekomata", "y_tamamo", "ittan", "kooni", "y_gashadokuro", "tengu", "y_orochi", "bakedanuki"];
+    const seq = ids.map((id, i) => `<div class="pm">${Art.portrait(id)}</div>${i % 3 === 1 ? '<div class="lantern"></div>' : ""}`).join("");
+    $("#parade").innerHTML = `<div class="parade-track">${seq}${seq}</div>`;
+    BGM.setTrack("title");
+  }
+
+  let pickRank = 0;
+  function renderSelect(onPick) {
+    show("select");
+    const list = $("#om-list");
+    const u = Profile.data.unlocked;
+    const maxR = Profile.data.maxRank || 0;
+    pickRank = Math.min(pickRank, maxR);
+    const rankRow = maxR > 0 ? `<div class="rank-box"><div class="rank-h">位階（難しさ）</div><div class="rank-row">${RANKS.slice(0, maxR + 1).map((r, i) =>
+      `<button class="btn rank ${i === pickRank ? "on" : ""}" data-r="${i}">${esc(r.name)}</button>`).join("")}</div>
+      <div class="rank-desc">${RANKS.slice(1, pickRank + 1).map((r) => "・" + esc(r.text)).join("<br>") || "ふつうの一年"}</div></div>` : "";
+    list.innerHTML = rankRow + ONMYOJI.map((o) => `<div class="om ${u[o.id] ? "" : "locked"}" data-o="${o.id}">
+      <div class="opt">${Art.portrait(o.portrait)}</div>
+      <div><div class="ot">${esc(o.title)}</div><h4>${u[o.id] ? esc(o.name) : "？？？"}</h4>
+      <p>${u[o.id] ? esc(o.text) : "一年を結ぶと解放"}</p>${u[o.id] ? `<p style="font-size:12px;color:#7a4a10">「${esc(o.line)}」</p>` : ""}</div></div>`).join("");
+    $$(".om", list).forEach((e) => e.onclick = () => { if (u[e.dataset.o]) onPick(e.dataset.o, pickRank); else { SFX.error(); toast("一年を結ぶと解放されます"); } });
+    $$("[data-r]", list).forEach((b) => b.onclick = () => { pickRank = +b.dataset.r; SFX.select(); renderSelect(onPick); });
+  }
+
+  function renderEnd(cleared, newly) {
+    show("end");
+    const body = $("#end-body");
+    const reached = cleared ? 12 : run.month - (run.phase === "over" ? 0 : 0);
+    const y = run.round ? YOKAI[run.round.yokai] : null;
+    const topYaku = Object.entries(run.stats.yaku).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${YAKU[k].name}×${n}`).join("・") || "—";
+    const best = run.stats.bestYaku ? run.stats.bestYaku.map((k) => YAKU[k].name).join("＋") : "";
+    const lines = cleared ? STORY.ending : [
+      `${MONTHS[run.month].wa}。${y ? y.name : "妖"}の前に、札が尽きた。`,
+      y && y.win ? `「${y.win}」` : "「ひっひっ、また来年だねえ」",
+      "式神たちが、ちぎれた紙の袖を引く。まだ、終わりじゃない。",
+    ];
+    body.innerHTML = `
+      <div class="end-title ${cleared ? "" : "lose"}">${cleared ? "一年の結び" : "一年の終わり"}</div>
+      <div class="end-lines">${lines.map((l, i) => `<p style="animation-delay:${i * 0.5}s">${esc(l)}</p>`).join("")}</div>
+      ${run.shiki.length ? `<div class="end-team">${run.shiki.map((s) => `<div class="et"><div class="et-pt">${Art.portrait(s.id)}</div><div class="et-n">${esc(SHIKI_BY_ID[s.id].name)}</div></div>`).join("")}</div>` : ""}
+      <div class="end-stats">
+        <div><span>たどり着いた月</span><b>${run.year > 1 ? run.year + "年目 " : ""}${MONTHS[Math.min(12, run.month)].wa}</b></div>
+        <div><span>一打の最高</span><b>${fmt(run.stats.best)}</b></div>
+        ${best ? `<div><span>その役</span><b style="font-size:12px">${esc(best)}</b></div>` : ""}
+        <div><span>よく打った役</span><b style="font-size:12px">${esc(topYaku)}</b></div>
+        <div><span>連れていた式神</span><b style="font-size:12px">${esc(run.shiki.map((s) => SHIKI_BY_ID[s.id].name).join("・") || "—")}</b></div>
+        <div><span>神器</span><b>${run.jingi.length}/5</b></div>
       </div>
-      <div class="ps-mid">
-        <span class="ps-magic" title="手持ちの霊力">💎${p.magic}G</span>
-        <span class="ps-assets" title="総資産（霊力＋所有地の価値） / 目標"><b>${assets}</b> / ${RULES.target}G</span>
-        <div class="ps-bar"><div style="width:${Math.min(100, assets / RULES.target * 100)}%; background:${PLAYER_COLORS[p.id]}"></div></div>
-      </div>
-      <div class="ps-meta">
-        <span title="属性の連鎖（同属性の自領数）">🔗${chains}</span>
-        <span class="ps-inlay" title="通過した鳥居（宝玉が嵌まっていく）">⛩️${gates}</span>
-        <span class="ps-candles" title="周回数（1周ごとに蝋燭が灯る）">${candles}</span>
-        <span title="山札の残り">🎴${p.deck.length}</span>
-        <span class="ps-gap">${rankGapText(rows, me)}</span>
+      ${newly && newly.length ? `<div class="end-stats" style="text-align:center;color:var(--gold)">新たな陰陽師が解放された：${newly.map((id) => ONMYOJI.find((o) => o.id === id).name).join("・")}</div>` : ""}
+      ${cleared && Profile.data.newRank ? `<div class="end-stats" style="text-align:center;color:var(--gold)">位階が上がった：<b>${RANKS[Profile.data.newRank].name}</b><br><span style="font-size:12px;color:#f2b8a8">${esc(RANKS[Profile.data.newRank].text)}</span></div>` : ""}
+      <div class="end-actions">
+        ${cleared ? `<button class="btn big gold" data-a="endless">二年目へ（無限の絵巻）</button>` : ""}
+        <button class="btn big ${cleared ? "" : "shu"}" data-a="again">もう一度、一年を</button>
+        <button class="btn" data-a="title">タイトルへ</button>
       </div>`;
-  });
-  const diff = DIFFICULTIES[loadDifficulty()];
-  const mode = g.hotseat ? "🎮 2人対戦" : g.royale ? `⚔ 三つ巴｜${diff.icon}${diff.label}` : `難易度 ${diff.icon}${diff.label}`;
-  const ml = (typeof MATCH_LENGTHS !== "undefined") ? MATCH_LENGTHS[loadMatchLength()] : null;
-  // ヘッダーにも首位だけ出す（パネルを全部閉じていても「今だれが勝っているか」は分かるように）
-  const tied = rows.length > 1 && rows[1].rank === 1;
-  const leader = tied ? "同率首位" : g.players[rows[0].id].name;
-  document.getElementById("round-info").textContent =
-    `${g.stage.icon} STAGE ${g.stageIdx + 1}｜ラウンド ${Math.min(g.round, RULES.maxRounds)} / ${RULES.maxRounds}｜${mode}` +
-    (ml && !g.training && loadMatchLength() !== "normal" ? `｜${ml.icon}${ml.label}` : "") +
-    (g.weekly ? `｜🎪 ${g.weekly.name}` : "") +
-    `｜🥇 ${leader}`;
-}
-
-// ---------- プレイヤー詳細ポップアップ（v27） ----------
-// 上部の情報窓は圧縮表示なので、細かい情報（所有地の一覧・鳥居・捨札・手札枚数など）は
-// 情報窓をクリックしたときのポップアップで見せる。カード詳細（showCardDetail）と同じく
-// #overlay や UI.dialogBusy に触らない独立レイヤー＝どの場面で開いても進行を壊さない。
-function showPlayerDetail(pid) {
-  if (typeof G === "undefined" || !G || !G.players) return;
-  const p = G.players[pid];
-  if (!p) return;
-  const rows = standingsOf(G);
-  const me = rows.find(r => r.id === pid);
-  const lands = ownedLands(G, pid);
-  const landTotal = lands.reduce((s, t) => s + landValue(t), 0);
-  const needed = gatesNeededOf(G);
-  const gates = "●".repeat(Math.min(p.gates.size, needed)) + "○".repeat(Math.max(0, needed - p.gates.size));
-  const chains = Object.keys(ELEMENTS)
-    .map(e => ({ e, n: chainCount(G, pid, e) })).filter(c => c.n > 0)
-    .map(c => `${ELEMENTS[c.e].icon}${ELEMENTS[c.e].name}×${c.n}（通行料×${chainMult(c.n).toFixed(1)}）`).join("　") || "なし";
-  const ch = (typeof charOf === "function") ? charOf(p) : null;
-  const face = ch ? charPortraitSVG(ch, 30) : P_ICONS[pid];
-  const row = (k, v) => `<div class="cd-row"><span class="cd-k">${k}</span><span class="cd-v">${v}</span></div>`;
-  const landHtml = lands.length
-    ? lands.map(t => {
-        const cr = t.creature ? CARD_BY_ID[t.creature.cardId] : null;
-        const crTxt = cr
-          ? `${ELEMENTS[cr.element].icon}${esc(cr.name)}（HP ${currentHp(t.creature)}/${maxHpOf(t.creature)}）`
-          : `<span class="ip-empty">空き（式神無し）</span>`;
-        return `<div class="ip-land"><span class="ipl-no">#${t.id}</span>` +
-          `<span>${ELEMENTS[t.element].icon}Lv${t.level}・価値${landValue(t)}G</span>` +
-          `<span>${crTxt}</span><span class="ipl-toll">通行料 ${tollOf(G, t)}G</span></div>`;
-      }).join("")
-    : `<div class="ip-empty">まだ霊地はありません</div>`;
-  let pop = document.getElementById("info-pop");
-  if (!pop) {
-    pop = document.createElement("div");
-    pop.id = "info-pop";
-    document.body.appendChild(pop);
-  }
-  pop.innerHTML = `<div class="ip-box">
-      <div class="ip-name" style="color:${PLAYER_COLORS[pid]}">${face} ${esc(p.name)}
-        <span class="p-rank r${me.rank}">${rankMedal(me.rank)} ${me.rank}位</span></div>
-      ${row("霊力", `<b>${p.magic}G</b>`)}
-      ${row("総資産", `<b>${me.assets}G</b> / ${RULES.target}G　（霊力 ${p.magic}G ＋ 霊地 ${landTotal}G）`)}
-      ${row("順位", `${rankGapText(rows, me) || "—"}`)}
-      ${row("連鎖", chains)}
-      ${row("鳥居", `${gates}（${p.gates.size} / ${needed}）`)}
-      ${row("周回", `${p.laps} 周`)}
-      ${row("手札 / 山札 / 捨札", `${p.hand.length}枚 / ${p.deck.length}枚 / ${p.discard.length}枚`)}
-      <div class="ip-lands"><div class="cd-abs-t">🏞 所有地 ${lands.length}か所（合計 ${landTotal}G）</div>${landHtml}</div>
-      <div class="cd-hint">クリックで閉じる</div>
-    </div>`;
-  pop.classList.add("show");
-  pop.onclick = () => pop.classList.remove("show");
-}
-
-// ---------- 手札 ----------
-function cardHTML(c, opts = {}) {
-  const typeCls = c.type === "creature" ? `el-${c.element}` : c.type;
-  const rar = cardRarity(c);
-  const cls = ["card", typeCls, `rar-${rar}`];
-  if (opts.disabled) cls.push("disabled");
-  if (opts.selectable) cls.push("selectable");
-  if (opts.fixed) cls.push("fixed"); // フリップ演出用の固定サイズ（表裏のサイズを一致させる）
-  const abil = (c.ab || []).map(a => `<span class="ab">${ABILITY_INFO[a].name}</span>`).join("");
-  const body = c.type === "creature"
-    ? `<div class="c-stats"><span class="c-st">ST ${c.st}</span><span class="c-hp">HP ${c.hp}</span></div><div class="c-ab">${abil}</div>`
-    : `<div class="c-desc">${esc(c.desc)}</div>`;
-  const elemIcon = c.type === "creature" ? ELEMENTS[c.element].icon
-    : c.type === "item" ? (c.st > 0 ? "⚔️" : "🛡️") : "✨";
-  const rm = RARITY_META[rar];
-  // 額縁＋アート窓＋コスト宝珠＋霊力の光沢（.c-shine）で「霊力の込められたカード」を表現
-  return `<div class="${cls.join(" ")}" data-card="${c.id}" title="${esc(c.type === 'spell' ? c.desc : (c.ab || []).map(a => ABILITY_INFO[a].name + ': ' + ABILITY_INFO[a].desc).join(' / '))}">
-    <div class="c-art">${typeof cardArtSVG === "function" ? cardArtSVG(c) : ""}</div>
-    <span class="c-cost" title="コスト ${c.cost}G">${c.cost}</span>
-    <span class="c-rarity" style="color:${rm.color}" title="${rm.label}">${rm.stars}</span>
-    <span class="c-elem" title="${c.type === "creature" ? ELEMENTS[c.element].name + "属性" : c.type === "item" ? "宝具" : "呪術"}">${elemIcon}</span>
-    <div class="c-name">${esc(c.name)}</div><div class="c-body">${body}</div>
-    ${opts.ribbon ? `<span class="c-ribbon ${opts.ribbonCls || ""}">${opts.ribbon}</span>` : ""}
-    <div class="c-shine"></div></div>`;
-}
-
-// 五行・相剋の関係を返す: "adv"=meが剋す / "dis"=meが剋される / "even"=互角 / "none"=無属性が絡む（輪の外）
-function elemRelation(myElem, foeElem) {
-  if (myElem === "neutral" || foeElem === "neutral") return "none";
-  if (hasElemAdvantage(myElem, foeElem)) return "adv";
-  if (hasElemAdvantage(foeElem, myElem)) return "dis";
-  return "even";
-}
-// 相剋の輪（🌳剋⛰️剋💧剋🔥剋🪙剋🌳）のミニ表示。hl に指定した属性を光らせる
-function elemWheelHTML(hl = []) {
-  const ring = ["wood", "earth", "water", "fire", "metal"]; // 相剋順: 木剋土・土剋水・水剋火・火剋金・金剋木
-  const chip = e => `<span class="ew-chip ${hl.includes(e) ? "ew-hl" : ""}" style="--ec:${ELEMENTS[e].color}">${ELEMENTS[e].icon}${ELEMENTS[e].name}</span>`;
-  return `<span class="elem-wheel" title="相剋の輪: 左が右を剋す（打ち破る）">` +
-    ring.map(chip).join(`<span class="ew-arrow">剋</span>`) +
-    `<span class="ew-arrow">剋</span>${chip("wood")}</span>`;
-}
-// 相生の輪（🌳生🔥生⛰️生🪙生💧生🌳）のミニ表示（カード詳細・ヘルプ用）
-function souseiWheelHTML(hl = []) {
-  const ring = ["wood", "fire", "earth", "metal", "water"]; // 相生順: 木生火・火生土・土生金・金生水・水生木
-  const chip = e => `<span class="ew-chip ${hl.includes(e) ? "ew-hl" : ""}" style="--ec:${ELEMENTS[e].color}">${ELEMENTS[e].icon}${ELEMENTS[e].name}</span>`;
-  return `<span class="elem-wheel" title="相生の輪: 左が右を生み育てる">` +
-    ring.map(chip).join(`<span class="ew-arrow">生</span>`) +
-    `<span class="ew-arrow">生</span>${chip("wood")}</span>`;
-}
-
-// ---------- カード詳細ポップアップ（v22） ----------
-// 📚アルバム・🛠デッキ構築・🎁封符戦・🗑捨札から、カード1枚のフルサイズ表示＋
-// ステータス＋特性（能力）の説明を確認できる。既存のダイアログ（#overlay）の上に重なる独立レイヤー。
-// クリック（背景・✖）で閉じる。ゲーム進行には一切影響しない（表示のみ）。
-function showCardDetail(cardId) {
-  const c = CARD_BY_ID[cardId];
-  if (!c) return;
-  let pop = document.getElementById("card-pop");
-  if (!pop) {
-    pop = document.createElement("div");
-    pop.id = "card-pop";
-    document.body.appendChild(pop);
-  }
-  const rm = RARITY_META[cardRarity(c)];
-  const setInfo = CARD_SETS.find(s => s.set === cardSet(c));
-  const typeName = c.type === "creature" ? `式神（${ELEMENTS[c.element].icon}${ELEMENTS[c.element].name}属性）`
-    : c.type === "item" ? "宝具" : "呪術";
-  const row = (k, v) => `<div class="cd-row"><span class="cd-k">${k}</span><span class="cd-v">${v}</span></div>`;
-  let info = row("タイプ", typeName) + row("コスト", `${c.cost}G`) +
-    row("レア度", `<span style="color:${rm.color}">${rm.stars} ${rm.label}</span>`) +
-    row("収録", `${setInfo.icon} ${esc(setInfo.name)}`);
-  if (c.type === "creature") {
-    info += row("ST / HP", `⚔ ${c.st} ／ ❤️ ${c.hp}`);
-    if (c.element === "neutral") {
-      info += row("五行", `⚪ 五行の輪の<b>外</b>＝相剋・相生なし（土地の加護・恵みも受けない）`);
-    } else {
-      const beats = ELEM_ADVANTAGE[c.element]; // この属性が剋す相手
-      const beatenBy = LAND_ELEMENTS.find(e => ELEM_ADVANTAGE[e] === c.element); // この属性を剋す相手
-      const parent = souseiParentOf(c.element); // この属性を生む親属性（恵みを受けられる土地）
-      info += row("相剋", `${ELEMENTS[beats].icon}${ELEMENTS[beats].name}を<b>剋す</b>（ST+${ELEM_ADV_ST}）／` +
-        `${ELEMENTS[beatenBy].icon}${ELEMENTS[beatenBy].name}に<b>剋される</b>（相手にST+${ELEM_ADV_ST}）` +
-        `<div class="cd-wheel">${elemWheelHTML([c.element])}</div>`);
-      info += row("相生", `${ELEMENTS[parent].icon}${ELEMENTS[parent].name}は${ELEMENTS[c.element].name}を生む＝` +
-        `<b>${ELEMENTS[parent].name}の土地</b>でも防衛HP+${SOUSEI_HP}の<b>恵み</b>を受ける` +
-        `<div class="cd-wheel">${souseiWheelHTML([parent, c.element])}</div>`);
-    }
-  }
-  if (c.type === "item") info += row("補正", `${c.st ? `ST+${c.st} ` : ""}${c.hp ? `HP+${c.hp}` : ""}` || "—");
-  // v25: 二形（hybrid）＝武具として装備したときの補正も併記する
-  if (c.asItem) info += row("武具として", `${c.asItem.st ? `⚔ ST+${c.asItem.st} ` : ""}${c.asItem.hp ? `🛡 HP+${c.asItem.hp}` : ""}（装備すると使い切り）`);
-  // 特性（能力）は名前だけでなく説明文まで表示（今回の要望の中心）
-  const abHtml = (c.ab || []).length
-    ? `<div class="cd-abs"><div class="cd-abs-t">🔖 特性</div>` +
-      c.ab.map(a => `<div class="cd-ab"><b class="ab">${ABILITY_INFO[a].name}</b><span>${esc(ABILITY_INFO[a].desc)}</span></div>`).join("") + `</div>`
-    : "";
-  const descHtml = c.desc ? `<div class="cd-abs"><div class="cd-abs-t">✨ 効果</div><div class="cd-desc">${esc(c.desc)}</div></div>` : "";
-  pop.innerHTML = `<div class="cd-box">
-      <button class="cd-close" title="閉じる">✖</button>
-      <div class="cd-flex">
-        <div class="cd-card">${cardHTML(c)}</div>
-        <div class="cd-info">
-          <div class="cd-name">${esc(c.name)}</div>
-          ${info}${abHtml}${descHtml}
-        </div>
-      </div>
-      <div class="cd-hint">クリックで閉じる</div>
-    </div>`;
-  pop.classList.add("show");
-  const close = () => pop.classList.remove("show");
-  pop.onclick = close; // 背景・✖・どこをクリックしても閉じる（表示専用）
-}
-
-// 3Dフリップできるカード（裏面=共通のカードバック／表面=カード本体）。
-// .revealed を付けると裏→表にめくれる。手札のオープン・ドロー・文箱開封で使う。
-// 表裏が「同じ1枚のカード」に見えるよう、表面は固定サイズ（.card.fixed）で描画し、
-// 裏面はグリッドセル（＝表面と同寸）いっぱいに広がる。
-function flipCardHTML(c, opts = {}) {
-  return `<div class="flip3d${opts.revealed ? " revealed" : ""}"${c ? ` data-flip="${c.id}"` : ""}>
-    <div class="flip3d-inner">
-      <div class="flip3d-face flip3d-back">${CARD_BACK_HTML}</div>
-      <div class="flip3d-face flip3d-front">${c ? cardHTML(c, { ...opts, fixed: true }) : ""}</div>
-    </div>${opts.badge || ""}</div>`;
-}
-
-function renderHand(g) {
-  // 通常はプレイヤー0（人間）の手札。2人対戦（ホットシート）では手番プレイヤーの手札を表示する
-  const p = g.players[g.hotseat ? g.current : 0];
-  const el = document.getElementById("hand");
-  if (g.hotseat && UI.handHidden) {
-    // 手番交代画面の間は伏せて、次のプレイヤーの手札が前のプレイヤーに見えないようにする
-    el.innerHTML = p.hand.map(() => `<div class="card facedown" title="交代中は伏せられています">${CARD_BACK_HTML}</div>`).join("");
-  } else {
-    el.innerHTML = p.hand.map(id => cardHTML(CARD_BY_ID[id])).join("");
-  }
-  document.getElementById("hand-count").textContent =
-    (g.hotseat ? `${p.name}の` : "") + `手札 ${p.hand.length}/${HAND_LIMIT}`;
-  updateHandArrows();
-}
-
-// ---------- 手札の矢印送り ----------
-// スマホでは手札の横スワイプがAndroidの「戻る」ジェスチャーと衝突してゲームが終了してしまうため、
-// はみ出した手札は ◀▶ ボタンで1枚ずつ送れるようにする（オーバーフロー時のみ表示）。
-function updateHandArrows() {
-  const hand = document.getElementById("hand");
-  const prev = document.getElementById("hand-prev");
-  const next = document.getElementById("hand-next");
-  if (!hand || !prev || !next) return;
-  const overflow = hand.scrollWidth > hand.clientWidth + 4;
-  prev.classList.toggle("hidden", !overflow);
-  next.classList.toggle("hidden", !overflow);
-  if (!overflow) return;
-  prev.disabled = hand.scrollLeft <= 2;
-  next.disabled = hand.scrollLeft >= hand.scrollWidth - hand.clientWidth - 2;
-}
-function initHandArrows() {
-  const hand = document.getElementById("hand");
-  const step = () => {
-    const card = hand.querySelector(".card, .flip3d");
-    return card ? card.getBoundingClientRect().width + 8 : 110; // カード1枚ぶんずつ送る
-  };
-  // スクロール直後に矢印の有効/無効を更新する（scrollイベントが飛ばない環境があるためクリック側でも直接呼ぶ）
-  const go = dir => { hand.scrollBy({ left: dir * step() }); updateHandArrows(); };
-  document.getElementById("hand-prev").addEventListener("click", () => go(-1));
-  document.getElementById("hand-next").addEventListener("click", () => go(1));
-  hand.addEventListener("scroll", updateHandArrows, { passive: true });
-  window.addEventListener("resize", updateHandArrows);
-}
-
-// ---------- ゲーム開始の手札オープン演出 ----------
-// 全カードが表紙（カードバック）側で配られ、1枚ずつめくれて対戦が始まる
-async function handIntro(g) {
-  const p = g.players[0];
-  const el = document.getElementById("hand");
-  el.innerHTML = p.hand.map(id => flipCardHTML(CARD_BY_ID[id])).join("");
-  await sleep(420);
-  for (const f of el.querySelectorAll(".flip3d")) {
-    f.classList.add("revealed");
-    SFX.flip();
-    await sleep(150);
-  }
-  await sleep(500);
-  renderHand(g);
-}
-
-// ---------- ドロー演出 ----------
-// 山札からカードが現れ、めくれて手札へ吸い込まれる（人間のドロー時のみ）
-async function animateDraw(card) {
-  const host = document.createElement("div");
-  host.id = "draw-fx";
-  host.innerHTML = flipCardHTML(card);
-  document.body.appendChild(host);
-  SFX.draw();
-  await sleep(120);
-  host.querySelector(".flip3d").classList.add("revealed");
-  SFX.flip();
-  await sleep(620);
-  host.classList.add("to-hand"); // 手札ウィンドウへ吸い込まれる
-  await sleep(300);
-  host.remove();
-}
-
-function renderAll(g) {
-  renderBoard(g);
-  renderPanels(g);
-  renderHand(g);
-  // 手札の枚数や⚑凱旋リーチ表示で上部・下段の高さが変わるので、そのたびに位置基準を測り直す
-  // （盤面の等倍サイズ --board-base もここで更新＝盤面が下段に食い込まない）
-  syncHudMetrics();
-}
-
-// ---------- タイトル画面（起動時の世界観演出） ----------
-// 霊力の粒子が瞬く夜空＋ゆっくり回る大紋章＋地平の式神シルエット。
-// 画面のどこかをクリック／タップでフェードアウトしてメニューへ。
-function showTitleScreen() {
-  return new Promise(resolve => {
-    const el = document.createElement("div");
-    el.id = "title-screen";
-    // 霊力の粒子（ランダム配置・明滅）
-    const stars = Array.from({ length: 46 }, () => {
-      const sz = (Math.random() * 2 + 1).toFixed(1);
-      return `<span class="ts-star" style="left:${(Math.random() * 100).toFixed(1)}%;top:${(Math.random() * 88).toFixed(1)}%;` +
-        `width:${sz}px;height:${sz}px;animation-duration:${(2.2 + Math.random() * 3.4).toFixed(1)}s;animation-delay:-${(Math.random() * 4).toFixed(1)}s"></span>`;
-    }).join("");
-    el.innerHTML = `
-      ${stars}
-      <div class="ts-center">
-        <div class="ts-emblem">${TITLE_EMBLEM_SVG}</div>
-        <h1 class="ts-title">式神絵巻</h1>
-        <div class="ts-sub">— SHIKIGAMI EMAKI —</div>
-        <p class="ts-flavor">木は火を生み、火は土を生む——五行の理、いま絵巻に顕れる。<br>
-          呪符より式神を呼び覚まし、相生に養い、相剋にて討て。<br>
-          絵巻を制する者こそ、当代随一の陰陽師。</p>
-        <div class="ts-start">✦ クリック / タップ で始める ✦</div>
-      </div>
-      <div class="ts-frieze">${TITLE_FRIEZE_SVG}</div>`;
-    document.body.appendChild(el);
-    el.addEventListener("click", () => {
-      if (typeof SFX !== "undefined" && SFX.bless) SFX.bless(); // 荘厳なアルペジオで開幕
-      el.classList.add("ts-out");
-      setTimeout(() => { el.remove(); resolve(); }, 650);
-    }, { once: true });
-  });
-}
-
-// ---------- 盤面ズーム（拡大縮小して読みやすく） ----------
-let BOARD_ZOOM = 1;
-// 直近の自動フィット倍率。BOARD_ZOOM がこれと同じ＝「自分では拡大していない」状態なので、
-// 表示領域が変わったとき（情報窓の開閉・画面回転・マップ確認モード）に自動で合わせ直してよい
-let AUTO_FIT_ZOOM = null;
-// ZOOM_MIN は「⛶ 全体」フィットで大きな盤面を1画面に収められるよう低め（0.3）にしてある
-const ZOOM_MIN = 0.3, ZOOM_MAX = 2.6, ZOOM_STEP = 0.2;
-function applyZoom() {
-  const svg = document.getElementById("board");
-  if (svg) svg.style.setProperty("--zoom", BOARD_ZOOM.toFixed(2));
-  const lbl = document.getElementById("zoom-label");
-  if (lbl) lbl.textContent = `${Math.round(BOARD_ZOOM * 100)}%`;
-}
-function zoomBoard(delta) {
-  BOARD_ZOOM = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, +(BOARD_ZOOM + delta).toFixed(2)));
-  applyZoom();
-}
-function resetZoom() { BOARD_ZOOM = 1; applyZoom(); }
-// 「⛶ 全体」: 盤面全体が #board-wrap に収まる倍率へ調整する（見えないマスを無くす）。
-// opts.max を指定すると倍率の上限（対戦開始時は 1＝拡大はしない）
-function fitBoard(opts = {}) {
-  const wrap = document.getElementById("board-wrap");
-  const svg = document.getElementById("board");
-  if (!wrap || !svg) return;
-  const rect = svg.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
-  const baseW = rect.width / BOARD_ZOOM, baseH = rect.height / BOARD_ZOOM; // 等倍時のサイズを逆算
-  let z = Math.min((wrap.clientWidth - 10) / baseW, (wrap.clientHeight - 10) / baseH);
-  if (opts.max !== undefined) z = Math.min(z, opts.max);
-  BOARD_ZOOM = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, +z.toFixed(2)));
-  AUTO_FIT_ZOOM = BOARD_ZOOM; // 「自動で合わせた倍率」として覚える（maybeRefitBoard の判定用）
-  applyZoom();
-  wrap.scrollTo({ left: 0, top: 0 });
-}
-
-// ============================================================
-// 表示トグル（v27）— 👥情報窓 / 📜ログ / 🃏手札 / 🗺マップ確認
-// ------------------------------------------------------------
-// 情報窓・手札・賽は盤面に重ならないフロー配置になったので、隠す目的は
-// 「盤面をもっと広く見たい」ことに絞られた。切り替えは上部バーの4つのボタンに集約し、
-// 各ウィンドウの「✕」も同じ関数を呼ぶ（＝状態が1か所に集まって食い違わない）。
-// 選んだ状態は localStorage に残す（毎回同じ好みで遊べるように）。
-// ============================================================
-const HUD_PREF_KEY = "shiki-emaki-hud";
-// 既定: 情報窓＝出す／ログ＝広い画面だけ出す（狭い画面ではログが盤面に重なるため既定オフ。
-// 通知トースト（v26）があるので閉じていても重要な出来事は分かる）／手札＝開いた状態
-function defaultHudPrefs() {
-  return { panels: true, log: window.innerWidth > 980, hand: true };
-}
-let HUD_PREFS = defaultHudPrefs();
-// 自分で選んだ設定が保存されているか（無い間は画面幅に応じた既定を使い続ける＝
-// 小さい窓で開いてから最大化した場合などに「なぜかログが出ない」状態が固定されない）
-function hasSavedHudPrefs() {
-  try { return localStorage.getItem(HUD_PREF_KEY) != null; } catch (e) { return false; }
-}
-function loadHudPrefs() {
-  try {
-    const s = JSON.parse(localStorage.getItem(HUD_PREF_KEY));
-    if (s && typeof s === "object") return { ...defaultHudPrefs(), ...s };
-  } catch (e) { /* プライベートモード等 */ }
-  return defaultHudPrefs();
-}
-function saveHudPrefs() {
-  try { localStorage.setItem(HUD_PREF_KEY, JSON.stringify(HUD_PREFS)); } catch (e) { /* 無視 */ }
-}
-// v27でレイアウトが変わったので、最初の1回だけ切り替え方を案内する（保存できない環境では出さない）
-const HUD_HINT_KEY = "shiki-emaki-hint-v27";
-function showLayoutHintOnce() {
-  try {
-    if (localStorage.getItem(HUD_HINT_KEY)) return;
-    localStorage.setItem(HUD_HINT_KEY, "1");
-  } catch (e) { return; }
-  toast("🗺 で盤面を大きく確認／👥📜🃏 で情報窓・ログ・手札を切替できます", "sys");
-}
-// 隠したときに出す短い案内（戻し方が分からなくならないように）
-const VIEW_HINTS = {
-  panels: "👥 情報窓を隠しました（上部の👥で戻せます）",
-  log: "📜 ログを隠しました（上部の📜で戻せます）",
-  hand: "🃏 手札を畳みました（上部の🃏で戻せます）",
-};
-function applyHudPrefs() {
-  const strips = document.getElementById("pstrips");
-  if (strips) strips.classList.toggle("hidden", !HUD_PREFS.panels);
-  const logWin = document.getElementById("win-log");
-  if (logWin) logWin.classList.toggle("hidden", !HUD_PREFS.log);
-  // 手札は「畳む」（完全に消さない＝枚数の帯は残す）
-  document.body.classList.toggle("hand-min", !HUD_PREFS.hand);
-  renderViewToggles();
-  syncHudMetrics();
-  maybeRefitBoard();
-  updateHandArrows();
-}
-function toggleView(key) {
-  if (!(key in HUD_PREFS)) return;
-  HUD_PREFS[key] = !HUD_PREFS[key];
-  saveHudPrefs();
-  applyHudPrefs();
-  if (!HUD_PREFS[key] && VIEW_HINTS[key]) toast(VIEW_HINTS[key], "sys");
-}
-function renderViewToggles() {
-  const set = (id, off, on) => {
-    const b = document.getElementById(id);
-    if (!b) return;
-    b.classList.toggle("off", !!off);
-    b.classList.toggle("on", !!on);
-  };
-  set("view-panels", !HUD_PREFS.panels);
-  set("view-log", !HUD_PREFS.log);
-  set("view-hand", !HUD_PREFS.hand);
-  set("view-map", false, !!UI.mapFocus);
-}
-
-// ---------- 上部エリア／下段の実測高さをCSS変数に流す ----------
-// セリフ吹き出し・ポップアップ通知・「選択に戻る」ボタンの位置をこの値から決めている
-// （v26まではpx直書きで、レイアウトを変えるたびに重なりの調整が必要だった）
-// 盤面の等倍サイズ（--board-base）も同時に更新する: 盤面エリアの高さ＝100% になるので、
-// 情報窓・手札を畳んだぶんがそのまま盤面の大きさになり、「100%」の意味も分かりやすい
-function syncHudMetrics() {
-  const h = (document.querySelector("header")?.offsetHeight || 0) +
-            (document.getElementById("hud-top")?.offsetHeight || 0);
-  const bar = document.getElementById("bottom-bar");
-  const bh = (bar && getComputedStyle(bar).display !== "none") ? bar.offsetHeight : 0;
-  const root = document.documentElement;
-  root.style.setProperty("--hud-h", `${Math.round(h)}px`);
-  root.style.setProperty("--bottom-h", `${Math.round(bh)}px`);
-  const wrap = document.getElementById("board-wrap");
-  // clientHeight はスクロールバーを除いた内側の高さ。8px引いて、拡大時に横スクロールバーが
-  // 出ても「縮む→出ない→また伸びる」の往復にならないようにしている
-  if (wrap && wrap.clientHeight > 80) {
-    root.style.setProperty("--board-base", `${Math.round(wrap.clientHeight - 8)}px`);
-  }
-}
-
-// ---------- 🗺 マップ確認モード ----------
-// 情報窓・ログ・手札を一時的に片付けて「マス目の表示を最優先」にする。
-// 解除すると元の倍率に戻る（マップを見るために拡大した状態が残らないように）。
-UI.mapFocus = false;
-UI._zoomBeforeMap = null;
-function setMapFocus(on) {
-  on = !!on;
-  if (UI.mapFocus === on) return;
-  UI.mapFocus = on;
-  document.body.classList.toggle("map-focus", on);
-  if (on) {
-    UI._zoomBeforeMap = BOARD_ZOOM;
-    syncHudMetrics();
-    fitBoard(); // 空いた領域いっぱいに盤面を広げる（拡大の上限なし＝マスを大きく見せる）
-    toast("🗺 マップ確認モード（もう一度🗺で戻ります）", "sys");
-  } else {
-    syncHudMetrics();
-    if (UI._zoomBeforeMap != null) { BOARD_ZOOM = UI._zoomBeforeMap; applyZoom(); }
-    UI._zoomBeforeMap = null;
-  }
-  renderViewToggles();
-}
-function toggleMapFocus() { setMapFocus(!UI.mapFocus); }
-function exitMapFocus() { setMapFocus(false); }
-
-// 盤面の自動フィット: 「自動で合わせた倍率のまま（＝自分で拡大縮小していない）」ときだけ
-// 表示領域の変化に追随する。手で拡大した倍率を勝手に戻さないための判定。
-function maybeRefitBoard() {
-  if (typeof G === "undefined" || !G || !G.tiles) return;
-  if (UI.mapFocus) { fitBoard(); return; }
-  if (AUTO_FIT_ZOOM != null && Math.abs(BOARD_ZOOM - AUTO_FIT_ZOOM) < 0.005) fitBoard({ max: 1 });
-}
-
-function initHudWindows() {
-  HUD_PREFS = loadHudPrefs();
-  // 各ウィンドウの「✕」もトグルと同じ処理を呼ぶ（状態が食い違わないように）
-  const closeMap = { "win-log": "log", "win-hand": "hand" };
-  Object.entries(closeMap).forEach(([winId, key]) => {
-    const btn = document.getElementById(winId)?.querySelector(".win-close");
-    if (btn) btn.addEventListener("click", () => { if (HUD_PREFS[key]) toggleView(key); });
-  });
-  document.getElementById("view-panels")?.addEventListener("click", () => toggleView("panels"));
-  document.getElementById("view-log")?.addEventListener("click", () => toggleView("log"));
-  document.getElementById("view-hand")?.addEventListener("click", () => toggleView("hand"));
-  document.getElementById("view-map")?.addEventListener("click", toggleMapFocus);
-  // 情報窓のクリックで詳細ポップアップ（イベント委譲＝毎回の再描画で付け直さない）
-  document.getElementById("pstrips")?.addEventListener("click", e => {
-    const strip = e.target.closest && e.target.closest(".pstrip");
-    if (strip && strip.dataset.pid !== undefined) showPlayerDetail(Number(strip.dataset.pid));
-  });
-  applyHudPrefs();
-  initHandArrows();
-}
-
-// ---------- ログ ----------
-// 📜ログウィンドウを閉じて遊ぶ人のために、「影響のある出来事」は同じ文言をポップアップ（toast）にも出す。
-// どの行を出すかの既定ルール:
-//   ・cls === "warn"      → 出す（このコードベースでは warn ＝ 妨害・機能停止・霊力不足など「効いた」出来事）
-//   ・castSpell 実行中     → 出す（呪術の効果ログ。beginLogToast/endLogToast のスコープ内。
-//                            新しい呪術を足しても toast の付け忘れが起きないようにするため）
-//   ・cls === "battle"    → 出さない（バトル実況は1戦で何行も流れるのでポップアップには不向き）
-//   ・それ以外            → 出さない
-// 個別に上書きしたいときは第3引数で `{ toast: true }` / `{ toast: false }` を渡す
-// （特性の発動・通行料・周回など「ログでしか分からない出来事」は明示的に true にしている）。
-function log(msg, cls = "", opts = {}) {
-  const el = document.getElementById("log");
-  const div = document.createElement("div");
-  div.className = `log-line ${cls}`;
-  div.textContent = msg;
-  el.appendChild(div);
-  el.scrollTop = el.scrollHeight;
-  const auto = cls === "warn" || (UI.logToastScope > 0 && cls !== "battle");
-  if (opts.toast !== undefined ? opts.toast : auto) toast(msg, opts.kind !== undefined ? opts.kind : cls);
-}
-
-// ---------- ポップアップ通知（toast） ----------
-// 画面上部にすっと現れてすぐ消える非ブロッキングの通知。pointer-events:none なので
-// 盤面のクリック・ダイアログの操作を一切邪魔しない（＝進行フローに影響しない表示専用レイヤー）。
-UI.logToastScope = 0; // >0 の間は log() が既定でポップアップも出す（castSpell のスコープ）
-const TOAST_MAX = 3;         // 同時に見せる最大数。これを超えたら古いものから先に退場させる
-const TOAST_LIFE = 2600;     // 表示時間(ms)＝「すぐ消える」
-const TOAST_LIFE_BUSY = 1500; // 立て込んでいるとき（呪術の連鎖など）の短縮表示(ms)
-function toast(msg, kind = "") {
-  const stack = document.getElementById("toast-stack");
-  if (!stack) return;
-  const el = document.createElement("div");
-  el.className = `toast${kind ? ` t-${kind}` : ""}`;
-  el.textContent = msg;
-  stack.appendChild(el);
-  const live = Array.from(stack.children).filter(c => !c.classList.contains("t-out"));
-  // 溢れた分は先に退場（画面が通知で埋まって盤面が見えなくなるのを防ぐ）
-  live.slice(0, Math.max(0, live.length - TOAST_MAX)).forEach(old => dismissToast(old, 180));
-  requestAnimationFrame(() => el.classList.add("t-in"));
-  el._toastTimer = setTimeout(() => dismissToast(el), live.length > TOAST_MAX ? TOAST_LIFE_BUSY : TOAST_LIFE);
-}
-function dismissToast(el, wait = 320) {
-  if (!el || el.classList.contains("t-out")) return;
-  clearTimeout(el._toastTimer);
-  el.classList.remove("t-in");
-  el.classList.add("t-out");
-  setTimeout(() => el.remove(), wait);
-}
-// castSpell の間だけ「効果ログ＝ポップアップにも出す」スコープを張る（main.js の castSpell が使う）
-function beginLogToast() { UI.logToastScope++; }
-function endLogToast() { UI.logToastScope = Math.max(0, UI.logToastScope - 1); }
-// 対戦をまたいで残らないように（リトライ・タイトルへ戻るとき）
-function clearToasts() {
-  const stack = document.getElementById("toast-stack");
-  if (stack) stack.innerHTML = "";
-  UI.logToastScope = 0;
-}
-
-// ---------- メッセージ（中央の大きな表示） ----------
-function setMessage(msg) {
-  document.getElementById("message").textContent = msg;
-}
-
-// ---------- 汎用ダイアログ（Promiseベース） ----------
-// opts: { title, body?, cards?: [{card, disabled, note}], buttons: [{label, value, primary}], peek? }
-// peek:true を渡すと「👁 盤面を確認」ボタンが付き、決定を保留したまま一旦閉じて盤面/手札を見られる
-// 解決値: { action: value } または { action: "card", cardId }
-function showDialog(opts) {
-  return new Promise(resolve => {
-    closePassiveDialog(); // 開きっぱなしの受け身ダイアログ（🔍マス情報など）は自動で閉じる
-    UI.dialogBusy++;
-    const overlay = document.getElementById("overlay");
-    const box = document.getElementById("dialog");
-    const restoreBtn = document.getElementById("peek-restore");
-    let html = `<h2>${esc(opts.title)}</h2>`;
-    if (opts.body) html += `<p class="dlg-body">${opts.body}</p>`;
-    if (opts.cards && opts.cards.length) {
-      html += `<div class="dlg-cards">` +
-        opts.cards.map(ci => cardHTML(ci.card, { disabled: ci.disabled, selectable: !ci.disabled, ribbon: ci.ribbon, ribbonCls: ci.ribbonCls })).join("") +
-        `</div>`;
-    }
-    html += `<div class="dlg-buttons">`;
-    if (opts.peek) html += `<button class="btn dlg-peek" data-peek="1" title="このウインドウを一旦閉じて盤面・手札を確認します（選択はそのまま保留されます）">👁 盤面を確認</button>`;
-    html += opts.buttons.map(b => `<button class="btn ${b.primary ? "primary" : ""}" data-value="${esc(b.value)}">${esc(b.label)}</button>`).join("") +
-      `</div>`;
-    box.innerHTML = html;
-    overlay.classList.add("show");
-
-    // 「👁 盤面を確認」: ダイアログを一旦隠し、フローティングの「選択に戻る」ボタンを出す（決定は保留）
-    const clearPeek = () => { restoreBtn.classList.add("hidden"); restoreBtn.onclick = null; };
-    const peek = () => {
-      overlay.classList.remove("show");
-      restoreBtn.classList.remove("hidden");
-      restoreBtn.onclick = () => { overlay.classList.add("show"); clearPeek(); };
-    };
-    const close = result => {
-      if (opts.passive && UI._passiveClose === closeSelf) UI._passiveClose = null;
-      UI.dialogBusy = Math.max(0, UI.dialogBusy - 1);
-      overlay.classList.remove("show");
-      clearPeek();
-      resolve(result);
-    };
-    const closeSelf = () => close({ action: "dismiss" });
-    if (opts.passive) UI._passiveClose = closeSelf; // 受け身ダイアログとして登録（後続のダイアログが自動で閉じられる）
-    const peekBtn = box.querySelector("[data-peek]");
-    if (peekBtn) peekBtn.addEventListener("click", peek);
-    box.querySelectorAll(".dlg-cards .card.selectable").forEach(cardEl => {
-      cardEl.addEventListener("click", () => close({ action: "card", cardId: cardEl.dataset.card }));
+    if (Profile.data.newRank) { Profile.data.newRank = 0; Profile.save(); }
+    $$("[data-a]", body).forEach((b) => b.onclick = () => {
+      const a = b.dataset.a;
+      if (a === "again") Main.newGame();
+      if (a === "title") Main.toTitle();
+      if (a === "endless") Main.endless();
     });
-    box.querySelectorAll(".dlg-buttons .btn:not(.dlg-peek)").forEach(btn => {
-      btn.addEventListener("click", () => close({ action: btn.dataset.value }));
-    });
-  });
-}
+    BGM.setTrack(cleared ? "win" : "lose");
+  }
 
-// ---------- 盤面から選べるタイルピッカー（霊地・式神選択） ----------
-// 候補マスを盤面で光らせ、①ダイアログのボタン ②「👁 盤面から選ぶ」→光ったマスを直接クリック、
-// のどちらでも選べる。どのマスを指しているかは #番号（盤面＆ボタン）で対応づく。
-// candidates: tile配列 / opts: { title, body, labelFn(tile)->string, cancelable?, cancelLabel? }
-// 解決値: 選んだ tile（キャンセルなら null）
-function humanPickTileOnMap(candidates, opts) {
-  return new Promise(resolve => {
-    closePassiveDialog(); // 開きっぱなしの受け身ダイアログは自動で閉じる
-    UI.dialogBusy++;
-    const overlay = document.getElementById("overlay");
-    const box = document.getElementById("dialog");
-    const restoreBtn = document.getElementById("peek-restore");
-    const svg = document.getElementById("board");
-    const ids = new Set(candidates.map(t => t.id));
-    setSelectableTiles(ids);
-    renderBoard(G);
+  function renderBook(tab = "shiki") {
+    show("book");
+    $$("#book-tabs .tab").forEach((t) => { t.classList.toggle("on", t.dataset.tab === tab); t.onclick = () => renderBook(t.dataset.tab); });
+    const body = $("#book-body");
+    const P = Profile.data;
+    if (tab === "shiki") {
+      const seen = SHIKI.filter((s) => P.seenShiki[s.id]).length;
+      body.innerHTML = `<p class="dim" style="font-size:12px;margin-bottom:8px">出会った式神 ${seen}/${SHIKI.length}</p><div class="book-grid">${SHIKI.map((s) => {
+        const known = P.seenShiki[s.id];
+        return `<div data-s="${s.id}">${known ? `<div class="shiki r${s.rar}"><div class="pt">${Art.portrait(s.id)}</div><div class="sn">${esc(s.name)}</div></div>` : `<div class="shiki r${s.rar}"><div class="pt unknown">${Art.portrait(s.id)}</div><div class="sn">？？？</div></div>`}</div>`;
+      }).join("")}</div>`;
+      $$("[data-s]", body).forEach((e) => e.onclick = () => {
+        const s = SHIKI_BY_ID[e.dataset.s];
+        if (!P.seenShiki[s.id]) { toast("まだ出会っていない"); return; }
+        modal(`<div class="det"><div class="big-pt">${Art.portrait(s.id)}</div><div><span class="rar" style="background:${RAR[s.rar].color}">${RAR[s.rar].name}</span><h3>${esc(s.name)} <span class="yomi-kana">${esc(s.yomi)}</span></h3>
+          <div class="effect">${esc(s.text.replace("{n}", 0).replace("{x}", "1.0"))}</div></div></div><p class="lore" style="margin-top:8px;font-size:13px;color:#5c4d33">${esc(s.lore)}</p>`);
+      });
+    }
+    if (tab === "yaku") {
+      body.innerHTML = `<div class="yaku-list">${YAKU_ORDER.filter((k) => !YAKU[k].hidden || P.seenYaku[k]).map((k) => {
+        const Y = YAKU[k], y = YOMI[k];
+        return `<div class="yaku-row"><div class="yr-h"><span class="yr-name">${esc(Y.name)}</span><span class="yr-val"><span class="b1">${Y.bun}</span> × <span class="b2">${Y.bai}</span></span>
+          <span class="yr-lv">${P.seenYaku[k] ? `${P.seenYaku[k]}回` : "未"}</span></div><div class="yr-desc">${esc(Y.desc)}</div>
+          <div class="yr-uta">${esc(y.uta)}　— ${esc(y.poet)}</div></div>`;
+      }).join("")}</div>`;
+    }
+    if (tab === "yokai") {
+      const all = Object.entries(YOKAI).filter(([, v]) => v);
+      body.innerHTML = `<div class="book-grid" style="grid-template-columns:repeat(auto-fill,minmax(78px,1fr))">${all.map(([id, y]) => {
+        const met = P.metYokai[id];
+        return `<div data-y="${id}" style="text-align:center"><div style="width:66px;height:66px;margin:0 auto;border-radius:50%;overflow:hidden;background:#f3e9d2;border:2px solid #1d1a17" class="${met ? "" : "unknown"}">${Art.portrait(y.portrait)}</div>
+          <div class="bname">${met ? esc(y.name) : "？？？"}${P.beatYokai[id] ? " 祓" : ""}</div></div>`;
+      }).join("")}</div>`;
+      $$("[data-y]", body).forEach((e) => e.onclick = () => {
+        const y = YOKAI[e.dataset.y];
+        if (!P.metYokai[e.dataset.y]) { toast("まだ出会っていない"); return; }
+        modal(`<div class="det"><div class="big-pt" style="border-radius:50%">${Art.portrait(y.portrait)}</div><div><h3>${esc(y.name)}</h3>
+          <div class="effect">${esc(y.qtext || "癖なし")}</div><p class="lore">「${esc(y.line)}」</p></div></div>`);
+      });
+    }
+    if (tab === "fuda") {
+      body.innerHTML = `<p class="dim" style="font-size:12px;margin-bottom:8px">花札四十八枚。月（植物）が12、種類が4（光・種・短冊・カス）。</p>
+        <div class="deck-grid">${BASE_DECK.map((c, i) => Art.card({ ...c, uid: "b" + i })).join("")}</div>`;
+      $$(".card", body).forEach((ce, i) => ce.onclick = () => {
+        const c = BASE_DECK[i];
+        modal(`<div class="det"><div style="flex:none;--cw:110px">${Art.card({ ...c, uid: "" })}</div><div><h3>${esc(cardName(c))}</h3>
+          <p>${MONTHS[c.m].wa}（${KANSUJI[c.m]}月）</p><p>${TYPES[c.t].name}・文${TYPES[c.t].bun}</p></div></div>`);
+      });
+    }
+  }
 
-    const onBoardClick = e => {
-      const gEl = e.target.closest && e.target.closest(".tile");
-      if (!gEl) return;
-      const id = Number(gEl.dataset.tile);
-      if (ids.has(id)) finish(G.tiles[id]);
+  // ---------- 保存 ----------
+  function save() { if (run) Run.save(run); }
+
+  // ---------- 操作の結線（1回だけ） ----------
+  function bindStatic() {
+    $("#btn-play").onclick = () => doPlay();
+    $("#btn-discard").onclick = () => doDiscard();
+    $("#btn-sort").onclick = () => { sortMode = sortMode === "month" ? "type" : "month"; renderHand(false); updateButtons(); SFX.page(); };
+    $("#btn-deck").onclick = () => showDeck();
+    $("#btn-reroll").onclick = () => {
+      const res = Run.reroll(run);
+      if (res.error) { SFX.error(); toast(res.error, true); return; }
+      SFX.page(); save(); renderShop();
     };
-    function finish(tile) {
-      UI.dialogBusy = Math.max(0, UI.dialogBusy - 1);
-      svg.removeEventListener("click", onBoardClick);
-      restoreBtn.classList.add("hidden");
-      restoreBtn.onclick = null;
-      clearSelectableTiles();
-      overlay.classList.remove("show");
-      renderBoard(G);
-      resolve(tile);
-    }
-    const peek = () => {
-      overlay.classList.remove("show");
-      restoreBtn.classList.remove("hidden");
-      restoreBtn.textContent = "▲ 選択ウインドウに戻る";
-      restoreBtn.onclick = () => { overlay.classList.add("show"); restoreBtn.classList.add("hidden"); };
-    };
+    $("#btn-leave").onclick = () => Main.leaveShop();
+    // 採点中にタップで早送り
+    $("#field").addEventListener("click", () => { if (busy) skip = true; });
+    $$("[data-back]").forEach((b) => b.onclick = () => Main.toTitle());
+    window.addEventListener("resize", () => { if (run && run.phase === "round" && !busy) renderHand(false); });
+  }
 
-    // v25: 候補は「縦1列のリスト」で並べる。
-    // 以前は .dlg-buttons（横並び・btnはwhite-space:nowrap）だったため、
-    // 「🔥 火の土地 #12（Lv3・価値480G・💧アンダイン）」のような長いラベルがスマホ幅を突き抜けて
-    // 右側が見切れていた（原さん報告）。リスト化＋折り返しで全文が読めるようにし、
-    // 候補が多いときはリスト枠だけをスクロールさせて「👁 盤面から選ぶ／やめる」を常に画面内に残す。
-    let html = `<h2>${esc(opts.title)}</h2>`;
-    html += `<p class="dlg-body">${opts.body}<br>🖱 <b>盤面で光っているマス（#番号）を直接クリック</b>しても選べます（「👁 盤面から選ぶ」で盤面へ）。</p>`;
-    html += `<div class="tile-pick-list">`;
-    html += candidates.map(t => {
-      const label = opts.labelFn(t);
-      // ラベルに #番号 が含まれない種類のマス（本宮・鳥居など）には番号バッジを添えて盤面と対応づける
-      const no = label.includes(`#${t.id}`) ? "" : `<span class="tp-no">#${t.id}</span>`;
-      return `<button class="btn tile-pick" data-id="${t.id}">${no}<span class="tp-label">${label}</span></button>`;
-    }).join("");
-    html += `</div>`;
-    html += `<div class="dlg-buttons tile-pick-actions">`;
-    html += `<button class="btn dlg-peek" data-peek="1" title="盤面を表示して、光っているマスを直接クリックで選べます">👁 盤面から選ぶ</button>`;
-    if (opts.cancelable) html += `<button class="btn" data-cancel="1">${esc(opts.cancelLabel || "やめる")}</button>`;
-    html += `</div>`;
-    box.innerHTML = html;
-    overlay.classList.add("show");
-
-    box.querySelector("[data-peek]").addEventListener("click", peek);
-    box.querySelectorAll("[data-id]").forEach(b => b.addEventListener("click", () => finish(G.tiles[Number(b.dataset.id)])));
-    const cancelBtn = box.querySelector("[data-cancel]");
-    if (cancelBtn) cancelBtn.addEventListener("click", () => finish(null));
-    svg.addEventListener("click", onBoardClick);
-  });
-}
-
-// ---------- ステージ選択画面 ----------
-// opts.training: 稽古（練習対戦）モードのステージ選択
-// opts.versus:   2人対戦のステージ選択 {names:[1P名, 2P名]}（全ステージ選択可）
-// opts.royale:   三つ巴（人間1 + CPU2）のステージ選択（全ステージ選択可）
-// opts.sealed:   封符戦（その場開封の使い捨てプールで構築して1戦）のステージ選択（全ステージ選択可）
-// 解決値: ステージ index（数値）／ "help" / "album" / "deck" / "training" / "versus" / "royale" / "sealed" / "workshop" / "weekly" / "matchlen" / "back"
-function showStageSelect(opts = {}) {
-  const training = !!opts.training;
-  const versus = opts.versus || null;
-  const royale = !!opts.royale;
-  const sealed = !!opts.sealed;
-  return new Promise(resolve => {
-    const overlay = document.getElementById("overlay");
-    const box = document.getElementById("dialog");
-    const prog = loadProgress();
-    const rows = STAGES.map((s, i) => {
-      const unlocked = versus || royale || sealed || isStageUnlocked(i); // 2人対戦・三つ巴・封符戦は全ステージから選べる
-      const cleared = !!prog.cleared[s.id];
-      const desc = unlocked
-        ? `${versus ? "" : royale ? `VS ${esc(s.cpuName)} ＋ 乱入者1名｜` : `VS ${esc(s.cpuName)}｜`}${buildBoard(s).length}マス｜目標 ${((s.rules && s.rules.target) || 4000)}G<br>${esc(s.desc)}`
-        : "？？？（前のステージをクリアで解放）";
-      return `<button class="stage-btn ${unlocked ? "" : "locked"}" data-idx="${i}" ${unlocked ? "" : "disabled"}>
-        <span class="st-bg" aria-hidden="true">${unlocked ? s.icon : "🔒"}</span>
-        <span class="st-icon">${unlocked ? s.icon : "🔒"}</span>
-        <span class="st-main"><b><span class="st-no">STAGE ${i + 1}</span>${unlocked ? esc(s.name) : "？？？"}</b><small>${desc}</small></span>
-        <span class="st-star">${cleared ? `<i class="candle big lit" title="踏破の灯"></i>` : unlocked ? `<i class="candle big" title="未踏破"></i>` : ""}</span>
-      </button>`;
-    }).join("");
-    const diff = DIFFICULTIES[loadDifficulty()];
-    const streak = (typeof trainingStreakCount === "function") ? trainingStreakCount() : 0;
-    const wr = currentWeeklyRule();
-    const wOn = weeklyEnabled();
-    // 世界観ヘッダー（紋章＋題字＋口上＋状態チップ）
-    const chips = arr => `<div class="ss-chips">${arr.filter(Boolean).map(t => `<span class="ss-chip">${t}</span>`).join("")}</div>`;
-    const hero = (title, flavor, chipArr) => `
-      <div class="ss-hero">
-        <div class="ss-crest">${typeof TITLE_EMBLEM_SVG !== "undefined" ? TITLE_EMBLEM_SVG : ""}</div>
-        <div class="ss-hero-main">
-          <h2>${title}</h2>
-          <p class="ss-flavor">${flavor}</p>
-          ${chips(chipArr)}
-        </div>
-      </div>`;
-    const ml = MATCH_LENGTHS[loadMatchLength()];
-    const mlChip = loadMatchLength() !== "normal" ? `⏱ 決着: <b>${ml.icon}${ml.label}</b>` : "";
-    const weeklyChip = wOn ? `🎪 今週のルール: <b>${esc(wr.name)}</b>` : "";
-    const header = versus
-      ? hero("🎮 決闘の間",
-        `同じ卓を囲み、端末を手渡して覇を競う——友との真剣勝負。<b>全ステージから選択可</b>（報酬・進行度は変化しません）。`,
-        [`🔵 <b>${esc(versus.names[0])}</b> vs 🔴 <b>${esc(versus.names[1])}</b>`, weeklyChip, mlChip])
-      : sealed
-      ? hero("🎁 封符戦の間",
-        `その場で開封した<b>壱の巻・弐の巻の文箱5つずつ（計${SEALED_PACKS_PER_SET * SEALED_PACK_SIZE * 2}枚）</b>だけで
-         ${DECK_SIZE}枚デッキを組み、ステージの主に挑む——<b>コレクションの厚さに関係なく誰でも対等</b>の腕くらべ。
-         開封プールはコレクションに入りません（勝てば通常どおりカード${REWARD_WIN}枚獲得・進行度は変化しません）。<b>全ステージから選択可</b>。`,
-        [`👤 <b>${esc(currentProfileName())}</b>`, `⚙ 難易度: <b>${diff.icon} ${diff.label}</b>`, weeklyChip, mlChip])
-      : royale
-      ? hero("⚔ 三つ巴の戦場",
-        `🔵あなた・🔴ステージの主・🟢乱入者——<b>3人の陰陽師</b>が同じ盤上で覇を競う。乱入者は毎回ランダム！
-         勝てばカードを${REWARD_WIN}枚獲得（進行度は変化しません）。<b>全ステージから選択可</b>。`,
-        [`👤 <b>${esc(currentProfileName())}</b>`, `⚙ 難易度: <b>${diff.icon} ${diff.label}</b>`, weeklyChip, mlChip])
-      : training
-      ? hero("🎯 修練の間",
-        `腕とデッキを磨く練習対戦。<b>勝つとカードを${REWARD_TRAINING}枚獲得</b>（何度でも）。` +
-        `🔥<b>${TRAINING_STREAK_FOR_RARE}連勝から</b>は毎回<b>稀以上1枚保証</b>（負け・投了でリセット）。`,
-        [streak >= 1 ? `🔥 <b>${streak}連勝中</b>` : "", `⚙ 難易度: <b>${diff.icon} ${diff.label}</b>`])
-      : hero("✦ 遠征の絵巻 — 旅路を選べ ✦",
-        `大地に張り巡らされた霊脈の道。式神を従えて霊地を結び、連鎖で通行料を吊り上げ、
-         目標資産を成して🏯本宮へ凱旋せよ。初クリアの<b>文箱</b>と勝利の<b>カード</b>で、自分だけのデッキを組み上げよ。`,
-        [`👤 <b>${esc(currentProfileName())}</b>`, `⚙ 難易度: <b>${diff.icon} ${diff.label}</b>`, weeklyChip, mlChip]);
-    const buttons = (versus || training || royale || sealed)
-      ? (training || royale || sealed ? `<button class="btn" data-value="difficulty">⚙ 難易度: ${diff.icon}${diff.label}</button>` : "") +
-        `<button class="btn" data-value="back">← 戻る</button>`
-      : `<button class="btn" data-value="profile">👤 ${esc(currentProfileName())}</button>
-         <button class="btn" data-value="difficulty">⚙ 難易度: ${diff.icon}${diff.label}</button>
-         <button class="btn" data-value="matchlen">⏱ 決着: ${ml.icon}${ml.label}</button>
-         <button class="btn" data-value="album">📚 アルバム（${distinctOwned()}/${CARD_DB.length}）</button>
-         <button class="btn" data-value="deck">🛠 デッキ構築</button>
-         <button class="btn" data-value="workshop">♻️ 交換所（🎟${shardCount()}）</button>
-         <button class="btn" data-value="training">🎯 稽古</button>
-         <button class="btn" data-value="royale">⚔ 三つ巴</button>
-         <button class="btn" data-value="sealed">🎁 封符戦</button>
-         <button class="btn" data-value="versus">🎮 2人対戦</button>
-         <button class="btn" data-value="weekly">🎪 週替り: ${wr.icon}${esc(wr.name)}${wOn ? "" : "（OFF）"}</button>
-         <button class="btn" data-value="help">❓ 遊び方</button>`;
-    overlay.classList.add("show");
-    const close = v => { overlay.classList.remove("show"); resolve(v); };
-
-    // --- ステージ一覧（「← ステージを選び直す」でここへ戻ってくる） ---
-    function renderList() {
-      box.innerHTML = `${header}<div class="stage-list">${rows}</div><div class="dlg-buttons">${buttons}</div>`;
-      box.scrollTop = 0;
-      box.querySelectorAll(".stage-btn:not(.locked)").forEach(btn =>
-        btn.addEventListener("click", () => pick(Number(btn.dataset.idx))));
-      box.querySelectorAll(".dlg-buttons .btn").forEach(btn =>
-        btn.addEventListener("click", () => close(btn.dataset.value)));
-    }
-
-    // v28: ステージを押した瞬間に開戦していたため、押し間違えても戻れなかった。
-    // 出陣確認を1枚挟んで「選び直せる」ようにする。
-    // （🎁封符戦だけは startSealed 側に文箱開封前の確認があるので二重にしない）
-    function pick(idx) {
-      if (sealed) { close(idx); return; }
-      renderConfirm(idx);
-    }
-
-    // --- 出陣確認（相手の顔・盤面の規模・目標・ルールを見てから決める） ---
-    function renderConfirm(idx) {
-      const s = STAGES[idx];
-      const ch = (typeof CHARACTERS !== "undefined" && CHARACTERS[s.id]) || null;
-      const target = (s.rules && s.rules.target) || 4000;
-      const facts = [
-        versus ? `🎮 <b>${esc(versus.names[0])}</b> vs <b>${esc(versus.names[1])}</b>` : "",
-        `🔲 盤面: <b>${buildBoard(s).length}マス</b>`,
-        `🎯 目標資産: <b>${target}G</b>`,
-        `⛩ 周回に必要な鳥居: <b>${s.gatesNeeded || 3}</b>`,
-        prog.cleared[s.id] ? "⭐ クリア済み" : "🆕 未クリア",
-        training ? "🎯 稽古（進行度は変化しません）"
-          : royale ? "⚔ 三つ巴（進行度は変化しません）"
-          : versus ? "🎮 2人対戦（報酬・進行度はありません）" : "",
-        versus ? "" : `⚙ 難易度: <b>${diff.icon}${diff.label}</b>`,
-        weeklyChip, mlChip,
-      ];
-      box.innerHTML = `
-        <div class="ss-confirm">
-          <div class="sc-head">
-            <div class="sc-face">${ch ? charPortraitSVG(ch, 72) : `<span class="sc-emoji">${s.icon}</span>`}</div>
-            <div class="sc-title">
-              <div class="sc-no">STAGE ${idx + 1}</div>
-              <h2>${s.icon} ${esc(s.name)}</h2>
-              ${versus ? "" : `<div class="sc-cpu" style="color:${ch ? ch.color : "var(--gold)"}">🗡 ${esc(s.cpuName)}${royale ? "　＋ 🟢乱入者1名" : ""}</div>`}
-            </div>
-          </div>
-          <p class="sc-desc">${esc(s.desc)}</p>
-          ${ch && !versus ? `<p class="sc-quote">「${esc((ch.lines.greet && ch.lines.greet[0]) || "")}」</p>` : ""}
-          <div class="ss-chips sc-facts">${facts.filter(Boolean).map(t => `<span class="ss-chip">${t}</span>`).join("")}</div>
-        </div>
-        <div class="dlg-buttons">
-          <button class="btn primary" data-go>⚔ この盤面で挑む</button>
-          <button class="btn" data-reselect>← ステージを選び直す</button>
-        </div>`;
-      box.scrollTop = 0;
-      box.querySelector("[data-go]").addEventListener("click", () => close(idx));
-      box.querySelector("[data-reselect]").addEventListener("click", renderList);
-    }
-
-    renderList();
-  });
-}
-
-// ---------- 難易度選択（イージー/ノーマル/ハード） ----------
-function showDifficultyPicker() {
-  return new Promise(resolve => {
-    const overlay = document.getElementById("overlay");
-    const box = document.getElementById("dialog");
-    const cur = loadDifficulty();
-    const rows = Object.keys(DIFFICULTIES).map(k => {
-      const d = DIFFICULTIES[k];
-      return `<button class="stage-btn ${k === cur ? "diff-current" : ""}" data-diff="${k}">
-        <span class="st-icon">${d.icon}</span>
-        <span class="st-main"><b>${d.label}${k === cur ? "（現在）" : ""}</b><small>${esc(d.desc)}</small></span>
-        <span class="st-star">${k === cur ? "✔" : ""}</span>
-      </button>`;
-    }).join("");
-    box.innerHTML = `<h2>⚙ ゲーム難易度</h2>
-      <p class="dlg-body">相手ごとの強さの違いはそのままに、<b>全体の手ごたえ</b>を調整します（CPUの積極性・デッキの強さ・資金力が変わります）。次の対戦から反映されます。</p>
-      <div class="stage-list">${rows}</div>
-      <div class="dlg-buttons"><button class="btn" data-value="back">← 戻る</button></div>`;
-    overlay.classList.add("show");
-    const close = () => { overlay.classList.remove("show"); resolve(); };
-    box.querySelectorAll("[data-diff]").forEach(btn => btn.addEventListener("click", () => {
-      saveDifficulty(btn.dataset.diff); close();
-    }));
-    box.querySelector("[data-value=back]").addEventListener("click", close);
-  });
-}
-
-// ---------- 決着モード選択（短期戦/標準/長期戦/大戦） ----------
-// 目標資産とラウンド上限に倍率を掛けて、対戦の長さを好みに調整する（v18・稽古以外の全モードに適用）
-function showMatchLengthPicker() {
-  return new Promise(resolve => {
-    const overlay = document.getElementById("overlay");
-    const box = document.getElementById("dialog");
-    const cur = loadMatchLength();
-    const rows = Object.keys(MATCH_LENGTHS).map(k => {
-      const m = MATCH_LENGTHS[k];
-      return `<button class="stage-btn ${k === cur ? "diff-current" : ""}" data-ml="${k}">
-        <span class="st-icon">${m.icon}</span>
-        <span class="st-main"><b>${m.label}${k === cur ? "（現在）" : ""}</b><small>${esc(m.desc)}</small></span>
-        <span class="st-star">${k === cur ? "✔" : ""}</span>
-      </button>`;
-    }).join("");
-    box.innerHTML = `<h2>⏱ 決着モード（対戦の長さ）</h2>
-      <p class="dlg-body">ステージの<b>目標資産</b>と<b>ラウンド上限</b>に倍率を掛けて、決着までの長さを調整します。
-      正規対戦・三つ巴・2人対戦に適用（稽古は常に時短）。次の対戦から反映されます。</p>
-      <div class="stage-list">${rows}</div>
-      <div class="dlg-buttons"><button class="btn" data-value="back">← 戻る</button></div>`;
-    overlay.classList.add("show");
-    const close = () => { overlay.classList.remove("show"); resolve(); };
-    box.querySelectorAll("[data-ml]").forEach(btn => btn.addEventListener("click", () => {
-      saveMatchLength(btn.dataset.ml); close();
-    }));
-    box.querySelector("[data-value=back]").addEventListener("click", close);
-  });
-}
-
-// ---------- バトル演出（フルスクリーンのカットイン・スキップ可） ----------
-// 侵略側が左から、防衛側が右から突撃してくるカットイン。攻撃のたびにカードが突進し、
-// 被弾側が揺れる。「⏩ スキップ」で残りのログを一括表示して即座に決着へ進める。
-UI.battleSkip = false;
-UI.battleCtx = null; // { attName, defName } — ログ行からどちらの攻撃かを判定する
-
-function openBattleView(g, attackerName, attCard, attItem, tile, defItem) {
-  closePassiveDialog(); // 🔍マス情報などが開いていたら閉じてから（上書きでbusyカウンタが狂うのを防ぐ）
-  const defCard = CARD_BY_ID[tile.creature.cardId];
-  const defBonus = attCard.ab.includes("pierce") ? 0 : landHpBonus(tile, defCard);
-  const support = landSupportSt(g, tile);
-  const dCur = tile.creature.hp ?? defCard.hp;
-  UI.battleSkip = false;
-  UI.battleCtx = { attName: attCard.name, defName: defCard.name };
-  const cutin = document.getElementById("battle-cutin");
-  const fighter = (c, item, extraHp, side, extraMods = "") => `
-    <div class="fighter ${side === "att" ? "bc-att" : "bc-def"}" id="bc-${side}">
-      <div class="f-side">${side === "att" ? "⚔ 侵略" : "🛡 防衛"}</div>
-      ${cardHTML(c)}
-      <div class="f-mods">
-        ${item ? `<span class="f-mod">${item.st > 0 ? "⚔️" : "🛡️"} ${esc(item.name)}</span>` : ""}
-        ${extraHp > 0 ? `<span class="f-mod">🏞 土地HP+${extraHp}</span>` : ""}
-        ${extraMods}
-      </div>
-    </div>`;
-  // 物理/呪力の攻防に関わる要素はカットインにバッジで明示（呪力攻撃は宝具由来も含む）
-  const typeMods = (c, item) =>
-    (c.ab.includes("physnull") ? `<span class="f-mod">🌫 物理無効</span>` : "") +
-    (c.ab.includes("physreflect") ? `<span class="f-mod">🪞 物理反射</span>` : "") +
-    ((c.ab.includes("magicatk") || (item && item.magicatk)) ? `<span class="f-mod">✨ 呪力攻撃</span>` : "");
-  // 五行相剋の有利不利をバッジと相性バナーで明示（v22・v30五行対応）
-  const rel = elemRelation(attCard.element, defCard.element); // 攻撃側から見た関係
-  const elemMod = r =>
-    r === "adv" ? `<span class="f-mod f-adv">⚡ 相剋 ST+${ELEM_ADV_ST}</span>` :
-    r === "dis" ? `<span class="f-mod f-dis">⚠ 剋される</span>` : "";
-  const relBanner =
-    rel === "adv"  ? `<span class="be-rel be-adv">⚡ 剋す ST+${ELEM_ADV_ST} ▶</span>` :
-    rel === "dis"  ? `<span class="be-rel be-dis">◀ 剋される（相手にST+${ELEM_ADV_ST}）</span>` :
-    rel === "none" ? `<span class="be-rel be-none">⚪ 相性なし（無属性）</span>` :
-                     `<span class="be-rel be-even">— 互角 —</span>`;
-  const elemChip = e => `<span class="be-elem" style="--ec:${ELEMENTS[e].color}">${ELEMENTS[e].icon} ${ELEMENTS[e].name}</span>`;
-  const elemBanner = `<div class="bc-elems">
-      ${elemChip(attCard.element)}${relBanner}${elemChip(defCard.element)}
-      <div class="bc-wheel">${elemWheelHTML([attCard.element, defCard.element].filter(e => e !== "neutral"))}</div>
-    </div>`;
-  const defMods =
-    (support > 0 ? `<span class="f-mod">🏯 援護ST+${support}</span>` : "") +
-    (dCur < defCard.hp ? `<span class="f-mod">🩹 HP残${dCur}</span>` : "") +
-    (defCard.ab.includes("capture") ? `<span class="f-mod">🕸️ 捕縛</span>` : "") +
-    elemMod(rel === "adv" ? "dis" : rel === "dis" ? "adv" : rel) +
-    typeMods(defCard, defItem);
-  cutin.innerHTML = `
-    <div class="bc-flash" id="bc-flash"></div>
-    <div class="bc-inner">
-      <h2 class="bc-title">⚔ バトル！ <small>${esc(ELEMENTS[tile.element].name)}の土地 Lv${tile.level}</small></h2>
-      ${elemBanner}
-      <div class="battle-arena">
-        ${fighter(attCard, attItem, 0, "att", elemMod(rel) + typeMods(attCard, attItem))}
-        <div class="vs">VS</div>
-        ${fighter(defCard, defItem, defBonus, "def", defMods)}
-      </div>
-      <div id="battle-log"></div>
-      <div class="bc-actions"><button id="battle-skip" class="btn small" title="残りの演出を飛ばして決着まで進めます">⏩ 演出をスキップ</button></div>
-    </div>`;
-  cutin.classList.remove("hidden", "bc-out");
-  document.getElementById("battle-skip").addEventListener("click", () => {
-    UI.battleSkip = true;
-    cutin.classList.add("bc-skipping");
-  });
-}
-
-// ログ行に応じたカットインの動き（突進・被弾・会心フラッシュ・撃破）
-function _battleLineFx(line) {
-  const ctx = UI.battleCtx || {};
-  const att = document.getElementById("bc-att");
-  const def = document.getElementById("bc-def");
-  const flash = document.getElementById("bc-flash");
-  const pulse = (el, cls) => {
-    if (!el) return;
-    el.classList.remove(cls);
-    void el.offsetWidth; // アニメを再発火させるためのリフロー
-    el.classList.add(cls);
+  return {
+    bindStatic, show, toast, modal, closeModal, talk, renderTitle, renderSelect, renderEmaki, renderRound, renderShop, renderEnd, renderBook,
+    showCashout, showPack, showSeason, showHowto, showSettings, showYakuList, showDeck,
+    setRun(r) { run = r; sel = []; armedFu = null; busy = false; },
+    get run() { return run; },
+    get busy() { return busy; },
   };
-  if (line.includes("会心")) { pulse(flash, "go-crit"); return; }
-  if (line.startsWith(`${ctx.attName}の攻撃`) || line.startsWith(`${ctx.attName}の呪力攻撃`)) { pulse(att, "bc-lunge-r"); pulse(def, "bc-hurt"); pulse(flash, "go"); return; }
-  if (line.startsWith(`${ctx.defName}の攻撃`) || line.startsWith(`${ctx.defName}の呪力攻撃`)) { pulse(def, "bc-lunge-l"); pulse(att, "bc-hurt"); pulse(flash, "go"); return; }
-  if (line.includes("物理無効！") || line.includes("物理反射！")) { pulse(flash, "go"); return; }
-  if (line.includes("跳ね返った")) { // 物理反射のダメージが攻撃側に返った行（行頭は被弾した側の名前）
-    if (line.startsWith(ctx.attName)) pulse(att, "bc-hurt");
-    else if (line.startsWith(ctx.defName)) pulse(def, "bc-hurt");
-    pulse(flash, "go"); return;
-  }
-  if (line.includes("倒された")) {
-    if (line.startsWith(ctx.defName)) pulse(def, "bc-dead");
-    else if (line.startsWith(ctx.attName)) pulse(att, "bc-dead");
-  }
-}
-
-async function playBattleLines(lines, interval = 700) {
-  const el = document.getElementById("battle-log");
-  for (const line of lines) {
-    const instant = UI.battleSkip; // スキップ後は残りを一括表示
-    if (el) {
-      const div = document.createElement("div");
-      div.textContent = line;
-      if (line.includes("会心")) div.className = "crit";
-      else if (line.startsWith("📊")) div.className = "formula";
-      el.appendChild(div);
-      el.scrollTop = el.scrollHeight;
-    }
-    log(line, "battle");
-    if (instant) continue;
-    if (line.includes("倒された")) SFX.destroy();
-    else if (line.includes("会心")) SFX.destroy();
-    else if (line.includes("攻撃！")) SFX.hit();
-    _battleLineFx(line);
-    await sleep(interval);
-  }
-}
-
-function closeBattleView() {
-  const cutin = document.getElementById("battle-cutin");
-  cutin.classList.add("bc-out"); // フェードアウトしてから消す
-  setTimeout(() => { cutin.classList.add("hidden"); cutin.classList.remove("bc-out", "bc-skipping"); }, 320);
-}
-
-// ---------- 勝利の祝福演出 ----------
-// 金色の光条＋舞い散る紙吹雪＋祝福の鐘の音。演出中もクリックは透過する（pointer-events:none）ので
-// 続く報酬ダイアログの操作を妨げない。opts.grand で紙吹雪を増量（初クリア用）。
-async function playVictoryFx(title, sub, opts = {}) {
-  const old = document.getElementById("victory-fx");
-  if (old) old.remove();
-  const host = document.createElement("div");
-  host.id = "victory-fx";
-  const colors = ["#ffd76a", "#ffe9a0", "#4da3ff", "#ff8a6a", "#8ee0a0", "#d9a6ff", "#fff"];
-  const n = opts.grand ? 110 : 70;
-  let confetti = "";
-  for (let i = 0; i < n; i++) {
-    const left = Math.random() * 100;
-    const delay = Math.random() * 1.6;
-    const dur = 2.2 + Math.random() * 1.6;
-    const c = colors[Math.floor(Math.random() * colors.length)];
-    const w = 6 + Math.random() * 7, h = 8 + Math.random() * 9;
-    const rot = Math.floor(Math.random() * 360);
-    confetti += `<i class="vf-confetti" style="left:${left}vw;width:${w}px;height:${h}px;background:${c};animation-delay:${delay}s;animation-duration:${dur}s;transform:rotate(${rot}deg)"></i>`;
-  }
-  host.innerHTML = `
-    <div class="vf-rays"></div>
-    <div class="vf-title">${esc(title)}</div>
-    <div class="vf-sub">${esc(sub || "")}</div>
-    ${confetti}`;
-  document.body.appendChild(host);
-  SFX.bless();
-  await sleep(1700); // タイトルの余韻まで待ってから次へ（紙吹雪は背後で降り続ける）
-  (async () => {   // 後片付けは待たずに進める（ダイアログの背後で静かにフェードアウト）
-    await sleep(2600);
-    host.classList.add("vf-fade");
-    await sleep(1100);
-    host.remove();
-  })();
-}
-
-// ---------- 分かれ道の選択（人間用） ----------
-function dirArrow(from, to) {
-  const dx = Math.sign(to.x - from.x), dy = Math.sign(to.y - from.y);
-  if (dx > 0) return "➡";
-  if (dx < 0) return "⬅";
-  return dy > 0 ? "⬇" : "⬆";
-}
-
-// startId から既定ルート（方向つき移動の近似＝背後のマスへ戻らない最初の候補）で進んだ場合の
-// マスアイコン列（【】=止まる予定のマス）。fromId は startId へ入る直前のマス（Uターン除外用）
-function routePreview(g, startId, steps, fromId = null) {
-  const icons = [];
-  const shown = Math.min(steps, 6);
-  let prev = fromId, cur = startId;
-  for (let s = 0; s < shown; s++) {
-    const t = g.tiles[cur];
-    let ic = t.type === "LAND" ? ELEMENTS[t.element].icon : TILE_ICONS[t.type];
-    if (t.type === "LAND" && t.owner !== null) ic += P_MINI[t.owner] || "🔸";
-    icons.push(s === steps - 1 ? `【${ic}】` : ic);
-    const nxt = moveOptions(g, t, prev)[0];
-    prev = cur;
-    cur = nxt.id;
-  }
-  return icons.join(" ") + (steps > shown ? " …" : "");
-}
-
-// v24（方向つき移動）: 進める方向＝moveOptions（隣接から背後＝prevIdを除いたもの）。
-// 通常は逆走できないため、このダイアログが出るのは分岐・交差か、方向未確定（🧭出発時）のときだけ
-async function humanChooseDirection(p, tile, stepsLeft, prevId = null) {
-  const legend = G.hotseat ? "🔹=🔵1P 🔸=🔴2P"
-    : G.players.length > 2 ? `🔹=自分 🔸=${esc(G.players[1].name)} 💚=${esc(G.players[2].name)}`
-    : "🔹=自分 🔸=敵";
-  const opts = moveOptions(G, tile, prevId);
-  const res = await showDialog({
-    title: prevId === null ? "🧭 進む方向" : "🔀 分かれ道",
-    body: `残り${stepsLeft}マス。行く手を選んでください（背後には戻れません。【】=止まる予定のマス、${legend}の土地）`,
-    peek: true,
-    buttons: opts.map(nt => ({
-      label: `${dirArrow(tile, nt)} ${routePreview(G, nt.id, stepsLeft, tile.id)}`,
-      value: String(nt.id),
-    })),
-  });
-  return Number(res.action);
-}
-
-// 賽の目を選ぶ（辻占用）
-async function showDicePicker() {
-  return new Promise(resolve => {
-    closePassiveDialog();
-    UI.dialogBusy++;
-    const overlay = document.getElementById("overlay");
-    const box = document.getElementById("dialog");
-    box.innerHTML = `<h2>辻占</h2><p class="dlg-body">次の賽の目を選んでください</p>
-      <div class="dlg-buttons dice-pick">` +
-      [1, 2, 3, 4, 5, 6].map(n => `<button class="btn primary" data-n="${n}">${n}</button>`).join("") +
-      `</div>`;
-    overlay.classList.add("show");
-    box.querySelectorAll("[data-n]").forEach(btn => btn.addEventListener("click", () => {
-      UI.dialogBusy = Math.max(0, UI.dialogBusy - 1);
-      overlay.classList.remove("show");
-      resolve(Number(btn.dataset.n));
-    }));
-  });
-}
-
-// ---------- メインの操作ボタン（v27: 操作ドック） ----------
-// 賽を振る操作は専用の丸いボタン（#roll-btn＝出目表示に重なる大きな的）で受ける。
-// 盤面中央から下段の右端へ移したので、盤面を隠さずに親指の届く位置で押せる。
-// それ以外のラベル（▶次へ等）は同じドックのピル（#action-btn）に出す。
-function mainActionButton(label) {
-  return /🎲/.test(label) ? document.getElementById("roll-btn") : document.getElementById("action-btn");
-}
-function showActionButton(label) {
-  const btn = mainActionButton(label);
-  if (btn.id === "action-btn") btn.textContent = label; // 賽ボタンの中身は固定（🎲＋振る）
-  btn.classList.remove("hidden");
-  UI._actionBtn = btn; // Space / Enter キーで押せるようにするため覚えておく
-  return btn;
-}
-function hideActionButton(btn) {
-  const b = btn || UI._actionBtn;
-  if (b) b.classList.add("hidden");
-  if (!btn || btn === UI._actionBtn) UI._actionBtn = null;
-}
-// メインの操作ボタン（1つだけ表示して押されるのを待つ）
-function waitButton(label) {
-  return new Promise(resolve => {
-    const btn = showActionButton(label);
-    const handler = () => {
-      hideActionButton(btn);
-      btn.removeEventListener("click", handler);
-      resolve();
-    };
-    btn.addEventListener("click", handler);
-  });
-}
-
-// 賽演出
-async function animateDice(finalValue) {
-  const el = document.getElementById("dice");
-  el.classList.add("rolling");
-  for (let i = 0; i < 8; i++) {
-    el.textContent = 1 + Math.floor(Math.random() * 6);
-    SFX.dice();
-    await sleep(60);
-  }
-  el.textContent = finalValue;
-  el.classList.remove("rolling");
-  await sleep(350);
-}
+})();

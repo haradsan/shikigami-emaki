@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>式神 肖像プレビュー</title>
+<style>
+  body { margin: 0; font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; background: #e9dfc6; color: #2a2420; }
+  header { padding: 12px 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .note { font-size: 12px; opacity: .75; }
+  #warn { color: #c8322a; font-size: 13px; white-space: pre-wrap; }
+  section { padding: 14px 16px 20px; }
+  .paper { background: #f3e9d2; }
+  .dark { background: #1b1712; color: #eadfc8; }
+  .strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .strip .s56 { width: 56px; height: 56px; border-radius: 8px; background: rgba(255,255,255,.35); }
+  .dark .strip .s56 { background: rgba(255,255,255,.05); }
+  .grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .cell { width: 150px; text-align: center; font-size: 12px; padding: 6px 0 8px; border-radius: 10px; background: rgba(255,255,255,.28); }
+  .dark .cell { background: rgba(255,255,255,.04); }
+  .cell .name { font-size: 14px; font-weight: bold; }
+  .cell .id { font-family: monospace; font-size: 10px; opacity: .6; }
+  .cell .s64 { width: 64px; height: 64px; display: inline-block; vertical-align: middle; }
+  .cell .s140 { width: 140px; height: 140px; display: block; margin: 4px auto 0; }
+  .cell .cnt { font-family: monospace; font-size: 10px; opacity: .55; }
+  .s56 svg, .s64 svg, .s140 svg { width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>式神 肖像プレビュー（js/art-shiki.js）</h1>
+  <div class="note">上段：56px の並び（シルエット確認）／各マス：64px・140px。和紙色と暗色の両方で表示。</div>
+  <div id="warn"></div>
+</header>
+<section class="paper"><h2>和紙色 #f3e9d2</h2><div class="strip"></div><div class="grid"></div></section>
+<section class="dark"><h2>暗色 #1b1712</h2><div class="strip"></div><div class="grid"></div></section>
+<script src="../js/art-shiki.js"></script>
+<script>
+const LIST = [
+  ['kamihito', '紙人形'], ['kooni', '小鬼'], ['kappa', '河童'], ['kamaitachi', '鎌鼬'], ['karakasa', 'からかさ小僧'],
+  ['ittan', '一反木綿'], ['kitsunebi', '狐火'], ['inugami', '犬神'], ['tsukumo', '付喪神'], ['tofu', '豆腐小僧'],
+  ['zashiki', '座敷童子'], ['maneki', '招き猫'], ['chochin', '提灯お化け'], ['makura', '枕返し'], ['nekomata', '猫又'],
+  ['amanojaku', '天邪鬼'], ['kodama', '木霊'], ['onibi', '鬼火'], ['sunekosuri', 'すねこすり'], ['betobeto', 'べとべとさん'],
+  ['karasutengu', '烏天狗'], ['bakedanuki', '化け狸'], ['a_komainu', '狛犬・阿'], ['un_komainu', '狛犬・吽'],
+  ['mizaru', '見ざる'], ['kikazaru', '聞かざる'], ['iwazaru', '言わざる'],
+  ['yukionna', '雪女'], ['tengu', '天狗'], ['gama', '大蝦蟇'], ['rokurokubi', 'ろくろ首'], ['nurikabe', '塗壁'],
+  ['dodomeki', '百々目鬼'], ['shoujou', '猩々'], ['yamagami', '山の神'], ['fuguruma', '文車妖妃'], ['jorogumo', '絡新婦'],
+  ['kanedama', '金霊'], ['binbogami', '貧乏神'], ['raijuu', '雷獣'], ['hakutaku', '白澤'], ['nue', '鵺'],
+  ['amabie', 'アマビエ'], ['kasha', '火車'], ['hitodama', '人魂'], ['fuujin', '風神'], ['raijin', '雷神'],
+  ['yatagarasu', '八咫烏'], ['kudagitsune', '管狐'], ['baku', '獏'], ['ryujin', '龍神'], ['tsuchigumo_s', '蜘蛛の子'],
+  ['kyubi', '九尾の狐'], ['ootengu', '大天狗'], ['shuten', '酒呑童子'],
+  ['__unknown__', '（未知のid）'],
+];
+const warn = [];
+const BAD = [[/\sid=/, 'id属性'], [/<defs/, 'defs'], [/url\(#/, 'url(#)'], [/<text/, 'text'], [/Gradient/, 'グラデーション'], [/<filter/, 'filter'], [/NaN|undefined/, 'NaN/undefined']];
+function count(svg) { return (svg.match(/<(path|circle|ellipse|rect|polygon|polyline|line)\b/g) || []).length; }
+for (const sec of document.querySelectorAll('section')) {
+  const strip = sec.querySelector('.strip'), grid = sec.querySelector('.grid');
+  for (const [id, name] of LIST) {
+    let svg = '';
+    try { svg = ShikiArt.svg(id); } catch (e) { warn.push(id + ': ' + e.message); }
+    if (sec.classList.contains('paper')) {
+      for (const [re, label] of BAD) if (re.test(svg)) warn.push(id + ': ' + label + ' を含む');
+      if (id !== '__unknown__' && !ShikiArt.has(id)) warn.push(id + ': has() が false');
+      if (svg !== ShikiArt.svg(id)) warn.push(id + ': 出力が決定的でない');
+    }
+    const s = document.createElement('div'); s.className = 's56'; s.title = name; s.innerHTML = svg; strip.appendChild(s);
+    const c = document.createElement('div'); c.className = 'cell';
+    c.innerHTML = `<div class="name">${name}</div><div class="id">${id}</div><div class="s64">${svg}</div><div class="s140">${svg}</div><div class="cnt">要素 ${count(svg)}</div>`;
+    grid.appendChild(c);
+  }
+}
+if (ShikiArt.has('__unknown__')) warn.push('has(未知) が true');
+document.getElementById('warn').textContent = warn.length ? '⚠ ' + warn.join('\n⚠ ') : '';
+</script>
+</body>
+</html>

@@ -1,62 +1,48 @@
 // ============================================================
-// profile.js — プレイヤープロファイル（5人が別々に遊べる）
-// コレクション・デッキ・ステージ進行度をプレイヤーごとに分けて保存する。
-// 最初に読み込まれる必要がある（stages.js / collection.js が profileStorageKey を使う）
+// profile.js — 遊んだ記録（図鑑・解放・設定）。1プレイの途中経過は run.js が別に保存する。
 // ============================================================
 "use strict";
 
-const PROFILE_KEY = "shiki-emaki-profiles"; // プロファイル一覧はプレイヤー共通で1つ
-const PROFILE_COUNT = 5;
+const Profile = (() => {
+  const KEY = "shiki-hana-profile";
+  const def = () => ({
+    runs: 0, clears: 0, bestMonth: 0, bestYear: 1, bestHand: 0, bestHandYaku: null,
+    seenShiki: {}, seenYaku: {}, beatYokai: {}, metYokai: {}, unlocked: { hinata: true },
+    speed: 1, tips: {}, maxRank: 0,
+  });
+  let d = def();
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) d = Object.assign(def(), s); } catch (e) { /* */ }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) { /* */ } };
 
-function defaultProfiles() {
   return {
-    current: 0,
-    names: Array.from({ length: PROFILE_COUNT }, (_, i) => `プレイヤー${i + 1}`),
-  };
-}
-
-function loadProfiles() {
-  try {
-    const p = JSON.parse(localStorage.getItem(PROFILE_KEY));
-    if (p && typeof p === "object" && Array.isArray(p.names)) {
-      const def = defaultProfiles();
-      // 欠けがあっても安全に補完
-      for (let i = 0; i < PROFILE_COUNT; i++) {
-        if (typeof p.names[i] !== "string" || !p.names[i].trim()) p.names[i] = def.names[i];
+    get data() { return d; },
+    save,
+    seeShiki(id) { if (!d.seenShiki[id]) { d.seenShiki[id] = 1; save(); } },
+    seeYaku(key) { d.seenYaku[key] = (d.seenYaku[key] || 0) + 1; save(); },
+    meetYokai(id) { if (!d.metYokai[id]) { d.metYokai[id] = 1; save(); } },
+    beatYokai(id) { d.beatYokai[id] = (d.beatYokai[id] || 0) + 1; save(); },
+    // 一打の最高記録。通知するのは「それなりの記録を塗り替えたとき」だけ（序盤に毎回出ないように）
+    hand(total, keys) { if (total > d.bestHand) { const prev = d.bestHand; d.bestHand = total; d.bestHandYaku = keys; save(); return prev >= 1000; } return false; },
+    // 一年が終わったとき
+    endRun(run, cleared) {
+      d.runs += 1;
+      const reached = run.year > 1 ? 12 : (cleared ? 12 : run.month - 1);
+      if (run.year > d.bestYear || (run.year === d.bestYear && reached > d.bestMonth)) { d.bestMonth = reached; }
+      if (run.year > d.bestYear) d.bestYear = run.year;
+      if (cleared) {
+        d.clears += 1;
+        const nextRank = Math.min(RANKS.length - 1, (run.rank || 0) + 1);
+        if (nextRank > (d.maxRank || 0)) { d.maxRank = nextRank; d.newRank = nextRank; }
+        const newly = [];
+        for (const o of ONMYOJI) if (o.unlock === "clear1" && !d.unlocked[o.id]) { d.unlocked[o.id] = true; newly.push(o.id); }
+        save();
+        return newly;
       }
-      p.names = p.names.slice(0, PROFILE_COUNT);
-      p.current = Math.min(Math.max(0, p.current | 0), PROFILE_COUNT - 1);
-      return p;
-    }
-  } catch (e) { /* 壊れていたら初期化 */ }
-  return defaultProfiles();
-}
-
-function saveProfiles(p) {
-  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch (e) { /* プライベートモード等 */ }
-}
-
-function currentProfile() { return loadProfiles().current; }
-function currentProfileName() { const p = loadProfiles(); return p.names[p.current]; }
-function profileName(i) { return loadProfiles().names[i]; }
-
-function setCurrentProfile(i) {
-  const p = loadProfiles();
-  p.current = Math.min(Math.max(0, i | 0), PROFILE_COUNT - 1);
-  saveProfiles(p);
-}
-
-function renameProfile(i, name) {
-  const p = loadProfiles();
-  const nm = String(name || "").trim().slice(0, 12);
-  if (!nm) return;
-  p.names[i] = nm;
-  saveProfiles(p);
-}
-
-// プレイヤーごとの保存キー。プレイヤー1（index 0）は従来キーをそのまま使う
-// ＝これまでのコレクション・進行度は自動的にプレイヤー1のデータになる（後方互換）
-function profileStorageKey(base) {
-  const i = currentProfile();
-  return i === 0 ? base : `${base}-p${i + 1}`;
-}
+      save();
+      return [];
+    },
+    tip(key) { if (d.tips[key]) return false; d.tips[key] = 1; save(); return true; },
+    setSpeed(v) { d.speed = v; save(); },
+    reset() { d = def(); save(); },
+  };
+})();

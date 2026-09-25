@@ -1,0 +1,12 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+html,body{margin:0;background:#555;overflow:hidden}
+iframe{border:0;display:block;position:absolute;left:0;top:0}
+</style></head><body>
+<script>
+// dev/phone.html?w=390&h=844&q=<index.html のクエリ（encodeURIComponent 済み）>
+const p = new URLSearchParams(location.search);
+const f = document.createElement("iframe");
+f.width = p.get("w") || 390; f.height = p.get("h") || 844;
+f.src = "../index.html?" + (p.get("q") || "");
+document.body.appendChild(f);
+</script></body></html>

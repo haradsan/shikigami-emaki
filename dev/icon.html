@@ -1,0 +1,17 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+html,body{margin:0;overflow:hidden;background:#1b1712}
+.ic{width:512px!important;height:512px!important;right:auto!important;bottom:auto!important}
+.ic{position:absolute;inset:0;background:radial-gradient(circle at 50% 30%,#4a3a26,#1b1712 70%);display:flex;align-items:center;justify-content:center}
+.c{position:absolute;width:calc(44 * 5.12px);height:calc(71.9 * 5.12px);border-radius:calc(3 * 5.12px);box-shadow:0 calc(2 * 5.12px) calc(5 * 5.12px) #000c}
+.c svg{width:100%;height:100%;display:block}
+.c1{transform:translate(-calc(13 * 5.12px),calc(3 * 5.12px)) rotate(-14deg)}
+.c2{transform:translate(calc(13 * 5.12px),calc(3 * 5.12px)) rotate(12deg)}
+.c3{transform:translate(0,-calc(2 * 5.12px))}
+.moon{position:absolute;width:calc(30 * 5.12px);height:calc(30 * 5.12px);border-radius:50%;background:radial-gradient(circle at 40% 40%,#fff8e0,#f3dfa0 60%,#d9b860);top:calc(6 * 5.12px);right:calc(8 * 5.12px);box-shadow:0 0 calc(8 * 5.12px) #ffe9a066}
+</style></head><body><div class="ic"><div class="moon"></div><div class="c c1" id="a"></div><div class="c c2" id="b"></div><div class="c c3" id="c"></div></div>
+<script src="../js/art-hana.js"></script>
+<script>
+document.getElementById('a').innerHTML=HanaArt.svg({m:3,t:'hikari',sp:'maku'});
+document.getElementById('b').innerHTML=HanaArt.svg({m:8,t:'hikari',sp:'tsuki'});
+document.getElementById('c').innerHTML=HanaArt.svg({m:1,t:'hikari',sp:'tsuru'});
+</script></body></html>

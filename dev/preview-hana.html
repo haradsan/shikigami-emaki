@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>花札アート確認</title>
+<style>
+  body { margin: 0; padding: 16px; background: #2b2420; color: #f3e9d2; font-family: system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  h2 { font-size: 13px; margin: 22px 0 8px; color: #d9a531; font-weight: 600; }
+  #status { font-size: 12px; color: #bdb0a0; }
+  #status.bad { color: #ff8a7a; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 6px; align-items: flex-start; }
+  .c { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 9px; color: #b9ab98; line-height: 1.2; text-align: center; }
+  .c > span { display: block; }
+  .row svg { width: var(--w, 60px); height: calc(var(--w, 60px) * 98 / 60); display: block; }
+  .s160 .c { font-size: 11px; }
+  .gap { width: 10px; }
+</style>
+</head>
+<body>
+<h1>花札アート確認（js/art-hana.js）</h1>
+<div id="status">読み込み中…</div>
+<div id="out"></div>
+<script src="../js/art-hana.js"></script>
+<script>
+(function () {
+  const CARDS = [
+    { m: 1, t: "hikari", sp: "tsuru" }, { m: 1, t: "tan", sp: "akatan" }, { m: 1, t: "kasu", v: 0 }, { m: 1, t: "kasu", v: 1 },
+    { m: 2, t: "tane", sp: "uguisu" }, { m: 2, t: "tan", sp: "akatan" }, { m: 2, t: "kasu", v: 0 }, { m: 2, t: "kasu", v: 1 },
+    { m: 3, t: "hikari", sp: "maku" }, { m: 3, t: "tan", sp: "akatan" }, { m: 3, t: "kasu", v: 0 }, { m: 3, t: "kasu", v: 1 },
+    { m: 4, t: "tane", sp: "hototogisu" }, { m: 4, t: "tan", sp: "tan" }, { m: 4, t: "kasu", v: 0 }, { m: 4, t: "kasu", v: 1 },
+    { m: 5, t: "tane", sp: "yatsuhashi" }, { m: 5, t: "tan", sp: "tan" }, { m: 5, t: "kasu", v: 0 }, { m: 5, t: "kasu", v: 1 },
+    { m: 6, t: "tane", sp: "chou" }, { m: 6, t: "tan", sp: "aotan" }, { m: 6, t: "kasu", v: 0 }, { m: 6, t: "kasu", v: 1 },
+    { m: 7, t: "tane", sp: "inoshishi" }, { m: 7, t: "tan", sp: "tan" }, { m: 7, t: "kasu", v: 0 }, { m: 7, t: "kasu", v: 1 },
+    { m: 8, t: "hikari", sp: "tsuki" }, { m: 8, t: "tane", sp: "kari" }, { m: 8, t: "kasu", v: 0 }, { m: 8, t: "kasu", v: 1 },
+    { m: 9, t: "tane", sp: "sakazuki" }, { m: 9, t: "tan", sp: "aotan" }, { m: 9, t: "kasu", v: 0 }, { m: 9, t: "kasu", v: 1 },
+    { m: 10, t: "tane", sp: "shika" }, { m: 10, t: "tan", sp: "aotan" }, { m: 10, t: "kasu", v: 0 }, { m: 10, t: "kasu", v: 1 },
+    { m: 11, t: "hikari", sp: "ame" }, { m: 11, t: "tane", sp: "tsubame" }, { m: 11, t: "tan", sp: "tan" }, { m: 11, t: "kasu", sp: "kaminari" },
+    { m: 12, t: "hikari", sp: "houou" }, { m: 12, t: "kasu", v: 0 }, { m: 12, t: "kasu", v: 1 }, { m: 12, t: "kasu", v: 2 },
+  ];
+  const GENERIC = [];
+  for (let m = 1; m <= 12; m++) for (const t of ["hikari", "tane", "tan", "kasu"]) GENERIC.push({ m, t, v: 0 });
+
+  const TNAME = { hikari: "光", tane: "種", tan: "短", kasu: "カス" };
+  const label = (c) => `${c.m}月 ${TNAME[c.t]}${c.sp ? " " + c.sp : ""}${c.t === "kasu" && !c.sp ? " v" + (c.v || 0) : ""}`;
+  const countEls = (s) => (s.match(/<(path|circle|ellipse|rect|text|g|line|polygon|polyline|svg)\b/g) || []).length;
+
+  const problems = [];
+  let totalEls = 0, maxEls = 0, maxName = "";
+  const parser = new DOMParser();
+  function check(name, s) {
+    if (/\sid=|<defs|url\(#|Gradient|<filter|\bwidth="\d+px/.test(s)) problems.push(name + ": 禁止要素");
+    if (!/^<svg viewBox="0 0 60 98" xmlns="http:\/\/www\.w3\.org\/2000\/svg">/.test(s)) problems.push(name + ": 先頭の形式");
+    if (/NaN|undefined/.test(s)) problems.push(name + ": NaN/undefined");
+    const doc = parser.parseFromString(s, "image/svg+xml");
+    if (doc.getElementsByTagName("parsererror").length) problems.push(name + ": XMLとして不正");
+    const n = countEls(s);
+    totalEls += n;
+    if (n > maxEls) { maxEls = n; maxName = name; }
+    return n;
+  }
+
+  function section(title, list, size, withBack) {
+    const h = document.createElement("h2");
+    h.textContent = `${title}（幅${size}px）`;
+    const row = document.createElement("div");
+    row.className = "row s" + size;
+    row.style.setProperty("--w", size + "px");
+    for (const c of list) {
+      const s = HanaArt.svg(c);
+      const n = check(label(c), s);
+      const d = document.createElement("div");
+      d.className = "c";
+      d.innerHTML = s + `<span>${label(c)}</span><span>${n}要素</span>`;
+      row.appendChild(d);
+    }
+    if (withBack) {
+      const s = HanaArt.back();
+      const n = check("裏", s);
+      const d = document.createElement("div");
+      d.className = "c";
+      d.innerHTML = s + `<span>裏面</span><span>${n}要素</span>`;
+      row.appendChild(d);
+    }
+    out.appendChild(h);
+    out.appendChild(row);
+  }
+
+  // 絞り込み（任意）: ?m=1,2 で月を限定 / ?size=160 で片方の段だけ（任意の幅も可）/ ?set=48|gen
+  const q = new URLSearchParams(location.search);
+  const months = q.get("m") ? q.get("m").split(",").map(Number) : null;
+  const sizes = q.get("size") ? [Number(q.get("size"))] : [60, 160];
+  const sets = q.get("set") ? [q.get("set")] : ["48", "gen"];
+  const pick = (list) => (months ? list.filter((c) => months.includes(c.m)) : list);
+
+  const out = document.getElementById("out");
+  const t0 = performance.now();
+  try {
+    for (const size of sizes) {
+      if (sets.includes("48")) section("48枚", pick(CARDS), size, !months);
+      if (sets.includes("gen")) section("変化札（sp なし）", pick(GENERIC), size, false);
+    }
+    const st = document.getElementById("status");
+    const ms = (performance.now() - t0).toFixed(1);
+    const shown = out.querySelectorAll(".c").length || 1;
+    st.textContent = `生成 ${ms}ms ／ 要素数 平均 ${(totalEls / shown).toFixed(1)}・最大 ${maxEls}（${maxName}）` +
+      (problems.length ? ` ／ 問題: ${[...new Set(problems)].join("、")}` : " ／ 問題なし");
+    if (problems.length) { st.className = "bad"; console.error("HanaArt problems", problems); }
+  } catch (e) {
+    document.getElementById("status").textContent = "エラー: " + e.message;
+    document.getElementById("status").className = "bad";
+    throw e;
+  }
+})();
+</script>
+</body>
+</html>
